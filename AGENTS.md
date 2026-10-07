@@ -4,6 +4,8 @@ Open Notebook is an open-source, privacy-focused alternative to Google's Noteboo
 
 This file holds the project-wide rules every coding session needs. Component rules: [open_notebook/AGENTS.md](open_notebook/AGENTS.md) (backend — also covers `api/`, `commands/`, `prompts/`) and [frontend/AGENTS.md](frontend/AGENTS.md). Knowledge lives in the docs (see [Where to look](#where-to-look)) — read it on demand instead of guessing.
 
+> **LiteNotebook** (`litenotebook/`, branch `litenotebook`) is a separate, self-contained project with its own environment and rules: [litenotebook/AGENTS.md](litenotebook/AGENTS.md). The rules below do not apply there.
+
 ## Stack, ports, startup order
 
 Three tiers: Next.js frontend (3000) → FastAPI (5055) → SurrealDB (8000).

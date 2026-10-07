@@ -1,0 +1,70 @@
+[project]
+name = "litenotebook"
+version = "0.1.0"
+description = "Lightweight, local-first notebook RAG: SQLite + FAISS + MiniLM + llama.cpp"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    # Web
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.20",
+    # LLM client (OpenAI-compatible llama.cpp endpoint)
+    "httpx>=0.28",
+    # Ingestion
+    "pymupdf>=1.26",
+    # Embeddings + vector index (CPU only; see [tool.uv.sources])
+    "numpy>=2.0",
+    "faiss-cpu>=1.9",
+    "sentence-transformers>=4.0",
+    "torch>=2.6",
+    # Answer rendering
+    "markdown-it-py>=3.0",
+    "nh3>=0.2.20",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.9",
+    "mypy>=1.14",
+]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv]
+# Linux-only personal deployment; keeps the lockfile small and avoids
+# resolving torch wheels for platforms we never install on.
+environments = ["sys_platform == 'linux'"]
+
+# CPU-only torch: the GPU is reserved for llama.cpp (Qwen). The default PyPI
+# torch wheel pulls ~4 GB of nvidia-* / triton packages.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "model: loads the real MiniLM model (slow, needs the HF cache)",
+    "llm: calls a real llama.cpp server",
+]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
