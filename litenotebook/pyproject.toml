@@ -24,6 +24,9 @@ dependencies = [
     "nh3>=0.2.20",
 ]
 
+[project.scripts]
+litenotebook = "litenotebook.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -68,3 +71,9 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
+
+# SWIG-wrapped libraries without usable type information: treat as Any at
+# the boundary instead of scattering ignores through the code.
+[[tool.mypy.overrides]]
+module = ["faiss", "faiss.*", "pymupdf", "pymupdf.*"]
+follow_imports = "skip"
