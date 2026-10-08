@@ -796,6 +796,12 @@ mark { background: var(--accent-bg); color: var(--accent-strong); border-radius:
 .swatch { width: 1.5rem; height: 1.5rem; }
 .swatch:focus-visible { outline-offset: 2px; }
 
+.diag {
+  margin: 0; padding: var(--space-3); background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); font: 0.82rem/1.5 var(--mono); white-space: pre-wrap;
+  overflow-wrap: anywhere; max-height: 70vh; overflow-y: auto;
+}
+
 /* --- backup & restore ---------------------------------------------------- */
 
 .notice-panel { border-left: 3px solid var(--info); }

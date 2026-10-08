@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pytest
 
-from conftest import FakeEmbedder, make_pdf
+from conftest import FakeEmbedder, make_pdf, symlink_or_skip
 from litenotebook.ingest import pipeline
 from litenotebook.ingest.pipeline import (
     DuplicateSourceError,
@@ -469,7 +469,7 @@ def test_delete_unlinks_symlink_target_never(
     src = register_source(conn, settings, notebook, pdf)
     stored = settings.data_dir / src.stored_path
     stored.unlink()
-    stored.symlink_to(victim)
+    symlink_or_skip(stored, victim)
     delete_source(conn, settings, notebook.id, src.id, store)
     assert victim.exists()
 

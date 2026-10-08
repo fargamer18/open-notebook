@@ -396,18 +396,16 @@ def test_instance_lock_and_exclusive_create(tmp_path):
 
 
 def test_no_linux_only_calls_in_phase10_code():
+    """Archive code must be OS-neutral; OS specifics live in platform_utils
+    (audited separately in test_platform.py)."""
     from pathlib import Path
 
     root = Path(__file__).parents[1] / "src/litenotebook"
-    files = [
-        *root.joinpath("archive").glob("*.py"),
-        *root.joinpath("platform_utils").glob("*.py"),
-        root / "web/routes/backup.py",
-    ]
+    files = [*root.joinpath("archive").glob("*.py"), root / "web/routes/backup.py"]
     for path in files:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         for needle in (
-            "/proc",
+            "/proc/",
             "/run/media",
             "pkill",
             "systemctl",
@@ -416,7 +414,7 @@ def test_no_linux_only_calls_in_phase10_code():
             "os.getuid",
             "os.chown",
             "signal.SIGKILL",
+            "fcntl",
+            "msvcrt",
         ):
             assert needle not in text, (path.name, needle)
-        if path.name != "filesystem.py":  # the platform layer may branch on the OS
-            assert "fcntl" not in text and "msvcrt" not in text, path.name

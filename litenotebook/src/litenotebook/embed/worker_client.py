@@ -36,7 +36,6 @@ import logging
 import os
 import queue
 import subprocess
-import sys
 import threading
 import time
 import weakref
@@ -52,6 +51,8 @@ from litenotebook.embed.embedder import (
     EmbeddingModelUnavailableError,
     validate_matrix,
 )
+from litenotebook.platform_utils.processes import OwnedProcess, spawn, stop
+from litenotebook.platform_utils.system import python_module_command
 
 log = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ class WorkerEmbedder:
         self.request_timeout = float(request_timeout)
         self.batch_size = max(1, int(batch_size))
         self.max_waiting = max(1, int(max_waiting))
-        self.command = command or [sys.executable, "-m", "litenotebook.embed.worker"]
+        self.command = command or python_module_command("litenotebook.embed.worker")
         self.extra_env = dict(env or {})
 
         self._cv = threading.Condition()
@@ -109,6 +110,7 @@ class WorkerEmbedder:
         self._closed = False
 
         self._proc: subprocess.Popen[bytes] | None = None
+        self._owned: OwnedProcess | None = None
         self._lines: queue.Queue[bytes | None] | None = None
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=20)
         self._state = "stopped"
@@ -257,19 +259,15 @@ class WorkerEmbedder:
         self.spawns += 1
         started = time.perf_counter()
         try:
-            proc = subprocess.Popen(
-                self.command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=self._child_env(),
-                close_fds=True,
-            )
+            # argument list, no shell; on Windows: no console window, own
+            # process group, and a kill-on-close Job Object (no orphans)
+            owned = spawn(self.command, env=self._child_env())
         except OSError as e:
             self._state = "failed"
             self._last_error = "The embedding worker could not be started"
             raise _Broken(self._last_error) from e
-        self._proc = proc
+        self._owned = owned
+        self._proc = proc = owned.proc
         self._lines = queue.Queue()
         assert proc.stdout is not None and proc.stderr is not None
         threading.Thread(
@@ -384,28 +382,14 @@ class WorkerEmbedder:
         self._state = "stopped"
 
     def _kill(self) -> None:
-        """Make sure the child is gone and reaped (no zombies, no orphans)."""
+        """Make sure the child is gone and reaped (no zombies, no orphans):
+        stdin EOF → wait → terminate → wait → kill, on the exact owned handle."""
         proc, self._proc = self._proc, None
+        owned, self._owned = self._owned, None
         self._lines = None
         if proc is None:
             return
-        for pipe in (proc.stdin,):
-            with contextlib.suppress(OSError, ValueError):
-                if pipe is not None:
-                    pipe.close()
-        try:
-            proc.wait(timeout=STOP_GRACE_S)
-        except subprocess.TimeoutExpired:
-            proc.terminate()
-            try:
-                proc.wait(timeout=STOP_GRACE_S)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-        for pipe in (proc.stdout, proc.stderr):
-            with contextlib.suppress(OSError, ValueError):
-                if pipe is not None:
-                    pipe.close()
+        stop(owned or OwnedProcess(proc), grace_s=STOP_GRACE_S)
         if proc.returncode not in (0, None):
             log.info("Embedding worker %s exited with %s", proc.pid, proc.returncode)
 

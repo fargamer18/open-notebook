@@ -11,10 +11,26 @@ The live data directory is never modified in place:
    every staged notebook (FAISS n/n, graph, files). Only then write the
    ``RESTORE-READY.json`` marker.
 4. **Switch** (``apply_pending_restore``), only while no LiteNotebook server
-   holds the data directory's instance lock:
+   holds the data directory's instance lock and nothing in this process has
+   the database open (Windows cannot rename a folder with open files):
    rename ``<data>`` → ``<data>.pre-restore-<UTC time>`` (the safety backup,
    kept until you delete it), then rename the staging directory → ``<data>``.
    If the second rename fails the first is undone.
+
+The switch is two renames, not one atomic operation, so it is designed to be
+crash-recoverable from whatever state is on disk (checked at every start):
+
+=================================  ============================================
+On disk at start                   What happens
+=================================  ============================================
+staging without marker             interrupted staging → staging deleted
+staging + marker, ``<data>``       normal case → switch (if not in use)
+staging + marker, no ``<data>``    crashed between the renames → finish switch
+marker inside ``<data>``           crashed after the switch → marker removed
+=================================  ============================================
+
+Each rename is atomic on Linux and Windows (same volume). The previous data
+is never deleted by LiteNotebook.
 
 Why rename-on-start instead of swapping a running server's files: Windows
 cannot rename a directory while files in it are open, and a POSIX rename
@@ -216,6 +232,8 @@ def apply_pending_restore(data_dir: Path) -> AppliedRestore | None:
     """Switch a staged restore in, if one is ready and nothing uses the data.
     Raises ``RestoreBusyError`` while a server holds the data directory."""
     staging = staging_dir(data_dir)
+    with contextlib.suppress(OSError):  # left by a switch interrupted at the very end
+        (data_dir / MARKER).unlink(missing_ok=True)
     if not staging.exists():
         return None
     marker = pending_restore(data_dir)

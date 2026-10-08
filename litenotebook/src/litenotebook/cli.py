@@ -12,6 +12,7 @@ python -m litenotebook.cli backup create|verify|restore backup.zip
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import sqlite3
 import sys
@@ -34,6 +35,7 @@ from litenotebook.notebooks import (
     create_notebook,
     get_notebook_by_name,
 )
+from litenotebook.platform_utils.filesystem import DataDirInUseError, InstanceLock
 from litenotebook.rag.answer import answer_question
 from litenotebook.rag.citations import format_citation
 from litenotebook.rag.prompts import source_header
@@ -57,6 +59,7 @@ USER_ERRORS = (
     ChunkingError,
     EmbeddingError,
     ArchiveError,
+    DataDirInUseError,
 )
 
 
@@ -481,6 +484,31 @@ def cmd_backup_cancel(
     return 0
 
 
+def _effective_llm(conn: sqlite3.Connection) -> dict[str, object]:
+    try:
+        eff = SettingsService(conn).effective()
+    except SettingsError:
+        return {}
+    return {
+        "base_url": eff.llm_base_url,
+        "model": eff.llm_model,
+        "api_key_configured": bool(eff.llm_api_key),  # never the key itself
+    }
+
+
+def cmd_diagnostics_platform(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    """Read-only environment report for bug reports (no secrets)."""
+    import json
+
+    from litenotebook.diagnostics import collect, format_text
+
+    report = collect(settings, effective_llm=_effective_llm(conn))
+    print(json.dumps(report, indent=1) if args.json else format_text(report), end="")
+    return 0
+
+
 def cmd_serve(
     args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
 ) -> int:
@@ -489,10 +517,21 @@ def cmd_serve(
     from litenotebook.web.app import create_app
 
     conn.close()  # the web app opens its own per-request connections
+    from litenotebook.platform_utils.filesystem import in_use
+
+    if in_use(settings.data_dir):  # fail before uvicorn starts, with a clear message
+        InstanceLock(settings.data_dir).acquire_or_raise("server")
     settings = replace(
         settings, host=args.host or settings.host, port=args.port or settings.port
     )  # re-validated: loopback only
-    print(f"LiteNotebook on http://{settings.host}:{settings.port}  (Ctrl+C to stop)")
+    url = f"http://{settings.host}:{settings.port}"
+    print(f"LiteNotebook on {url}  (Ctrl+C to stop)")
+    if args.open:
+        import threading
+
+        from litenotebook.platform_utils.system import open_browser
+
+        threading.Timer(1.5, open_browser, args=(url,)).start()
     uvicorn.run(
         create_app(settings),
         host=settings.host,
@@ -519,7 +558,7 @@ def build_parser() -> argparse.ArgumentParser:
     create = nb_sub.add_parser("create", help="create a notebook")
     create.add_argument("name")
     create.add_argument("--description", default="")
-    create.set_defaults(func=cmd_notebook_create)
+    create.set_defaults(func=cmd_notebook_create, mutates=True)
     nb_sub.add_parser("list", help="list notebooks").set_defaults(
         func=cmd_notebook_list
     )
@@ -533,7 +572,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.add_argument("--timings", action="store_true")
     ingest.add_argument("files", nargs="+", type=Path)
-    ingest.set_defaults(func=cmd_ingest)
+    ingest.set_defaults(func=cmd_ingest, mutates=True)
 
     search = sub.add_parser("search", help="hybrid search within one notebook")
     search.add_argument("--notebook", required=True)
@@ -554,7 +593,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, func in (("check", cmd_index_check), ("rebuild", cmd_index_rebuild)):
         p = index_sub.add_parser(name)
         p.add_argument("--notebook", required=True)
-        p.set_defaults(func=func)
+        p.set_defaults(func=func, mutates=name == "rebuild")
 
     llm = sub.add_parser("llm", help="LLM server utilities")
     llm_sub = llm.add_subparsers(dest="llm_command", required=True)
@@ -570,7 +609,7 @@ def build_parser() -> argparse.ArgumentParser:
     ):
         p = memory_sub.add_parser(name, help=help_)
         p.add_argument("--notebook", required=True, help="notebook name or id")
-        p.set_defaults(func=func)
+        p.set_defaults(func=func, mutates=name == "rebuild")
     msearch = memory_sub.add_parser("search", help="debug graph-memory retrieval")
     msearch.add_argument("--notebook", required=True, help="notebook name or id")
     msearch.add_argument("-k", type=int, default=6, help="results to show")
@@ -589,7 +628,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = imp_sub.add_parser("notebook", help="import a notebook export (new ids)")
     p.add_argument("archive", type=Path)
     p.add_argument("--name", help="name for the imported notebook (must be free)")
-    p.set_defaults(func=cmd_import_notebook)
+    p.set_defaults(func=cmd_import_notebook, mutates=True)
 
     backup = sub.add_parser("backup", help="full backups of all LiteNotebook data")
     backup_sub = backup.add_subparsers(dest="backup_command", required=True)
@@ -609,14 +648,36 @@ def build_parser() -> argparse.ArgumentParser:
         "cancel-restore", help="discard a staged, not yet applied restore"
     ).set_defaults(func=cmd_backup_cancel)
 
+    diagnostics = sub.add_parser("diagnostics", help="environment reports")
+    diag_sub = diagnostics.add_subparsers(dest="diagnostics_command", required=True)
+    p = diag_sub.add_parser(
+        "platform", help="OS, paths, SQLite, libraries, worker (no secrets)"
+    )
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_diagnostics_platform)
+
     serve = sub.add_parser("serve", help="run the local web app")
     serve.add_argument("--host", help="loopback address (default 127.0.0.1)")
     serve.add_argument("--port", type=int, help="port (default 5056)")
+    serve.add_argument(
+        "--open", action="store_true", help="open the app in the default browser"
+    )
     serve.set_defaults(func=cmd_serve)
     return parser
 
 
+def _safe_console() -> None:
+    """Redirected output on Windows uses the legacy code page (cp1252), which
+    cannot encode "→" or curly quotes; degrade those instead of crashing."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            with contextlib.suppress(ValueError, OSError):
+                reconfigure(errors="backslashreplace")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _safe_console()
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
@@ -626,11 +687,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         settings = load_settings()
         if args.data_dir:
             settings = replace(settings, data_dir=args.data_dir.expanduser())
+        lock = None
+        if getattr(args, "mutates", False):  # one writer per data folder
+            lock = InstanceLock(settings.data_dir).acquire_or_raise(
+                f"command: {args.command}"
+            )
         conn = open_db(settings.db_path)
         try:
             return int(args.func(args, conn, settings))
         finally:
             conn.close()
+            if lock is not None:
+                lock.release()
             WorkerEmbedder.close_all()  # never leave a MiniLM worker behind
     except USER_ERRORS as e:
         print(f"error: {e}", file=sys.stderr)

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% set nav = "settings" %}
+{% block title %}Diagnostics{% endblock %}
+{% block content %}
+{{ crumbs([("Settings", "/settings"), ("Diagnostics", "")]) }}
+<section class="page-head">
+  <h1>Diagnostics</h1>
+  <p class="muted">Environment details for bug reports. Nothing secret is included (no API key, no document names); your home folder is shown as “~”. Showing this page does not start the embedding model or contact the LLM.</p>
+</section>
+<section class="panel" aria-labelledby="diag-title">
+  <div class="panel-head">
+    <h2 id="diag-title">Report</h2>
+    <button class="btn btn-primary btn-sm" type="button" data-copy-target="diag-text" data-copy-done="Diagnostics copied">Copy diagnostics</button>
+  </div>
+  <pre class="diag" id="diag-text" tabindex="0" aria-label="Diagnostics report">{{ text }}</pre>
+</section>
+{% endblock %}

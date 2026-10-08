@@ -58,7 +58,7 @@ def portable_key(name: str) -> str:
 def download_name(text: str, fallback: str = "notebook") -> str:
     """ASCII, filesystem-safe fragment for a Content-Disposition file name."""
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", ascii_text).strip("-.")[:60]
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", ascii_text).strip("-")[:60].strip("-")
     if not slug or slug.split(".")[0].lower() in WINDOWS_RESERVED:
         return fallback
     return slug

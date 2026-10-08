@@ -491,6 +491,7 @@ def test_health_llm_offline_app_still_works(app_settings):
     assert client.get("/settings").status_code == 200
 
 
+@pytest.mark.posix_only  # permission bits; Windows uses ACLs
 def test_health_reports_storage_problems(client, app_settings):
     app_settings.data_dir.chmod(0o500)
     try:

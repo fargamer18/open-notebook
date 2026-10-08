@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import zlib
 from collections.abc import Iterator
 from pathlib import Path
@@ -21,14 +22,70 @@ def _minilm_cached() -> bool:
     return isinstance(try_to_load_from_cache(EMBED_MODEL, "model.safetensors"), str)
 
 
+def pytest_configure(config):  # type: ignore[no-untyped-def]
+    config.addinivalue_line(
+        "markers",
+        "posix_only: relies on POSIX semantics (permission bits, signals, /proc); "
+        "skipped on Windows",
+    )
+
+
 def pytest_collection_modifyitems(config, items):  # type: ignore[no-untyped-def]
     run_llm = os.environ.get("LITENOTEBOOK_TEST_LLM") == "1"
     have_model = _minilm_cached()
     for item in items:
+        if "posix_only" in item.keywords and sys.platform == "win32":
+            item.add_marker(pytest.mark.skip(reason="POSIX-specific behaviour"))
         if "llm" in item.keywords and not run_llm:
             item.add_marker(pytest.mark.skip(reason="set LITENOTEBOOK_TEST_LLM=1"))
         if "model" in item.keywords and not have_model:
             item.add_marker(pytest.mark.skip(reason="MiniLM not in the HF cache"))
+
+
+def symlink_or_skip(link: Path, target: Path, *, directory: bool = False) -> None:
+    """Symlinks need Developer Mode or admin rights on Windows."""
+    try:
+        link.symlink_to(target, target_is_directory=directory)
+    except (OSError, NotImplementedError) as e:
+        pytest.skip(f"cannot create symlinks here: {e}")
+
+
+def process_gone(pid: int, timeout: float = 10.0) -> bool:
+    """True once ``pid`` no longer exists (and, on Linux, is not a zombie)."""
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _pid_alive(pid: int) -> bool:
+    if sys.platform.startswith("linux"):
+        # running, sleeping — or a zombie ("Z"), which still counts as a leak
+        return Path(f"/proc/{pid}/stat").exists()
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)  # POSIX only: signal 0 just checks existence
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 class FakeEmbedder:

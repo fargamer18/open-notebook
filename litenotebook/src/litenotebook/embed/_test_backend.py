@@ -44,7 +44,9 @@ class FakeBackend:
         self.dir = Path(directory) if directory else None
         self.delay = float(os.environ.get("LITENOTEBOOK_EMBED_WORKER_TEST_DELAY", "0"))
         if self.dir:
-            (self.dir / f"worker-{os.getpid()}.pid").write_text(str(os.getpid()))
+            (self.dir / f"worker-{os.getpid()}.pid").write_text(
+                str(os.getpid()), encoding="utf-8"
+            )
 
     def _noise(self) -> None:
         print("stray print from a chatty library")  # noqa: T201
@@ -64,14 +66,14 @@ class FakeBackend:
     def encode(self, texts: list[str]) -> npt.NDArray[np.float32]:
         self._noise()
         if self.dir:
-            with open(self.dir / "order.log", "a") as log:
+            with open(self.dir / "order.log", "a", encoding="utf-8") as log:
                 log.write((texts[0] if texts else "") + "\n")
         if self.mode == "crash_on_embed":
             os._exit(9)
         if self.mode == "crash_once" and self.dir:
             marker = self.dir / "crashed-once"
             if not marker.exists():
-                marker.write_text("1")
+                marker.write_text("1", encoding="utf-8")
                 os._exit(9)
         if self.mode == "hang_on_embed":
             time.sleep(3600)

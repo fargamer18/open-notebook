@@ -101,6 +101,7 @@ def palette_commands(
         _cmd("LiteNotebook", "Search all notebooks", "/search", "find"),
         _cmd("LiteNotebook", "Settings", "/settings", "llm model status"),
         _cmd("LiteNotebook", "Backup & Restore", "/backup", "export import verify zip"),
+        _cmd("LiteNotebook", "Diagnostics", "/settings/diagnostics", "platform report"),
         _cmd("LiteNotebook", "Keyboard shortcuts", "", "help keys", action="shortcuts"),
     ]
     for nb in list_notebooks(conn)[:MAX_PALETTE_NOTEBOOKS]:

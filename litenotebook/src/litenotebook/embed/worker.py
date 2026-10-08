@@ -75,8 +75,17 @@ class MiniLMBackend:
 
 
 def _protect_stdout() -> BinaryIO:
-    """Return a private handle on the real stdout; make fd 1 point at stderr."""
+    """Return a private handle on the real stdout; make fd 1 point at stderr.
+
+    Both protocol descriptors are forced into binary mode: on Windows a
+    text-mode descriptor would turn ``\n`` into ``\r\n`` (and back), which
+    the JSON-lines framing must never see. (Python already sets fds 0–2 to
+    binary on Windows; a dup'd descriptor is set explicitly to be sure.)"""
+    from litenotebook.platform_utils.filesystem import set_binary_mode
+
     proto_fd = os.dup(1)
+    set_binary_mode(proto_fd)
+    set_binary_mode(0)
     os.dup2(2, 1)
     sys.stdout = sys.stderr
     return os.fdopen(proto_fd, "wb", buffering=0)
@@ -175,7 +184,9 @@ def main() -> int:
     logging.basicConfig(
         stream=sys.stderr, level=logging.WARNING, format="embed-worker: %(message)s"
     )
-    signal.signal(signal.SIGINT, signal.SIG_IGN)  # Ctrl+C goes to the parent
+    # Ctrl+C goes to the parent (SIGINT exists on Windows too; there the
+    # parent also starts the worker in its own process group).
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         return serve(sys.stdin.buffer, out, _backend())
     except BrokenPipeError:

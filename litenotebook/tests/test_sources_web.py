@@ -173,10 +173,13 @@ def test_plain_form_upload_redirects(client, app, nb, pdf):
 def test_active_source_row_polls_until_settled(app, app_settings, nb, pdf):
     conn = db(app_settings)
     src = register_source(conn, app_settings, get_notebook(conn, nb), pdf)
+    # What a restart's startup recovery does (a second server on the same data
+    # folder is refused since Phase 11): the pending source is marked failed.
+    from litenotebook.sources import recover_interrupted
+
+    assert src.id in recover_interrupted(conn)
     conn.close()
-    with TestClient(app, base_url=BASE) as c:  # second lifespan: not enqueued
-        pass
-    # recovery failed it (it was pending at startup); make it pending again
+    # make it pending again
     conn = db(app_settings)
     conn.execute(
         "UPDATE sources SET status='pending', stage='uploaded' WHERE id=?", (src.id,)

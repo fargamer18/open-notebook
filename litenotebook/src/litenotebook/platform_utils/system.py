@@ -1,0 +1,285 @@
+"""Where LiteNotebook keeps its files, and what machine it is running on.
+
+Default directories (``app_dirs``)::
+
+    Linux   data   $XDG_DATA_HOME/LiteNotebook    (~/.local/share/LiteNotebook)
+            config $XDG_CONFIG_HOME/LiteNotebook  (~/.config/LiteNotebook)
+            cache  $XDG_CACHE_HOME/LiteNotebook   (~/.cache/LiteNotebook)
+    Windows data   %LOCALAPPDATA%\\LiteNotebook
+            config %LOCALAPPDATA%\\LiteNotebook
+            cache  %LOCALAPPDATA%\\LiteNotebook\\Cache
+    macOS   data   ~/Library/Application Support/LiteNotebook (config too)
+            cache  ~/Library/Caches/LiteNotebook
+
+XDG variables are used only when they hold absolute paths (the spec says
+relative values must be ignored). Nothing here creates directories.
+
+``system_info`` gathers a small, extensible hardware/OS summary without
+running shell commands: Linux reads ``/proc`` (this module is the platform
+layer, the only place allowed to), Windows uses ``ctypes``/``winreg``, and
+anything unknowable is ``None`` rather than a guess.
+"""
+
+from __future__ import annotations
+
+import ctypes
+import os
+import platform
+import shutil
+import sys
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
+from typing import Any
+
+APP_NAME = "LiteNotebook"
+
+
+def os_name(value: str | None = None) -> str:
+    """ "windows", "linux", "macos" or "other" (``value`` overrides sys.platform)."""
+    raw = value or sys.platform
+    if raw.startswith("win"):
+        return "windows"
+    if raw.startswith("linux"):
+        return "linux"
+    if raw == "darwin":
+        return "macos"
+    return "other"
+
+
+@dataclass(frozen=True)
+class AppDirs:
+    data: PurePath
+    config: PurePath
+    cache: PurePath
+
+
+def app_dirs(
+    env: Mapping[str, str] | None = None,
+    *,
+    system: str | None = None,
+    home: PurePath | None = None,
+) -> AppDirs:
+    """Platform default directories. ``system``/``home`` let tests simulate
+    another OS; for the running OS the result holds concrete ``Path``s."""
+    env = os.environ if env is None else env
+    kind = os_name(system)
+    simulated = system is not None and os_name(system) != os_name()
+    if kind == "windows":
+        P: type[PurePath] = PureWindowsPath if simulated else Path
+        base_home = P(home) if home is not None else P(Path.home())
+        local = env.get("LOCALAPPDATA", "").strip()
+        root = (
+            P(local)
+            if local and P(local).is_absolute()
+            else base_home / "AppData" / "Local"
+        )
+        app = root / APP_NAME
+        return AppDirs(data=app, config=app, cache=app / "Cache")
+    P = PurePosixPath if simulated else Path
+    base_home = P(home) if home is not None else P(Path.home())
+    if kind == "macos":
+        support = base_home / "Library" / "Application Support" / APP_NAME
+        return AppDirs(support, support, base_home / "Library" / "Caches" / APP_NAME)
+
+    def xdg(var: str, fallback: PurePath) -> PurePath:
+        value = env.get(var, "").strip()
+        return P(value) if value and P(value).is_absolute() else fallback
+
+    return AppDirs(
+        data=xdg("XDG_DATA_HOME", base_home / ".local" / "share") / APP_NAME,
+        config=xdg("XDG_CONFIG_HOME", base_home / ".config") / APP_NAME,
+        cache=xdg("XDG_CACHE_HOME", base_home / ".cache") / APP_NAME,
+    )
+
+
+def executable_name(base: str, *, system: str | None = None) -> str:
+    """``llama-server`` → ``llama-server.exe`` on Windows."""
+    if os_name(system) == "windows" and not base.lower().endswith(".exe"):
+        return base + ".exe"
+    return base
+
+
+def find_executable(base: str, extra_dirs: tuple[Path, ...] = ()) -> Path | None:
+    """An executable by name: explicit directories first, then PATH
+    (``shutil.which`` honours PATHEXT on Windows). Never runs a shell."""
+    name = executable_name(base)
+    for directory in extra_dirs:
+        candidate = Path(directory) / name
+        if candidate.is_file() and (
+            os_name() == "windows" or os.access(candidate, os.X_OK)
+        ):
+            return candidate
+    found = shutil.which(base) or shutil.which(name)
+    return Path(found) if found else None
+
+
+def python_module_command(module: str) -> list[str]:
+    """How to run ``python -m <module>`` as a child process.
+
+    A frozen (packaged) build has no interpreter to pass ``-m`` to, and
+    ``sys.executable`` is the app itself, so spawning it would start a
+    second LiteNotebook. Packaging is not supported yet: say so clearly."""
+    if getattr(sys, "frozen", False):
+        raise RuntimeError(
+            "Packaged builds are not supported yet: the embedding worker needs a "
+            "Python interpreter"
+        )
+    return [sys.executable, "-m", module]
+
+
+def open_browser(url: str) -> bool:
+    """Open a URL in the default browser (no xdg-open/start/open subprocess)."""
+    import webbrowser
+
+    try:
+        return webbrowser.open(url, new=2)
+    except webbrowser.Error:
+        return False
+
+
+# --- hardware / OS summary ---------------------------------------------------------
+
+
+@dataclass
+class SystemInfo:
+    """Extended in Phase 12 (GPU, accelerators) — keep fields optional."""
+
+    os: str
+    os_release: str
+    architecture: str
+    python_version: str
+    python_implementation: str
+    cpu_name: str | None
+    logical_cpus: int | None
+    physical_cpus: int | None
+    total_ram_bytes: int | None
+    available_ram_bytes: int | None
+    disk_free_bytes: int | None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _linux_cpu() -> tuple[str | None, int | None]:
+    try:
+        text = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, None
+    name = None
+    cores: set[tuple[str, str]] = set()
+    physical, core = "0", None
+    for line in text.splitlines():
+        key, _, value = line.partition(":")
+        key, value = key.strip(), value.strip()
+        if key == "model name" and name is None:
+            name = value
+        elif key == "physical id":
+            physical = value
+        elif key == "core id":
+            core = value
+        elif not key and core is not None:
+            cores.add((physical, core))
+            core = None
+    if core is not None:
+        cores.add((physical, core))
+    return name, (len(cores) or None)
+
+
+def _linux_memory() -> tuple[int | None, int | None]:
+    try:
+        text = Path("/proc/meminfo").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, None
+    values = {}
+    for line in text.splitlines():
+        key, _, rest = line.partition(":")
+        parts = rest.split()
+        if parts and parts[0].isdigit():
+            values[key] = int(parts[0]) * 1024
+    return values.get("MemTotal"), values.get("MemAvailable")
+
+
+def _windows_memory() -> tuple[int | None, int | None]:
+    class MEMORYSTATUSEX(ctypes.Structure):
+        _fields_ = [
+            ("dwLength", ctypes.c_ulong),
+            ("dwMemoryLoad", ctypes.c_ulong),
+            ("ullTotalPhys", ctypes.c_ulonglong),
+            ("ullAvailPhys", ctypes.c_ulonglong),
+            ("ullTotalPageFile", ctypes.c_ulonglong),
+            ("ullAvailPageFile", ctypes.c_ulonglong),
+            ("ullTotalVirtual", ctypes.c_ulonglong),
+            ("ullAvailVirtual", ctypes.c_ulonglong),
+            ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+        ]
+
+    status = MEMORYSTATUSEX()
+    status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+    try:
+        ok = ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return None, None
+    return (int(status.ullTotalPhys), int(status.ullAvailPhys)) if ok else (None, None)
+
+
+def _windows_cpu_name() -> str | None:
+    try:
+        import winreg  # type: ignore[import-not-found,unused-ignore]
+
+        with winreg.OpenKey(  # type: ignore[attr-defined,unused-ignore]
+            winreg.HKEY_LOCAL_MACHINE,  # type: ignore[attr-defined,unused-ignore]
+            r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "ProcessorNameString")  # type: ignore[attr-defined,unused-ignore]
+            return str(value).strip() or None
+    except (ImportError, OSError):
+        return platform.processor() or None
+
+
+def _posix_total_memory() -> int | None:
+    try:
+        return int(os.sysconf("SC_PHYS_PAGES")) * int(os.sysconf("SC_PAGE_SIZE"))
+    except (AttributeError, ValueError, OSError):
+        return None
+
+
+def system_info(disk_path: Path | None = None) -> SystemInfo:
+    kind = os_name()
+    cpu_name: str | None = None
+    physical: int | None = None
+    total: int | None = None
+    available: int | None = None
+    if kind == "linux":
+        cpu_name, physical = _linux_cpu()
+        total, available = _linux_memory()
+    elif kind == "windows":
+        cpu_name = _windows_cpu_name()
+        total, available = _windows_memory()
+    else:
+        cpu_name = platform.processor() or None
+    if total is None and kind != "windows":
+        total = _posix_total_memory()
+    disk_free = None
+    if disk_path is not None:
+        probe = Path(disk_path)
+        while not probe.exists() and probe.parent != probe:
+            probe = probe.parent
+        try:
+            disk_free = shutil.disk_usage(probe).free
+        except OSError:
+            disk_free = None
+    return SystemInfo(
+        os=platform.system() or kind,
+        os_release=platform.release(),
+        architecture=platform.machine(),
+        python_version=platform.python_version(),
+        python_implementation=platform.python_implementation(),
+        cpu_name=cpu_name,
+        logical_cpus=os.cpu_count(),
+        physical_cpus=physical,
+        total_ram_bytes=total,
+        available_ram_bytes=available,
+        disk_free_bytes=disk_free,
+    )

@@ -216,12 +216,13 @@ def test_palette_commands_global_and_notebook_scoped(web):
     c, nb, other = web["c"], web["nb"], web["other"]
     plain = c.get("/palette.json").json()["commands"]
     labels = [x["label"] for x in plain]
-    assert labels[:6] == [
+    assert labels[:7] == [
         "Notebooks",
         "New notebook",
         "Search all notebooks",
         "Settings",
         "Backup & Restore",
+        "Diagnostics",
         "Keyboard shortcuts",
     ]
     assert (

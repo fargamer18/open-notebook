@@ -6,6 +6,21 @@ table and override the LLM defaults here at runtime.
 
 This module deliberately does not read ``.env`` files: the repository's
 ``.env`` belongs to the legacy Open Notebook stack.
+
+Where data lives (``load_settings``), in order:
+
+1. ``LITENOTEBOOK_DATA_DIR`` — an explicit custom folder (``%VAR%``/``$VAR``
+   and ``~`` are expanded the way the running OS does);
+2. a source checkout (``pyproject.toml`` next to ``src/litenotebook``) runs in
+   **development mode**: ``<checkout>/data``, exactly as before Phase 11;
+3. otherwise (an installed copy, or ``LITENOTEBOOK_MODE=user``) the platform
+   default: ``~/.local/share/LiteNotebook`` (XDG) or
+   ``%LOCALAPPDATA%\\LiteNotebook``.
+
+Existing data is never moved between these locations automatically.
+Config and cache folders follow the same rule (``LITENOTEBOOK_CONFIG_DIR`` /
+``LITENOTEBOOK_CACHE_DIR`` override them); in development and custom mode
+they sit inside the data folder.
 """
 
 from __future__ import annotations
@@ -16,6 +31,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MODES = ("development", "user")
+ORIGIN_CUSTOM = "custom (LITENOTEBOOK_DATA_DIR)"
+ORIGIN_DEVELOPMENT = "development checkout"
+ORIGIN_PLATFORM = "platform default"
+
+
+def is_source_checkout(root: Path = PROJECT_ROOT) -> bool:
+    return (root / "pyproject.toml").is_file() and (
+        root / "src" / "litenotebook"
+    ).is_dir()
+
 
 # Embeddings: fixed by the architecture. Qwen is for generation only.
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -41,6 +67,9 @@ class ConfigError(ValueError):
 class Settings:
     data_dir: Path
     host: str = "127.0.0.1"
+    data_dir_origin: str = ORIGIN_CUSTOM
+    config_dir: Path | None = None  # default: <data_dir>/config
+    cache_dir: Path | None = None  # default: <data_dir>/cache
     port: int = 5056
 
     # Chunking, measured in MiniLM wordpiece tokens.
@@ -107,6 +136,16 @@ class Settings:
             raise ConfigError(
                 "embed_worker_start_timeout_s must be between 10 and 3600"
             )
+
+    @property
+    def config_path(self) -> Path:
+        return (
+            self.config_dir if self.config_dir is not None else self.data_dir / "config"
+        )
+
+    @property
+    def cache_path(self) -> Path:
+        return self.cache_dir if self.cache_dir is not None else self.data_dir / "cache"
 
     @property
     def max_upload_bytes(self) -> int:
@@ -186,5 +225,32 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         if (number := get_int(name)) is not None:
             overrides[key] = number
 
-    data_dir = Path(get("DATA_DIR") or PROJECT_ROOT / "data").expanduser()
-    return Settings(data_dir=data_dir, **overrides)  # type: ignore[arg-type]
+    def path(raw: str) -> Path:
+        return Path(os.path.expandvars(raw)).expanduser().absolute()
+
+    mode = get("MODE")
+    if mode is not None and mode not in MODES:
+        raise ConfigError(f"{ENV_PREFIX}MODE must be one of {', '.join(MODES)}")
+    explicit = get("DATA_DIR")
+    config_dir = cache_dir = None
+    if explicit:
+        data_dir, origin = path(explicit), ORIGIN_CUSTOM
+    elif mode == "user" or (mode is None and not is_source_checkout()):
+        from litenotebook.platform_utils.system import app_dirs
+
+        dirs = app_dirs(env)
+        data_dir, origin = Path(dirs.data), ORIGIN_PLATFORM
+        config_dir, cache_dir = Path(dirs.config), Path(dirs.cache)
+    else:
+        data_dir, origin = PROJECT_ROOT / "data", ORIGIN_DEVELOPMENT
+    if raw_config := get("CONFIG_DIR"):
+        config_dir = path(raw_config)
+    if raw_cache := get("CACHE_DIR"):
+        cache_dir = path(raw_cache)
+    return Settings(
+        data_dir=data_dir,
+        data_dir_origin=origin,
+        config_dir=config_dir,
+        cache_dir=cache_dir,
+        **overrides,  # type: ignore[arg-type]
+    )

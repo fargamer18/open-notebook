@@ -11,13 +11,13 @@ holds a small, bounded set of variants.
 from __future__ import annotations
 
 import contextlib
-import shutil
 import sqlite3
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 from litenotebook.config import Settings
+from litenotebook.platform_utils.filesystem import remove_tree, replace_file
 from litenotebook.sources import Source, get_source, stored_file
 
 SCALES = (1.0, 1.5, 2.0, 2.5, 3.0)
@@ -101,7 +101,13 @@ def render_page(
     tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
     try:
         tmp.write_bytes(data)
-        tmp.replace(target)
+        try:
+            replace_file(tmp, target)
+        except PermissionError:
+            # Windows: another request is serving the same page right now and
+            # holds it open; that render is identical, so keep it.
+            if not target.is_file():
+                raise
     finally:
         tmp.unlink(missing_ok=True)
     return target, False
@@ -124,7 +130,10 @@ def remove_cache(settings: Settings, notebook_id: int, source_id: int) -> bool:
         settings.data_dir.resolve()
     ):
         return False
-    shutil.rmtree(resolved, ignore_errors=True)
+    # Derived data: on Windows a page being served at this moment cannot be
+    # deleted; anything left over is harmless and removed with its notebook.
+    with contextlib.suppress(OSError):
+        remove_tree(resolved)
     return True
 
 

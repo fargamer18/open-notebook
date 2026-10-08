@@ -30,6 +30,7 @@ from litenotebook.embed.embedder import (
 from litenotebook.ingest.chunker import ChunkingError, chunk_pages
 from litenotebook.ingest.pdf import PdfError, extract_pages, has_pdf_header, inspect_pdf
 from litenotebook.notebooks import Notebook, get_notebook
+from litenotebook.platform_utils.filesystem import replace_file
 from litenotebook.sources import (
     NOW_SQL,
     Source,
@@ -114,13 +115,13 @@ def _place(src: Path, dest: Path, *, move: bool) -> None:
     try:
         if move:
             try:
-                src.replace(tmp)
-            except OSError:  # different filesystem
+                replace_file(src, tmp)
+            except OSError:  # different filesystem (or volume, on Windows)
                 shutil.copyfile(src, tmp)
                 src.unlink()
         else:
             shutil.copyfile(src, tmp)
-        tmp.replace(dest)
+        replace_file(tmp, dest)
     finally:
         tmp.unlink(missing_ok=True)
 

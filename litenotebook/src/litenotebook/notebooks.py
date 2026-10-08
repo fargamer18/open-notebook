@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import sqlite3
 import unicodedata
 from dataclasses import dataclass
 
 from litenotebook.config import EMBED_DIM, EMBED_MODEL, Settings
+from litenotebook.platform_utils.filesystem import remove_tree
 
 log = logging.getLogger(__name__)
 
@@ -192,7 +192,7 @@ def _remove_notebook_dir(settings: Settings, notebook_id: int) -> bool:
     resolved = target.resolve()
     if resolved.parent != notebooks_root.resolve() or resolved.name != str(notebook_id):
         raise NotebookError("Refusing to delete a path outside the notebook directory")
-    shutil.rmtree(resolved)
+    remove_tree(resolved)  # clears read-only attributes (Windows)
     return True
 
 

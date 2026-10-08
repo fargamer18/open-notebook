@@ -18,6 +18,7 @@ from litenotebook.services.settings import (
     check_connection,
 )
 from litenotebook.web.deps import (
+    app_settings,
     get_db,
     is_htmx,
     llm_transport,
@@ -112,3 +113,30 @@ def test_connection(request: Request, conn: Db) -> HTMLResponse:
 @router.post("/settings/models", response_class=HTMLResponse)
 def refresh_models(request: Request, conn: Db) -> HTMLResponse:
     return _status(request, conn, "models")
+
+
+@router.get("/settings/diagnostics", response_class=HTMLResponse)
+def diagnostics_page(request: Request, conn: Db) -> HTMLResponse:
+    """Read-only; never starts the embedding worker or contacts the LLM."""
+    from litenotebook.diagnostics import collect, format_text
+
+    try:
+        eff = settings_service(request, conn).effective()
+        llm = {
+            "base_url": eff.llm_base_url,
+            "model": eff.llm_model,
+            "api_key_configured": bool(eff.llm_api_key),
+        }
+    except SettingsError:
+        llm = {}
+    embedder = getattr(request.app.state, "embedder", None)
+    report = collect(
+        app_settings(request),
+        effective_llm=llm,
+        worker_status=embedder.status() if embedder is not None else None,
+    )
+    return render(
+        request,
+        "diagnostics.html",
+        {"nav": "settings", "report": report, "text": format_text(report)},
+    )

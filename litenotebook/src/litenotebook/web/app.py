@@ -92,11 +92,10 @@ def create_app(
         # NTFS via FUSE. This idle connection keeps the WAL file in place.
         # Advisory "a server uses this data directory" lock: a restore waits
         # for it to be released instead of swapping files under a live server.
-        instance = InstanceLock(app_settings.data_dir)
-        if not instance.acquire():
-            log.warning(
-                "Another LiteNotebook instance may be using this data directory"
-            )
+        # One writer per data folder: refuse to start (clear message) if
+        # another LiteNotebook process holds it. The OS drops the lock on exit
+        # or crash, so a left-over lock file never blocks a later start.
+        instance = InstanceLock(app_settings.data_dir).acquire_or_raise("server")
         keeper = connect(app_settings.db_path)
         interrupted = recover_interrupted(keeper)
         if interrupted:

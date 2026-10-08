@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import make_pdf
+from conftest import make_pdf, symlink_or_skip
 from litenotebook.ingest.pipeline import ingest_pdf
 from litenotebook.notebooks import (
     MAX_NAME_LENGTH,
@@ -111,7 +111,7 @@ def test_symlinked_notebook_dir_is_unlinked_not_followed(conn, settings, tmp_pat
     outside.mkdir()
     (outside / "keep.txt").write_text("do not delete")
     settings.notebooks_dir.mkdir(parents=True)
-    settings.notebook_dir(nb.id).symlink_to(outside, target_is_directory=True)
+    symlink_or_skip(settings.notebook_dir(nb.id), outside, directory=True)
 
     delete_notebook(conn, settings, nb.id)
 
@@ -125,7 +125,7 @@ def test_refuses_notebooks_dir_symlinked_outside_data(conn, settings, tmp_path):
     (outside / str(nb.id)).mkdir(parents=True)
     (outside / str(nb.id) / "keep.txt").write_text("x")
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    settings.notebooks_dir.symlink_to(outside, target_is_directory=True)
+    symlink_or_skip(settings.notebooks_dir, outside, directory=True)
 
     with pytest.raises(NotebookError, match="Refusing"):
         delete_notebook(conn, settings, nb.id)

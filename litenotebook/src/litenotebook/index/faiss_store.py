@@ -88,7 +88,9 @@ def _atomic_write(path: Path, writer: Callable[[Path], None]) -> None:
         writer(tmp)
         with open(tmp, "rb+") as f:
             os.fsync(f.fileno())
-        os.replace(tmp, path)
+        from litenotebook.platform_utils.filesystem import replace_file
+
+        replace_file(tmp, path)  # retried on a Windows sharing violation
         _fsync_dir(path.parent)
     finally:
         tmp.unlink(missing_ok=True)

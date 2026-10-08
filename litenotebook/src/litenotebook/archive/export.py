@@ -222,14 +222,18 @@ def _write_archive(
     out_path: Path,
     kind: str,
     notebook_ids: list[int],
+    *,
+    now: datetime | None = None,
+    export_id: str | None = None,
 ) -> ExportResult:
+    """``now``/``export_id`` exist for reproducible fixture archives only."""
     started = time.perf_counter()
     if notebook_ids:
         _busy_check(conn, notebook_ids)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     partial = out_path.with_name(f".{out_path.name}.{uuid.uuid4().hex[:8]}.partial")
-    now = datetime.now(UTC)
+    now = now or datetime.now(UTC)
     try:
         with zipfile.ZipFile(partial, "w", allowZip64=True) as zf:
             w = _HashingWriter(zf, now.timetuple())
@@ -255,7 +259,7 @@ def _write_archive(
                 "format": FORMAT_NAME,
                 "export_format_version": FORMAT_VERSION,
                 "kind": kind,
-                "export_id": uuid.uuid4().hex,
+                "export_id": export_id or uuid.uuid4().hex,
                 "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "app_version": __version__,
                 "schema_version": schema_version(conn),
@@ -297,7 +301,13 @@ def _write_archive(
 
 
 def export_notebook(
-    conn: sqlite3.Connection, settings: Settings, notebook_id: int, out_path: Path
+    conn: sqlite3.Connection,
+    settings: Settings,
+    notebook_id: int,
+    out_path: Path,
+    *,
+    now: datetime | None = None,
+    export_id: str | None = None,
 ) -> ExportResult:
     """One notebook with its sources, chats, notes, annotations and memory."""
     if (
@@ -305,7 +315,15 @@ def export_notebook(
         is None
     ):
         raise ArchiveError(f"Notebook {notebook_id} not found")
-    return _write_archive(conn, settings, out_path, "notebook", [int(notebook_id)])
+    return _write_archive(
+        conn,
+        settings,
+        out_path,
+        "notebook",
+        [int(notebook_id)],
+        now=now,
+        export_id=export_id,
+    )
 
 
 def create_backup(

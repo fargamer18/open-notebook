@@ -7,7 +7,6 @@ These tests start real child processes using the deterministic test backend
 import io
 import json
 import os
-import signal
 import subprocess
 import sys
 import threading
@@ -17,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from conftest import process_gone
 from litenotebook.embed import protocol as p
 from litenotebook.embed._test_backend import fake_vectors
 from litenotebook.embed.embedder import (
@@ -30,21 +30,6 @@ from litenotebook.embed.worker_client import (
     EmbeddingWorkerError,
     WorkerEmbedder,
 )
-
-
-def process_gone(pid, timeout=10.0):
-    """True once ``pid`` no longer exists and is not a zombie."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            state = Path(f"/proc/{pid}/stat").read_text().split(") ", 1)[1][0]
-        except (FileNotFoundError, ProcessLookupError):
-            return True
-        if state == "Z":  # a zombie still counts as a leak
-            time.sleep(0.05)
-            continue
-        time.sleep(0.05)
-    return False
 
 
 def pids(directory):
@@ -286,7 +271,7 @@ def test_externally_killed_worker_is_replaced(make, tmp_path):
     w = make()
     w.encode(["x"])
     victim = w.pid
-    os.kill(victim, signal.SIGKILL)
+    w._proc.kill()  # an "external" kill, through the exact handle (any OS)
     time.sleep(0.2)
     np.testing.assert_array_equal(w.encode(["y"]), fake_vectors(["y"]))
     assert w.pid != victim and w.spawns == 2

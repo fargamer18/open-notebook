@@ -8,7 +8,6 @@ applied only where the text layer is empty).
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable
@@ -48,20 +47,38 @@ def normalize_page_text(text: str) -> str:
     return text.strip()
 
 
+def _tesseract() -> str | None:
+    from litenotebook.platform_utils.system import find_executable
+
+    found = find_executable("tesseract")  # tesseract.exe on Windows
+    return str(found) if found else None
+
+
 def tesseract_available() -> bool:
-    return shutil.which("tesseract") is not None
+    return _tesseract() is not None
 
 
 def _ocr_page(page: pymupdf.Page) -> str:
+    from litenotebook.platform_utils.processes import creation_flags
+
+    exe = _tesseract()
+    if exe is None:
+        return ""
     pix = page.get_pixmap(matrix=pymupdf.Matrix(OCR_ZOOM, OCR_ZOOM), alpha=False)
-    with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
-        pix.save(tmp.name)
-        result = subprocess.run(
-            ["tesseract", tmp.name, "stdout", "-l", "eng", "--psm", "6"],
+    # A temporary directory rather than an open temp file: Windows will not let
+    # tesseract open a file this process still holds open. The image is
+    # written and closed before tesseract reads it; the directory is removed.
+    with tempfile.TemporaryDirectory(prefix="litenotebook-ocr-") as tmp:
+        image = Path(tmp) / "page.png"
+        pix.save(str(image))
+        result = subprocess.run(  # noqa: S603 - argument list, no shell
+            [exe, str(image), "stdout", "-l", "eng", "--psm", "6"],
             capture_output=True,
-            text=True,
+            encoding="utf-8",  # tesseract writes UTF-8; never the locale codec
+            errors="replace",
             timeout=120,
             check=False,
+            creationflags=creation_flags(),
         )
     return result.stdout if result.returncode == 0 else ""
 
