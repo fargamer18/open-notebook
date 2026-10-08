@@ -233,6 +233,67 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .status-line { display: flex; align-items: center; gap: 0.5rem; }
 .model-list { margin: 0.25rem 0 0.5rem; padding-left: 1.1rem; }
 
+/* --- sources --------------------------------------------------------------- */
+
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.6rem; }
+.panel-head h1, .panel-head h2 { margin: 0; }
+.upload-form { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; }
+.upload-form .field { margin: 0; }
+.upload-form .grow { flex: 1 1 18rem; }
+.upload-form label.check { margin: 0 0 0.45rem; white-space: nowrap; }
+input[type="file"] { padding: 0.3rem 0.45rem; color: var(--muted); }
+input[type="file"]::file-selector-button {
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); padding: 0.2rem 0.6rem; margin-right: 0.6rem; font: inherit; cursor: pointer;
+}
+
+.src-list { list-style: none; margin: 0; padding: 0; }
+.src-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(9rem, 14rem) auto auto;
+  align-items: center; gap: 0.5rem 1.25rem;
+  padding: 0.6rem 1.1rem; border-bottom: 1px solid var(--border);
+}
+.src-row:last-child { border-bottom: none; }
+.src-row:hover { background: var(--surface-2); }
+.src-row.is-confirming { display: block; background: var(--surface-2); border-left: 2px solid var(--danger); }
+.src-row.is-deleted { display: block; }
+.src-main { min-width: 0; display: flex; flex-direction: column; }
+.src-name { color: var(--text); font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-name:hover { color: var(--accent-strong); }
+.src-sub { color: var(--faint); font-size: 0.8rem; }
+.src-sub .tag { margin: 0 0.3rem 0 0; color: var(--muted); background: var(--surface-2); border-color: var(--border); }
+.src-state { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; min-width: 0; }
+.src-error { color: var(--danger); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-row-error { grid-column: 1 / -1; }
+.src-stats { display: flex; gap: 1rem; margin: 0; font-size: 0.85rem; }
+.src-stats div { text-align: right; min-width: 3rem; }
+.src-stats dt { color: var(--faint); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.src-stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+.src-actions { display: flex; gap: 0.25rem; justify-content: flex-end; }
+.src-actions form { margin: 0; }
+.src-title { font-size: 1.1rem; overflow-wrap: anywhere; }
+
+.pill {
+  align-self: flex-start; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em;
+  padding: 0.05rem 0.5rem; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--muted);
+}
+.pill-ready { color: var(--accent); border-color: var(--accent-bg); background: var(--accent-bg); }
+.pill-processing { color: var(--warn); border-color: #3a3220; }
+.pill-failed { color: var(--danger); border-color: var(--danger-bg); background: var(--danger-bg); }
+
+progress {
+  appearance: none; width: 100%; height: 4px; border: none; border-radius: 2px;
+  background: var(--surface-2); overflow: hidden;
+}
+progress::-webkit-progress-bar { background: var(--surface-2); }
+progress::-webkit-progress-value { background: var(--accent); }
+progress::-moz-progress-bar { background: var(--accent); }
+
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1.25rem; margin: 0.75rem 0; font-size: 0.9rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; }
+.wrap { overflow-wrap: anywhere; }
+
 /* --- small windows -------------------------------------------------------- */
 
 @media (max-width: 640px) {
@@ -241,4 +302,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .container { padding: 1rem 0.75rem 2rem; }
   .nb-row { flex-wrap: wrap; gap: 0.35rem 0.75rem; }
   .nb-meta { order: 3; }
+  .src-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .src-state { grid-column: 1 / -1; grid-row: 2; }
+  .src-stats { justify-content: flex-start; }
 }

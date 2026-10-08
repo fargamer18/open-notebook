@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from conftest import FakeEmbedder, make_pdf
 from litenotebook.config import load_settings
-from litenotebook.db import connect
+from litenotebook.db import available_migrations, connect
 from litenotebook.index.faiss_store import FaissStore
 from litenotebook.ingest.pipeline import ingest_pdf
 from litenotebook.notebooks import get_notebook_by_name
@@ -293,10 +293,13 @@ def test_notebook_isolation_in_list_and_workspace(client, app_settings, tmp_path
     create(client, "Beta")
     populate(app_settings, "Alpha", tmp_path)
     alpha, beta = notebook_id(app_settings, "Alpha"), notebook_id(app_settings, "Beta")
-    assert "<dd>2</dd>" in client.get(f"/notebooks/{alpha}").text.replace(" ", "")
+    assert re.search(
+        r'Chunks</dt>\s*<dd id="ws-chunks">2</dd>',
+        client.get(f"/notebooks/{alpha}").text,
+    )
     beta_page = client.get(f"/notebooks/{beta}").text
     assert "Beta" in beta_page and "Alpha</h1>" not in beta_page
-    assert re.search(r"Sources</dt>\s*<dd>0</dd>", beta_page)
+    assert re.search(r'Sources</dt>\s*<dd id="ws-sources">0</dd>', beta_page)
 
 
 def test_workspace(client, app_settings):
@@ -312,7 +315,8 @@ def test_workspace(client, app_settings):
         "Chat",
         "Notes",
         "Search",
-        "Arrives in Phase 3".lower(),
+        "Upload PDF",
+        "No sources yet",
     ):
         assert text.lower() in r.text.lower()
     chat = client.get(f"/notebooks/{nb}?tab=chat").text
@@ -463,7 +467,10 @@ def test_connection_test_without_javascript_renders_full_page(client):
 def test_health_llm_online(client):
     h = client.get("/healthz").json()
     assert h["status"] == "ok"
-    assert h["database"] == {"status": "ok", "schema_version": 2}
+    assert h["database"] == {
+        "status": "ok",
+        "schema_version": len(available_migrations()),
+    }
     assert h["data"]["status"] == "ok"
     assert h["llm"]["status"] == "reachable" and h["llm"]["model_available"] is True
     assert "LLM online" in client.get("/health/badge").text

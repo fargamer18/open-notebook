@@ -1,0 +1,19 @@
+{% set nb = s.notebook %}
+<section class="panel" aria-labelledby="sources-title">
+  <div class="panel-head">
+    <h2 id="sources-title">Sources</h2>
+    <span class="muted">PDF only · up to {{ max_upload_mb }} MiB</span>
+  </div>
+  <div id="source-upload-slot">
+    {% include "partials/source_upload.html" %}
+  </div>
+</section>
+
+<section class="panel flush">
+  <ul class="src-list" id="source-list" aria-label="Sources">
+    {% for src in sources %}
+      {% with mode = "view", oob_counts = false %}{% include "partials/source_row.html" %}{% endwith %}
+    {% endfor %}
+  </ul>
+  <p class="empty" id="source-empty" {% if sources %}hidden{% endif %}>No sources yet. Upload a PDF above; it is processed in the background.</p>
+</section>

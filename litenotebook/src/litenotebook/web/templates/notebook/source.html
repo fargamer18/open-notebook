@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set nav = "notebooks" %}
+{% set nb = s.notebook %}
+{% set base = "/notebooks/" ~ nb.id ~ "/sources/" ~ src.id %}
+{% block title %}{{ src.original_filename }}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="/">Notebooks</a><span aria-hidden="true">/</span>
+  <a href="/notebooks/{{ nb.id }}?tab=sources">{{ nb.name }}</a><span aria-hidden="true">/</span>
+  <span>{{ src.original_filename }}</span>
+</nav>
+
+<section class="panel" id="source-detail"
+  {% if src.active %}hx-get="{{ base }}" hx-trigger="every 2s" hx-select="#source-detail" hx-target="this" hx-swap="outerHTML"{% endif %}>
+  <div class="panel-head">
+    <h1 class="src-title">{{ src.original_filename }}</h1>
+    <span class="pill pill-{{ src.status }}">{{ src.status | capitalize }}</span>
+  </div>
+  {% if src.active %}<p class="src-state">{% include "partials/source_progress.html" %}</p>{% endif %}
+  {% if src.status == "failed" and src.error %}<p class="error" role="alert">{{ src.error }}</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+
+  <dl class="kv">
+    <dt>Type</dt><dd>{{ src.file_type }}</dd>
+    <dt>Size</dt><dd>{{ src.size_bytes | filesize }} <span class="muted">({{ "{:,}".format(src.size_bytes) }} bytes)</span></dd>
+    <dt>Pages</dt><dd>{{ src.page_count if src.page_count is not none else "–" }}{% if src.status == "ready" and (src.pages_ocr or src.pages_empty) %} <span class="muted">({{ src.pages_ocr }} OCR, {{ src.pages_empty }} without text)</span>{% endif %}</dd>
+    <dt>Chunks</dt><dd>{{ src.chunk_count }}</dd>
+    <dt>OCR</dt><dd>{{ "On (pages with no text layer)" if src.ocr else "Off" }}</dd>
+    <dt>SHA-256</dt><dd class="mono wrap">{{ src.sha256 }}</dd>
+    <dt>Status</dt><dd>{{ src.stage_label }}{% if src.attempts > 1 %} <span class="muted">· attempt {{ src.attempts }}</span>{% endif %}</dd>
+    <dt>Added</dt><dd class="mono">{{ src.created_at | ts }}</dd>
+    <dt>Started</dt><dd class="mono">{{ src.started_at | ts }}</dd>
+    <dt>Finished</dt><dd class="mono">{{ src.finished_at | ts }}</dd>
+  </dl>
+
+  {% if src.timings %}
+  <h3>Ingestion timings</h3>
+  <dl class="kv timings">
+    {% for key, label in [("model_load", "MiniLM load"), ("extract", "Extraction"), ("chunk", "Chunking"), ("embed", "Embedding"), ("sqlite", "SQLite"), ("faiss", "FAISS index"), ("total", "Total")] %}
+      {% if key in src.timings %}<dt>{{ label }}</dt><dd class="mono">{{ src.timings[key] | duration }}</dd>{% endif %}
+    {% endfor %}
+  </dl>
+  {% endif %}
+
+  <div class="actions">
+    {% if src.status == "failed" %}
+      <form method="post" action="{{ base }}/retry"><button class="btn" type="submit">Retry ingestion</button></form>
+    {% endif %}
+    {% if src.status != "processing" and not confirming %}
+      <a class="btn btn-ghost btn-danger-text" href="{{ base }}?confirm=delete">Delete…</a>
+    {% endif %}
+    <a class="btn btn-ghost" href="/notebooks/{{ nb.id }}?tab=sources">Back to sources</a>
+  </div>
+
+  {% if confirming and src.status != "processing" %}
+  <div class="confirm">
+    <p class="confirm-title">Delete this source permanently?</p>
+    <dl class="preview">
+      <dt>Source</dt><dd>{{ src.original_filename }}</dd>
+      <dt>Pages</dt><dd>{{ src.page_count if src.page_count is not none else "–" }}</dd>
+      <dt>Chunks</dt><dd>{{ src.chunk_count }}</dd>
+    </dl>
+    <form class="inline-form" method="post" action="{{ base }}/delete">
+      <input type="hidden" name="confirm" value="{{ src.id }}">
+      <button class="btn btn-danger" type="submit">Delete source</button>
+      <a class="btn btn-ghost" href="{{ base }}">Cancel</a>
+    </form>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

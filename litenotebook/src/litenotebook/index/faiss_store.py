@@ -20,7 +20,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import faiss
 import numpy as np
 import numpy.typing as npt
 
@@ -32,6 +31,17 @@ META_VERSION = 1
 # faiss-cpu's bundled stubs omit IndexIDMap2.id_map and the numpy-array form
 # of remove_ids() that the SWIG wrapper accepts, so index objects are untyped.
 FaissIndex = Any
+
+
+def _faiss() -> Any:
+    """Import FAISS on first use: it maps ~30 MB of BLAS/OpenMP libraries, which
+    processes that never search or index (e.g. the web server while browsing)
+    should not pay for."""
+    import faiss
+
+    return faiss
+
+
 _locks: dict[Path, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
@@ -87,11 +97,11 @@ def _atomic_write(path: Path, writer: Callable[[Path], None]) -> None:
 
 
 def new_index(dim: int = EMBED_DIM) -> FaissIndex:
-    return faiss.IndexIDMap2(faiss.IndexFlatIP(dim))
+    return _faiss().IndexIDMap2(_faiss().IndexFlatIP(dim))
 
 
 def index_ids(index: FaissIndex) -> npt.NDArray[np.int64]:
-    return np.sort(faiss.vector_to_array(index.id_map).astype(np.int64))
+    return np.sort(_faiss().vector_to_array(index.id_map).astype(np.int64))
 
 
 class FaissStore:
@@ -150,7 +160,7 @@ class FaissStore:
             self.index_path(notebook_id),
             self.meta_path(notebook_id),
         )
-        index = faiss.read_index(str(index_path)) if index_path.exists() else None
+        index = _faiss().read_index(str(index_path)) if index_path.exists() else None
         meta = None
         if meta_path.exists():
             try:
@@ -184,7 +194,7 @@ class FaissStore:
             return status
 
         status.index_count = int(index.ntotal)
-        if not isinstance(index, faiss.IndexIDMap2):
+        if not isinstance(index, _faiss().IndexIDMap2):
             problems.append(f"index type is {type(index).__name__}, not IndexIDMap2")
             status.needs_rebuild = True
         if index.d != dim:
@@ -229,7 +239,7 @@ class FaissStore:
             "saved_at": datetime.now(UTC).isoformat(),
         }
         _atomic_write(
-            self.index_path(notebook_id), lambda p: faiss.write_index(index, str(p))
+            self.index_path(notebook_id), lambda p: _faiss().write_index(index, str(p))
         )
 
         def write_meta(path: Path) -> None:

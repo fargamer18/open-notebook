@@ -202,6 +202,14 @@ def delete_notebook(
     """Delete the notebook (sources/pages/chunks cascade) and its files/FAISS index."""
     summary = get_summary(conn, notebook_id)
     with conn:
+        busy = conn.execute(
+            "SELECT 1 FROM sources WHERE notebook_id = ? AND status = 'processing'",
+            (notebook_id,),
+        ).fetchone()
+        if busy:
+            raise NotebookError(
+                "A source in this notebook is being ingested; wait for it to finish"
+            )
         conn.execute("DELETE FROM notebooks WHERE id = ?", (notebook_id,))
     try:
         removed = _remove_notebook_dir(settings, notebook_id)

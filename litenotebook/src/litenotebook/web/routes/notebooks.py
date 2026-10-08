@@ -29,7 +29,7 @@ router = APIRouter()
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
 
 WORKSPACE_TABS = {
-    "sources": ("Sources", "Upload and manage PDFs and text files.", 3),
+    "sources": ("Sources", "Upload and manage PDFs.", 3),
     "chat": ("Chat", "Ask questions answered from this notebook's sources.", 5),
     "notes": ("Notes", "Write notes and save answers.", 6),
     "search": ("Search", "Hybrid keyword + semantic search across sources.", 4),
@@ -184,7 +184,22 @@ def delete(
             confirm_error=message,
             status_code=422,
         )
-    result = delete_notebook(conn, app_settings(request), notebook_id)
+    try:
+        result = delete_notebook(conn, app_settings(request), notebook_id)
+    except NotebookNotFoundError:
+        raise
+    except NotebookError as e:
+        if is_htmx(request):
+            return _row(
+                request, conn, notebook_id, "confirm", error=str(e), status_code=409
+            )
+        return _index(
+            request,
+            conn,
+            confirming_id=notebook_id,
+            confirm_error=str(e),
+            status_code=409,
+        )
     if not is_htmx(request):
         return redirect("/")
     return render(request, "partials/notebook_deleted.html", {"result": result})
@@ -194,11 +209,16 @@ def delete(
 def workspace(
     request: Request, conn: Db, notebook_id: int, tab: str = "sources"
 ) -> HTMLResponse:
-    summary = get_summary(conn, notebook_id)
     if tab not in WORKSPACE_TABS:
         tab = "sources"
+    if tab == "sources":
+        from litenotebook.web.routes.sources import panel_context
+
+        context = panel_context(request, conn, notebook_id)
+    else:
+        context = {"s": get_summary(conn, notebook_id)}
     return render(
         request,
         "notebook/workspace.html",
-        {"s": summary, "tabs": WORKSPACE_TABS, "tab": tab},
+        {**context, "tabs": WORKSPACE_TABS, "tab": tab},
     )

@@ -19,6 +19,34 @@ from litenotebook.services.settings import SettingsService
 TEMPLATES = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
+def filesize(num: int | None) -> str:
+    if num is None:
+        return "–"
+    size = float(num)
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if size < 1024 or unit == "GiB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} GiB"
+
+
+def duration(seconds: float | None) -> str:
+    if seconds is None:
+        return "–"
+    if seconds < 1:
+        return f"{seconds * 1000:.0f} ms"
+    if seconds < 120:
+        return f"{seconds:.1f} s"
+    return f"{seconds // 60:.0f} min {seconds % 60:.0f} s"
+
+
+def timestamp(value: str | None) -> str:
+    return (value or "")[:19].replace("T", " ") or "–"
+
+
+TEMPLATES.env.filters.update(filesize=filesize, duration=duration, ts=timestamp)
+
+
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
     conn = connect(app_settings(request).db_path)
     try:

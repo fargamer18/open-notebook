@@ -1,0 +1,7 @@
+{# Stage + numeric progress, only where the pipeline actually knows it. #}
+{% if src.status == "pending" %}
+  <span class="muted">Uploaded · waiting</span>
+{% elif src.status == "processing" %}
+  <span>{{ src.stage_label }}{% if src.progress_total %} · {{ src.progress_done or 0 }}/{{ src.progress_total }} {{ "pages" if src.stage == "extracting" else "chunks" }}{% endif %}</span>
+  {% if src.progress_total %}<progress max="{{ src.progress_total }}" value="{{ src.progress_done or 0 }}"></progress>{% endif %}
+{% endif %}

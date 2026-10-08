@@ -2,11 +2,18 @@
 
 Qwen is never used here: embeddings always come from all-MiniLM-L6-v2 running
 in-process on the CPU.
+
+Local-first: the model and tokenizer are resolved from the local Hugging Face
+cache with ``local_files_only=True`` and then loaded from that directory, so
+loading never contacts huggingface.co (no metadata checks, no implicit
+download), whatever the user's HF_HUB_OFFLINE setting. A missing model raises
+``EmbeddingModelUnavailableError`` with instructions to download it once.
 """
 
 from __future__ import annotations
 
 import functools
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
@@ -24,8 +31,26 @@ BLOB_BYTES = EMBED_DIM * BLOB_DTYPE.itemsize
 _NORM_TOLERANCE = 1e-3
 
 
+# Files that must be in the local snapshot for an offline load.
+REQUIRED_MODEL_FILES = ("modules.json", "config.json", "tokenizer.json")
+WEIGHT_FILES = ("model.safetensors", "pytorch_model.bin")
+
+
 class EmbeddingError(ValueError):
     pass
+
+
+class EmbeddingModelUnavailableError(EmbeddingError):
+    """The embedding model is not in the local cache (it is never downloaded
+    implicitly). The message is safe to show in the UI: it names no paths."""
+
+    def __init__(self, detail: str = "") -> None:
+        super().__init__(
+            f"The embedding model {EMBED_MODEL} is not available locally"
+            f"{f' ({detail})' if detail else ''}. LiteNotebook does not download "
+            f"models during ingestion. Download it once with "
+            f"`.venv/bin/hf download {EMBED_MODEL}`, then retry."
+        )
 
 
 class TextEmbedder(Protocol):
@@ -38,16 +63,38 @@ class TextEmbedder(Protocol):
 
 
 @functools.lru_cache(maxsize=1)
+def local_model_dir() -> Path:
+    """The cached snapshot directory of the embedding model, found offline.
+
+    ``snapshot_download(local_files_only=True)`` only reads the local cache
+    (honouring HF_HOME / HF_HUB_CACHE); it never makes a network request.
+    Failures are not cached, so downloading the model later just works.
+    """
+    from huggingface_hub import snapshot_download
+    from huggingface_hub.errors import LocalEntryNotFoundError
+
+    try:
+        path = Path(snapshot_download(EMBED_MODEL, local_files_only=True))
+    except (LocalEntryNotFoundError, OSError) as e:
+        raise EmbeddingModelUnavailableError() from e
+    missing = [name for name in REQUIRED_MODEL_FILES if not (path / name).is_file()]
+    if not any((path / name).is_file() for name in WEIGHT_FILES):
+        missing.append("model weights")
+    if missing:
+        raise EmbeddingModelUnavailableError(f"missing {', '.join(missing)}")
+    return path
+
+
+@functools.lru_cache(maxsize=1)
 def get_tokenizer() -> Tokenizer:
     """The exact tokenizer all-MiniLM-L6-v2 uses, with truncation disabled.
 
     The model's tokenizer.json ships with truncation at 128 tokens; leaving
     it on would make every count silently cap out and hide oversized chunks.
     """
-    from huggingface_hub import hf_hub_download
     from tokenizers import Tokenizer
 
-    tokenizer = Tokenizer.from_file(hf_hub_download(EMBED_MODEL, "tokenizer.json"))
+    tokenizer = Tokenizer.from_file(str(local_model_dir() / "tokenizer.json"))
     tokenizer.no_truncation()
     tokenizer.no_padding()
     return tokenizer
@@ -68,11 +115,23 @@ class MiniLMEmbedder:
         self.batch_size = batch_size
         self._model: object | None = None
 
+    @property
+    def loaded(self) -> bool:
+        return self._model is not None
+
+    def load(self) -> None:
+        """Load the model now (otherwise it loads on the first ``encode``)."""
+        self._load()
+
     def _load(self) -> object:
         if self._model is None:
+            model_dir = local_model_dir()  # before the slow torch import
             from sentence_transformers import SentenceTransformer
 
-            model = SentenceTransformer(EMBED_MODEL, device="cpu")
+            # A local directory plus local_files_only: no Hub requests at all.
+            model = SentenceTransformer(
+                str(model_dir), device="cpu", local_files_only=True
+            )
             if model.max_seq_length != EMBED_MAX_TOKENS:
                 raise EmbeddingError(
                     f"Unexpected max_seq_length {model.max_seq_length}"

@@ -1,0 +1,6 @@
+{% with upload_notice = "Uploaded “" ~ src.original_filename ~ "” — processing in the background." %}{% include "partials/source_upload.html" %}{% endwith %}
+<ul hx-swap-oob="afterbegin:#source-list">
+  {% with oob_counts = false %}{% include "partials/source_row.html" %}{% endwith %}
+</ul>
+<p class="empty" id="source-empty" hidden hx-swap-oob="true">No sources yet. Upload a PDF above; it is processed in the background.</p>
+<dd id="ws-sources" hx-swap-oob="true">{{ s.sources }}</dd>

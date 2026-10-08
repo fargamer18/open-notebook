@@ -9,8 +9,8 @@
   <h1>{{ nb.name }}</h1>
   {% if nb.description %}<p class="muted">{{ nb.description }}</p>{% endif %}
   <dl class="meta-row">
-    <div><dt>Sources</dt><dd>{{ s.sources }}</dd></div>
-    <div><dt>Chunks</dt><dd>{{ s.chunks }}</dd></div>
+    <div><dt>Sources</dt><dd id="ws-sources">{{ s.sources }}</dd></div>
+    <div><dt>Chunks</dt><dd id="ws-chunks">{{ s.chunks }}</dd></div>
     <div><dt>Embeddings</dt><dd class="mono">{{ nb.embed_model.split("/")[-1] }} · {{ nb.embed_dim }}-d</dd></div>
     <div><dt>Created</dt><dd class="mono">{{ nb.created_at[:16] | replace("T", " ") }}</dd></div>
   </dl>
@@ -23,9 +23,13 @@
 </nav>
 
 {% set label, desc, phase = tabs[tab] %}
+{% if tab == "sources" %}
+  {% include "notebook/sources_panel.html" %}
+{% else %}
 <section class="panel placeholder" aria-labelledby="tab-title">
   <h2 id="tab-title">{{ label }}</h2>
   <p class="muted">{{ desc }}</p>
   <p class="phase">Not built yet — arrives in Phase {{ phase }}.</p>
 </section>
+{% endif %}
 {% endblock %}

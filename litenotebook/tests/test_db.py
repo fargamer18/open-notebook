@@ -43,7 +43,7 @@ def test_migration_creates_schema(conn):
         "chunks_fts",
         "settings",
     } <= _tables(conn)
-    assert schema_version(conn) == len(available_migrations()) == 2
+    assert schema_version(conn) == len(available_migrations()) == 3
 
 
 def test_pragmas(conn):
@@ -52,8 +52,8 @@ def test_pragmas(conn):
 
 
 def test_migrate_is_idempotent(conn):
-    assert migrate(conn) == 2
-    assert migrate(conn) == 2
+    assert migrate(conn) == 3
+    assert migrate(conn) == 3
 
 
 def test_newer_database_is_rejected(settings):
@@ -151,3 +151,76 @@ def test_fts_triggers_follow_chunk_changes(conn, notebook):
     assert hits("zebra") == [] and len(hits("giraffe")) == 1
     conn.execute("DELETE FROM sources WHERE id = 1")  # cascades to chunks
     assert hits("giraffe") == []
+
+
+def _migrate_to(conn, version, monkeypatch, tmp_path):
+    """Apply only migrations 1..version (simulates an older database)."""
+    import shutil
+
+    from litenotebook import db
+
+    partial = tmp_path / f"migrations_{version}"
+    partial.mkdir()
+    for _v, path in available_migrations()[:version]:
+        shutil.copy(path, partial / path.name)
+    with monkeypatch.context() as m:
+        m.setattr(db, "MIGRATIONS_DIR", partial)
+        assert migrate(conn) == version
+
+
+def test_phase3_migration_preserves_phase2_data(settings, monkeypatch, tmp_path):
+    conn = connect(settings.db_path)
+    _migrate_to(conn, 2, monkeypatch, tmp_path)
+    nb = create_notebook(conn, "old")
+    for sid, status in [(1, "ready"), (2, "error"), (3, "queued"), (4, "embedding")]:
+        conn.execute(
+            "INSERT INTO sources (id, notebook_id, title, original_filename, "
+            "stored_path, mime, sha256, size_bytes, status, error) "
+            "VALUES (?, ?, 't', 't.pdf', 'p', 'application/pdf', ?, 1, ?, ?)",
+            (sid, nb.id, f"h{sid}", status, "boom" if status == "error" else None),
+        )
+    conn.execute(
+        "INSERT INTO pages (id, source_id, page_no, text, method) "
+        "VALUES (1, 1, 1, 'x', 'text')"
+    )
+    conn.execute(
+        "INSERT INTO chunks (id, notebook_id, source_id, page_id, page_no, ord, "
+        "char_start, char_end, text, n_tokens) "
+        "VALUES (5, ?, 1, 1, 1, 0, 0, 5, 'zebra crossing', 4)",
+        (nb.id,),
+    )
+    conn.commit()
+
+    assert migrate(conn) == 3
+    rows = {
+        r["id"]: (r["status"], r["stage"], r["error"])
+        for r in conn.execute("SELECT * FROM sources")
+    }
+    assert rows == {
+        1: ("ready", "ready", None),
+        2: ("failed", "failed", "boom"),
+        3: ("pending", "uploaded", None),
+        4: ("processing", "extracting", None),
+    }
+    # child rows survived the table rebuild (no cascade) and FTS still matches
+    assert conn.execute("SELECT count(*) FROM pages").fetchone()[0] == 1
+    hits = conn.execute(
+        "SELECT rowid FROM chunks_fts WHERE chunks_fts MATCH 'zebra'"
+    ).fetchall()
+    assert [h[0] for h in hits] == [5]
+    assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    # cascades still work on the rebuilt table
+    conn.execute("DELETE FROM sources WHERE id = 1")
+    assert conn.execute("SELECT count(*) FROM chunks").fetchone()[0] == 0
+    conn.close()
+
+
+def test_new_status_vocabulary_enforced(conn, notebook):
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO sources (notebook_id, title, original_filename, stored_path, "
+            "mime, sha256, size_bytes, status) VALUES (?, 't', 't.pdf', 'p', "
+            "'application/pdf', 'x', 1, 'error')",
+            (notebook.id,),
+        )

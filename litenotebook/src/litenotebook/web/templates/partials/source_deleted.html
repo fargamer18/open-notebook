@@ -1,0 +1,7 @@
+<li class="src-row is-deleted" id="src-{{ src.id }}">
+  <span class="muted">Deleted “{{ src.original_filename }}”.</span>
+</li>
+{% if oob_counts %}
+<dd id="ws-sources" hx-swap-oob="true">{{ s.sources }}</dd>
+<dd id="ws-chunks" hx-swap-oob="true">{{ s.chunks }}</dd>
+{% endif %}

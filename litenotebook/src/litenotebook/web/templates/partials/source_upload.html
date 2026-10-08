@@ -1,0 +1,16 @@
+{% set nb = s.notebook %}
+<form class="upload-form" method="post" action="/notebooks/{{ nb.id }}/sources" enctype="multipart/form-data"
+      hx-post="/notebooks/{{ nb.id }}/sources" hx-encoding="multipart/form-data"
+      hx-target="#source-upload-slot" hx-swap="innerHTML"
+      hx-indicator="#upload-busy" hx-disabled-elt="find button">
+  <div class="field grow">
+    <label for="src-file">PDF file</label>
+    <input id="src-file" name="file" type="file" accept="application/pdf,.pdf" required>
+  </div>
+  <label class="check"><input type="checkbox" name="ocr" value="1"> OCR pages with no text layer</label>
+  <button class="btn btn-primary" type="submit">Upload PDF</button>
+  <span id="upload-busy" class="htmx-indicator muted">Uploading…</span>
+</form>
+<p class="hint">Pages that already have text are never OCR'd. A PDF can be added once per notebook; other notebooks keep their own copy.</p>
+{% if upload_error %}<p class="error" role="alert">{{ upload_error }}</p>{% endif %}
+{% if upload_notice %}<p class="notice" role="status">{{ upload_notice }}</p>{% endif %}

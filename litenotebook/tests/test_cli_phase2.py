@@ -55,3 +55,21 @@ def test_llm_check_uses_saved_settings(tmp_path, monkeypatch, capsys):
     assert cli.main(["--data-dir", str(tmp_path), "llm", "check"]) == 0
     assert seen["url"] == "http://localhost:9100/v1"
     assert "Connected — m available" in capsys.readouterr().out
+
+
+def test_serve_entry_point_does_not_import_heavy_libraries():
+    """`litenotebook serve` imports the CLI module: it must not pull in
+    FAISS, torch or sentence-transformers before any ingestion happens."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, litenotebook.cli, litenotebook.web.app\n"
+        "print([m for m in ('faiss', 'torch', 'sentence_transformers', "
+        "'transformers') if m in sys.modules])"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "[]"

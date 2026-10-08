@@ -27,6 +27,8 @@ DEFAULT_LLM_BASE_URL = "http://127.0.0.1:8080/v1"
 DEFAULT_LLM_MODEL = "Qwen/Qwen3-4B-GGUF:Q4_K_M"
 DEFAULT_TOP_K = 8
 
+DEFAULT_MAX_UPLOAD_MB = 100
+
 ENV_PREFIX = "LITENOTEBOOK_"
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
@@ -56,6 +58,9 @@ class Settings:
     llm_model: str = DEFAULT_LLM_MODEL
     llm_timeout_s: float = 180.0
 
+    # Uploads (web): PDFs larger than this are rejected while streaming.
+    max_upload_mb: int = DEFAULT_MAX_UPLOAD_MB
+
     def __post_init__(self) -> None:
         if self.host not in LOOPBACK_HOSTS:
             raise ConfigError(
@@ -73,6 +78,12 @@ class Settings:
             )
         if not self.llm_base_url.startswith(("http://", "https://")):
             raise ConfigError("llm_base_url must be an http(s) URL")
+        if not 1 <= self.max_upload_mb <= 4096:
+            raise ConfigError("max_upload_mb must be between 1 and 4096")
+
+    @property
+    def max_upload_bytes(self) -> int:
+        return self.max_upload_mb * 1024 * 1024
 
     @property
     def db_path(self) -> Path:
@@ -90,6 +101,15 @@ class Settings:
 
     def sources_dir(self, notebook_id: int) -> Path:
         return self.notebook_dir(notebook_id) / "sources"
+
+    def source_file(self, notebook_id: int, source_id: int) -> Path:
+        """Storage path for an uploaded source: built from integer ids only."""
+        return self.sources_dir(int(notebook_id)) / f"{int(source_id)}.pdf"
+
+    @property
+    def upload_tmp_dir(self) -> Path:
+        """Partial uploads land here (same filesystem as sources, not tmpfs /tmp)."""
+        return self.data_dir / "tmp" / "uploads"
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -122,6 +142,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         ("chunk_target_tokens", "CHUNK_TOKENS"),
         ("chunk_overlap_tokens", "CHUNK_OVERLAP_TOKENS"),
         ("retrieval_top_k", "TOP_K"),
+        ("max_upload_mb", "MAX_UPLOAD_MB"),
     ):
         if (number := get_int(name)) is not None:
             overrides[key] = number

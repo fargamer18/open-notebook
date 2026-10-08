@@ -1,0 +1,59 @@
+{% set base = "/notebooks/" ~ src.notebook_id ~ "/sources/" ~ src.id %}
+{% set target = "#src-" ~ src.id %}
+<li class="src-row status-{{ src.status }}{% if mode == 'confirm' %} is-confirming{% endif %}" id="src-{{ src.id }}"
+    {% if src.active and mode != "confirm" %}hx-get="{{ base }}/status" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+{% if mode == "confirm" %}
+  <div class="confirm">
+    <p class="confirm-title">Delete this source permanently?</p>
+    <dl class="preview">
+      <dt>Source</dt><dd>{{ src.original_filename }}</dd>
+      <dt>Pages</dt><dd>{{ src.page_count if src.page_count is not none else "–" }}</dd>
+      <dt>Chunks</dt><dd>{{ src.chunk_count }}</dd>
+      <dt>Size</dt><dd>{{ src.size_bytes | filesize }}</dd>
+    </dl>
+    <p class="muted">Its stored PDF, extracted text, chunks and search vectors are removed.</p>
+    <form class="inline-form" method="post" action="{{ base }}/delete"
+          hx-post="{{ base }}/delete" hx-target="{{ target }}" hx-swap="outerHTML">
+      <input type="hidden" name="confirm" value="{{ src.id }}">
+      <button class="btn btn-danger" type="submit">Delete source</button>
+      <a class="btn btn-ghost" href="{{ base }}" hx-get="{{ base }}/status"
+         hx-target="{{ target }}" hx-swap="outerHTML">Cancel</a>
+    </form>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  </div>
+{% else %}
+  <div class="src-main">
+    <a class="src-name" href="{{ base }}" title="{{ src.original_filename }}">{{ src.original_filename }}</a>
+    <span class="src-sub">
+      <span class="tag">{{ src.file_type }}</span>
+      {{ src.size_bytes | filesize }} · added {{ src.created_at | ts }}{% if src.ocr %} · OCR on{% endif %}
+    </span>
+  </div>
+  <div class="src-state">
+    <span class="pill pill-{{ src.status }}">{{ src.status | capitalize }}</span>
+    {% include "partials/source_progress.html" %}
+    {% if src.status == "failed" and src.error %}<span class="src-error" title="{{ src.error }}">{{ src.error }}</span>{% endif %}
+  </div>
+  <dl class="src-stats">
+    <div><dt>Pages</dt><dd>{{ src.page_count if src.page_count is not none else "–" }}</dd></div>
+    <div><dt>Chunks</dt><dd>{{ src.chunk_count if src.status == "ready" else "–" }}</dd></div>
+    <div><dt>Ingest</dt><dd>{{ src.ingest_seconds | duration if src.status == "ready" else "–" }}</dd></div>
+  </dl>
+  <span class="src-actions">
+    {% if src.status == "failed" %}
+      <form method="post" action="{{ base }}/retry" hx-post="{{ base }}/retry" hx-target="{{ target }}" hx-swap="outerHTML">
+        <button class="btn btn-sm" type="submit">Retry</button>
+      </form>
+    {% endif %}
+    {% if src.status != "processing" %}
+      <a class="btn btn-ghost btn-sm btn-danger-text" href="{{ base }}/delete"
+         hx-get="{{ base }}/delete" hx-target="{{ target }}" hx-swap="outerHTML">Delete</a>
+    {% endif %}
+  </span>
+  {% if error %}<p class="error src-row-error" role="alert">{{ error }}</p>{% endif %}
+{% endif %}
+</li>
+{% if oob_counts %}
+<dd id="ws-sources" hx-swap-oob="true">{{ s.sources }}</dd>
+<dd id="ws-chunks" hx-swap-oob="true">{{ s.chunks }}</dd>
+{% endif %}
