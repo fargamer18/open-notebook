@@ -1,0 +1,40 @@
+{% set base = "/notebooks/" ~ nb_id ~ "/notes/" ~ note.id %}
+<section class="panel note-links" aria-labelledby="links-title">
+  <h3 id="links-title">Linked evidence</h3>
+  {% if links %}
+  <ul class="link-list">
+    {% for l in links %}
+      <li class="link-item{% if not l.exists %} is-gone{% endif %}">
+        <div class="link-head">
+          {% if l.link_type == "source_chunk" %}
+            <span class="tag">Source</span>
+            {% if l.exists %}<a href="/notebooks/{{ nb_id }}/chat/chunks/{{ l.chunk_id }}">{{ l.label }} — page {{ l.page_no }} · chunk {{ l.chunk_ord }}</a>
+            {% else %}<span>{{ l.label }} — page {{ l.page_no }} · chunk {{ l.chunk_ord }}</span>{% endif %}
+          {% elif l.link_type == "message" %}
+            <span class="tag">Chat</span>
+            {% if l.exists %}<a href="/notebooks/{{ nb_id }}/chat/{{ l.conversation_id }}#msg-{{ l.message_id }}">{{ l.label }}</a>{% else %}<span>{{ l.label }}</span>{% endif %}
+            <span class="muted">{{ "Assistant" if l.details.get("role") == "assistant" else "You" }}</span>
+          {% else %}
+            <span class="tag">Memory</span>
+            {% if l.exists %}<a href="/notebooks/{{ nb_id }}/memory/nodes/{{ l.memory_node_id }}">{{ l.label }}</a>{% else %}<span>{{ l.label }}</span>{% endif %}
+            <span class="muted">{{ (l.details.get("node_type") or "") | replace("_", " ") }}</span>
+          {% endif %}
+          <form method="post" action="{{ base }}/links/{{ l.id }}/delete" hx-post="{{ base }}/links/{{ l.id }}/delete"
+                hx-target="#note-links" hx-swap="innerHTML" class="link-remove">
+            <button class="fb" type="submit" title="Remove this link">Remove</button>
+          </form>
+        </div>
+        {% if not l.exists %}<p class="notice-warn">Original item has been deleted — showing the saved snapshot.</p>{% endif %}
+        {% if l.excerpt %}<blockquote class="ev-text">{{ l.excerpt }}</blockquote>{% endif %}
+        {% if l.citations %}<p class="muted link-cites">Cited: {% for c in l.citations %}[S{{ c.label }}] {{ c.filename }} p.{{ c.page }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="muted">No linked evidence yet.</p>
+  {% endif %}
+  {% if concepts %}
+    <h3>Concepts in memory</h3>
+    <p class="concept-list">{% for c in concepts %}<span class="tag tag-muted">{{ c }}</span>{% endfor %}</p>
+  {% endif %}
+</section>

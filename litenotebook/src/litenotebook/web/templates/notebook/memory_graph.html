@@ -1,0 +1,41 @@
+{% set nb = s.notebook %}
+<section class="panel mem-panel" aria-labelledby="graph-title">
+  <div class="panel-head">
+    <h2 id="graph-title">Memory graph</h2>
+    <nav class="mem-filters" aria-label="Memory views">
+      <a href="/notebooks/{{ nb.id }}/memory">List</a>
+      <a href="/notebooks/{{ nb.id }}/memory/graph" aria-current="page">Graph</a>
+    </nav>
+  </div>
+  {% if center %}
+  <div class="graph-controls" id="graph" data-notebook-id="{{ nb.id }}" data-center="{{ center }}" data-depth="{{ depth }}">
+    <form class="graph-search" id="graph-search" role="search">
+      <label class="sr-only" for="graph-q">Find a node</label>
+      <input id="graph-q" maxlength="300" placeholder="Find a concept, note or question…" autocomplete="off">
+      <button class="btn btn-sm" type="submit">Find</button>
+      <ul class="graph-hits" id="graph-hits"></ul>
+    </form>
+    <fieldset class="graph-opts">
+      <legend class="sr-only">Depth</legend>
+      <label class="check"><input type="radio" name="depth" value="1" {% if depth == 1 %}checked{% endif %}> Depth 1</label>
+      <label class="check"><input type="radio" name="depth" value="2" {% if depth == 2 %}checked{% endif %}> Depth 2</label>
+    </fieldset>
+    <fieldset class="graph-opts" id="graph-types">
+      <legend class="sr-only">Show</legend>
+      {% for t, label in [("concept", "Concepts"), ("note", "Notes"), ("question", "Questions"), ("answer", "Answers"), ("correction", "Corrections"), ("source_evidence", "Evidence"), ("conversation", "Conversations")] %}
+        <label class="check"><input type="checkbox" value="{{ t }}" checked> <span class="gdot gdot-{{ t }}" aria-hidden="true"></span>{{ label }}</label>
+      {% endfor %}
+    </fieldset>
+    <p class="muted graph-status" id="graph-status" role="status">Loading…</p>
+  </div>
+  {% else %}
+    <p class="empty">No memory yet. Ask questions in Chat or write notes; their concepts appear here.</p>
+  {% endif %}
+</section>
+{% if center %}
+<div class="graph-layout">
+  <section class="panel graph-canvas" aria-label="Graph"><svg id="graph-svg" role="img" aria-label="Local memory graph"></svg></section>
+  <aside class="evidence" id="graph-inspector" aria-live="polite"><p class="muted">Click a node or a link to inspect it. Click a node twice to centre the graph on it.</p></aside>
+</div>
+<noscript><p class="error">The graph view needs JavaScript (a small local script). The <a href="/notebooks/{{ nb.id }}/memory">list view</a> works without it.</p></noscript>
+{% endif %}

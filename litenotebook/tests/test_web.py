@@ -322,8 +322,8 @@ def test_workspace(client, app_settings):
     chat = client.get(f"/notebooks/{nb}?tab=chat").text  # redirects to the chat
     assert re.search(rf'/notebooks/{nb}/chat" aria-current="page"', chat)
     assert "New chat" in chat and 'id="composer"' in chat
-    notes = client.get(f"/notebooks/{nb}?tab=notes").text
-    assert "Phase 6" in notes
+    notes = client.get(f"/notebooks/{nb}?tab=notes").text  # redirects to Notes
+    assert "New note" in notes and "No notes yet." in notes
     assert client.get(f"/notebooks/{nb}?tab=../../etc").status_code == 200  # falls back
     assert client.get("/notebooks/424242").status_code == 404
     assert client.get("/notebooks/not-a-number").status_code == 422

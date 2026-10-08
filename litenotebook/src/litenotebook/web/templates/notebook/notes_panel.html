@@ -1,0 +1,82 @@
+{% set nb = s.notebook %}
+<div class="notes" id="notes">
+  <aside class="notes-side" aria-label="Notes">
+    <form method="post" action="/notebooks/{{ nb.id }}/notes" class="new-note">
+      <label class="sr-only" for="new-note-title">New note title</label>
+      <input id="new-note-title" name="title" maxlength="{{ max_title }}" placeholder="New note title" autocomplete="off">
+      <button class="btn btn-primary btn-sm" type="submit">New note</button>
+    </form>
+    {% if create_error %}<p class="error" role="alert">{{ create_error }}</p>{% endif %}
+    <form method="get" action="/notebooks/{{ nb.id }}/notes" class="note-filter" role="search">
+      <label class="sr-only" for="note-q">Filter notes</label>
+      <input id="note-q" name="q" value="{{ q }}" maxlength="500" placeholder="Filter notes…" autocomplete="off">
+    </form>
+    <ul class="conv-list">
+      {% for n in notes %}
+        <li><a class="conv{% if note and n.id == note.id %} is-current{% endif %}" href="/notebooks/{{ nb.id }}/notes/{{ n.id }}"
+               {% if note and n.id == note.id %}aria-current="page"{% endif %}>
+          <span class="conv-title">{{ n.title }}</span>
+          <span class="conv-meta">{{ n.updated_at | ts }}{% if n.link_count %} · {{ n.link_count }} link{{ "" if n.link_count == 1 else "s" }}{% endif %}</span>
+        </a></li>
+      {% else %}
+        <li class="muted conv-empty">{% if q %}No notes match “{{ q }}”.{% else %}No notes yet.{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  <section class="note-main">
+    {% if note %}
+      {% set base = "/notebooks/" ~ nb.id ~ "/notes/" ~ note.id %}
+      <form class="note-editor" id="note-editor" method="post" action="{{ base }}"
+            data-autosave-url="{{ base }}/autosave">
+        <input type="hidden" name="revision" value="{{ note.revision }}">
+        <div class="note-head">
+          <label class="sr-only" for="note-title">Title</label>
+          <input id="note-title" class="note-title" name="title" maxlength="{{ max_title }}" required
+                 value="{{ draft_title if draft_title is defined and draft_title else note.title }}" autocomplete="off">
+          <span class="save-state" id="save-state" role="status" data-state="saved">Saved</span>
+        </div>
+        <label class="sr-only" for="note-content">Note</label>
+        <textarea id="note-content" name="content" class="note-content" spellcheck="true"
+                  placeholder="Write your notes here (plain text)…">{{ draft_content if draft_content is defined and draft_content else note.content }}</textarea>
+        <div class="actions note-actions">
+          <button class="btn btn-sm" type="submit">Save now</button>
+          <span class="muted">Saves automatically. Created {{ note.created_at | ts }} · updated <span id="note-updated">{{ note.updated_at | ts }}</span></span>
+          {% if not confirming %}<a class="btn btn-ghost btn-sm btn-danger-text" href="{{ base }}/delete">Delete…</a>{% endif %}
+        </div>
+        {% if save_error %}<p class="error" role="alert">{{ save_error }}</p>{% endif %}
+      </form>
+
+      {% if confirming %}
+      <div class="panel confirm">
+        <p class="confirm-title">Delete this note permanently?</p>
+        <dl class="preview"><dt>Note</dt><dd>{{ note.title }}</dd><dt>Links</dt><dd>{{ links | length }}</dd></dl>
+        <p class="muted">Linked sources, chats and memory are not affected.</p>
+        <form class="inline-form" method="post" action="{{ base }}/delete">
+          <input type="hidden" name="confirm" value="{{ note.id }}">
+          <button class="btn btn-danger" type="submit">Delete note</button>
+          <a class="btn btn-ghost" href="{{ base }}">Cancel</a>
+        </form>
+        {% if delete_error %}<p class="error" role="alert">{{ delete_error }}</p>{% endif %}
+      </div>
+      {% endif %}
+
+      <div id="note-links">{% include "partials/note_links.html" %}</div>
+
+      <details class="attach">
+        <summary>Attach evidence from this notebook's sources</summary>
+        <form class="inline-form" hx-get="{{ base }}/attach" hx-target="#attach-results" hx-swap="innerHTML" role="search">
+          <label class="sr-only" for="attach-q">Find a passage</label>
+          <input id="attach-q" name="q" maxlength="500" placeholder="Find a passage (keyword search)" autocomplete="off">
+          <button class="btn btn-sm" type="submit">Find</button>
+        </form>
+        <div id="attach-results"></div>
+      </details>
+    {% else %}
+      <div class="panel placeholder">
+        <h2>Notes</h2>
+        <p class="muted">Create a note on the left, or use “Save to note” on a chat answer and “Add to note” on any evidence. Notes are plain text and are saved automatically.</p>
+      </div>
+    {% endif %}
+  </section>
+</div>

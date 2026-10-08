@@ -1,0 +1,30 @@
+{% set labels = {"sources": "Sources", "notes": "Notes", "chats": "Chats", "memory": "Memory"} %}
+<div id="search-results" class="search-results">
+  {% if query %}
+    <p class="muted search-summary">{{ results.total }} result{{ "" if results.total == 1 else "s" }} for “{{ query }}” · {{ "%.0f" | format(elapsed_ms) }} ms{% if results.engine == "hybrid" %} · hybrid source search{% if cold_start %} (embedding model was loaded for this search){% endif %}{% else %} · keyword search{% endif %}</p>
+    {% for section, hits in results.sections.items() %}
+      <section class="panel flush search-section" aria-labelledby="sec-{{ section }}">
+        <h3 class="search-section-title" id="sec-{{ section }}">{{ labels[section] }} <span class="muted">({{ hits | length }}{% if results.mode == "all" and hits | length >= 5 %}+ — <a href="/notebooks/{{ nb_id }}/search?q={{ query | urlencode }}&amp;mode={{ section }}&amp;engine={{ results.engine }}">show more</a>{% endif %})</span></h3>
+        {% if results.errors.get(section) %}<p class="error search-error">{{ results.errors[section] }}</p>{% endif %}
+        {% if hits %}
+        <ul class="hit-list">
+          {% for h in hits %}
+            <li class="hit">
+              <div class="hit-head">
+                <a class="hit-title" href="{{ h.url }}">{{ h.title }}</a>
+                <span class="muted">{{ h.subtitle }}</span>
+                {% if h.section == "sources" %}<span class="tag tag-muted">{{ h.meta.match }}</span>{% endif %}
+                {% if h.panel_url %}<a class="fb" href="{{ h.panel_url }}" hx-get="{{ h.panel_url }}" hx-target="#search-evidence" hx-swap="innerHTML">Preview</a>{% endif %}
+              </div>
+              {% if h.snippet %}<p class="hit-snippet">{{ h.snippet }}</p>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="empty">No {{ labels[section] | lower }} match.</p>{% endif %}
+      </section>
+    {% endfor %}
+    <aside class="evidence search-evidence" id="search-evidence" aria-live="polite"><p class="muted">Preview a source result to see the passage here.</p></aside>
+  {% else %}
+    <p class="empty">Type a query and press Search. Keyword search is instant and never loads the embedding model.</p>
+  {% endif %}
+</div>

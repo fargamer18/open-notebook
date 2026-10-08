@@ -15,6 +15,12 @@
     <dt>Chunk</dt><dd>{{ chunk_ord }} <span class="muted">(id {{ live.chunk_id if live else citation.chunk_id }})</span></dd>
   </dl>
   <blockquote class="ev-text">{{ text }}</blockquote>
+  {% set add_kind = "citation" if citation else "chunk" %}
+  {% set add_id = citation.id if citation else live.chunk_id %}
+  <div class="add-note" id="add-note-{{ add_kind }}-{{ add_id }}">
+    <a class="btn btn-ghost btn-sm" href="/notebooks/{{ nb_id }}/notes/add-form?kind={{ add_kind }}&amp;id={{ add_id }}"
+       hx-get="/notebooks/{{ nb_id }}/notes/add-form?kind={{ add_kind }}&amp;id={{ add_id }}" hx-target="#add-note-{{ add_kind }}-{{ add_id }}" hx-swap="innerHTML">Add to note…</a>
+  </div>
   {% if live %}
   <div class="actions ev-nav">
     {% if live.prev_id %}<a class="btn btn-sm" href="/notebooks/{{ nb_id }}/chat/chunks/{{ live.prev_id }}" hx-get="/notebooks/{{ nb_id }}/chat/chunks/{{ live.prev_id }}" hx-target="#evidence" hx-swap="innerHTML">← Previous chunk</a>{% endif %}

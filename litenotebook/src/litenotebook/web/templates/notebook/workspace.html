@@ -2,7 +2,7 @@
 {% set nav = "notebooks" %}
 {% set nb = s.notebook %}
 {% block title %}{{ nb.name }}{% endblock %}
-{% block scripts %}{% if tab == "chat" %}<script src="/static/chat.js" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if tab == "chat" %}<script src="/static/chat.js" defer></script>{% elif tab == "notes" and note %}<script src="/static/notes.js" defer></script>{% elif tab == "memory" and memory_view == "graph" %}<script src="/static/graph.js" defer></script>{% endif %}{% endblock %}
 {% block content %}
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Notebooks</a><span aria-hidden="true">/</span><span>{{ nb.name }}</span></nav>
 
@@ -19,7 +19,7 @@
 
 <nav class="tabs" aria-label="Workspace">
   {% for key, (label, _desc, _phase) in tabs.items() %}
-    <a href="{{ '/notebooks/%d/%s' % (nb.id, key) if key in ('chat', 'memory') else '/notebooks/%d?tab=%s' % (nb.id, key) }}" {% if key == tab %}aria-current="page"{% endif %}>{{ label }}</a>
+    <a href="{{ '/notebooks/%d/%s' % (nb.id, key) if key in ('chat', 'memory', 'notes', 'search') else '/notebooks/%d?tab=%s' % (nb.id, key) }}" {% if key == tab %}aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
 </nav>
 
@@ -28,8 +28,14 @@
   {% include "notebook/sources_panel.html" %}
 {% elif tab == "chat" %}
   {% include "notebook/chat_panel.html" %}
+{% elif tab == "memory" and memory_view == "graph" %}
+  {% include "notebook/memory_graph.html" %}
 {% elif tab == "memory" %}
   {% include "notebook/memory_panel.html" %}
+{% elif tab == "notes" %}
+  {% include "notebook/notes_panel.html" %}
+{% elif tab == "search" %}
+  {% include "notebook/search_panel.html" %}
 {% else %}
 <section class="panel placeholder" aria-labelledby="tab-title">
   <h2 id="tab-title">{{ label }}</h2>

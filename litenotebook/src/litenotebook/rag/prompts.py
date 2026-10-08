@@ -116,6 +116,11 @@ def _memory_header(label: int, item: MemoryItem) -> str:
         )
     if item.kind == "question":
         return f"[M{label}] Earlier user question, no answer recorded — {title}"
+    if item.kind == "note":
+        return (
+            f'[M{label}] User note "{_clip(item.question, 80)}" (written by the user; '
+            "not document evidence)"
+        )
     if item.sources:
         cited = ", ".join(
             f"{s['filename']} p.{s['page']}"
@@ -135,6 +140,10 @@ def _memory_header(label: int, item: MemoryItem) -> str:
 def build_memory_context(memories: Sequence[MemoryItem]) -> str:
     blocks = []
     for label, item in enumerate(memories, 1):
+        if item.kind == "note":
+            lines = [_memory_header(label, item), f"Note: {item.excerpt}"]
+            blocks.append("\n".join(lines))
+            continue
         lines = [_memory_header(label, item), f"Earlier question: {item.question}"]
         if item.kind == "correction":
             lines.append(f"Correction: {_CITATION_GROUP.sub('', item.excerpt).strip()}")

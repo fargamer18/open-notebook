@@ -10,7 +10,7 @@ import sqlite3
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from litenotebook.chat import MemoryRefNotFoundError, get_memory_ref
 from litenotebook.memory.graph import stats
@@ -77,6 +77,82 @@ def memory_page(
     if is_htmx(request) and request.headers.get("hx-target") == "memory-results":
         return render(request, "partials/memory_results.html", context)
     return render(request, "notebook/workspace.html", context)
+
+
+@router.get("/graph", response_class=HTMLResponse)
+def graph_page(
+    request: Request,
+    conn: Db,
+    notebook_id: int,
+    node: int | None = None,
+    depth: int = 1,
+) -> HTMLResponse:
+    from litenotebook.memory.explorer import FILTERABLE, default_center
+    from litenotebook.web.routes.notebooks import WORKSPACE_TABS
+
+    summary = get_summary(conn, notebook_id)
+    center = node if node is not None else default_center(conn, notebook_id)
+    if center is not None and node_detail(conn, notebook_id, center) is None:
+        raise MemoryNodeNotFoundError(
+            f"Memory node {center} not found in this notebook"
+        )
+    return render(
+        request,
+        "notebook/workspace.html",
+        {
+            "s": summary,
+            "tabs": WORKSPACE_TABS,
+            "tab": "memory",
+            "memory_view": "graph",
+            "center": center,
+            "depth": 2 if depth == 2 else 1,
+            "filterable": FILTERABLE,
+            "stats": stats(conn, notebook_id),
+            "nb_id": notebook_id,
+        },
+    )
+
+
+@router.get("/graph.json", response_model=None)
+def graph_json(
+    conn: Db,
+    notebook_id: int,
+    node: int,
+    depth: int = 1,
+    types: str = "",
+) -> JSONResponse:
+    from litenotebook.memory.explorer import subgraph
+
+    get_summary(conn, notebook_id)
+    wanted = {t for t in types.split(",") if t} or None
+    graph = subgraph(conn, notebook_id, node, depth, wanted)
+    if graph is None:
+        return JSONResponse({"error": "Memory node not found in this notebook"}, 404)
+    return JSONResponse(graph)
+
+
+@router.get("/graph/search", response_model=None)
+def graph_search(conn: Db, notebook_id: int, q: str = "") -> JSONResponse:
+    from litenotebook.memory.explorer import search_nodes
+
+    get_summary(conn, notebook_id)
+    return JSONResponse({"results": search_nodes(conn, notebook_id, q)})
+
+
+@router.get("/edges/{edge_id}", response_class=HTMLResponse)
+def edge_page(
+    request: Request, conn: Db, notebook_id: int, edge_id: int
+) -> HTMLResponse:
+    from litenotebook.memory.explorer import edge_detail
+
+    edge = edge_detail(conn, notebook_id, edge_id)
+    if edge is None:
+        raise MemoryNodeNotFoundError(
+            f"Memory link {edge_id} not found in this notebook"
+        )
+    return render(
+        request, "partials/memory_edge.html", {"edge": edge, "nb_id": notebook_id}
+    )
 
 
 @router.get("/nodes/{node_id}", response_class=HTMLResponse)

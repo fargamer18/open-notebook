@@ -3,13 +3,14 @@
   <p class="muted">Historical context from an earlier conversation — not document evidence. This is the snapshot the answer was given.</p>
   <dl class="kv ev-meta">
     <dt>Memory type</dt><dd>{{ ref.trust }}</dd>
-    <dt>Conversation</dt><dd>{% if ref.conversation_exists %}<a href="/notebooks/{{ nb_id }}/chat/{{ ref.conversation_id }}">{{ ref.conversation_title }}</a>{% else %}{{ ref.conversation_title }} <span class="muted">(conversation deleted)</span>{% endif %}</dd>
+    {% if ref.kind == "note" %}<dt>Note</dt><dd>{% if live_node_id %}<a href="/notebooks/{{ nb_id }}/notes/{{ ref.node_key.split(":")[1] }}">{{ ref.conversation_title }}</a>{% else %}{{ ref.conversation_title }} <span class="muted">(note deleted)</span>{% endif %}</dd>{% else %}
+    <dt>Conversation</dt><dd>{% if ref.conversation_exists %}<a href="/notebooks/{{ nb_id }}/chat/{{ ref.conversation_id }}">{{ ref.conversation_title }}</a>{% else %}{{ ref.conversation_title }} <span class="muted">(conversation deleted)</span>{% endif %}</dd>{% endif %}
     {% if ref.outcome %}<dt>Outcome</dt><dd>{{ {"useful": "Useful", "dead_end": "Dead end", "corrected": "Corrected"}[ref.outcome] }}</dd>{% endif %}
     <dt>Source-backed</dt><dd>{{ "yes" if ref.sources else "no" }}</dd>
     <dt>Created</dt><dd class="mono">{{ ref.remembered_at | ts }}</dd>
   </dl>
-  <p class="mem-q"><span class="muted">Original question:</span> {{ ref.question }}</p>
-  {% if ref.kind == "correction" %}
+  {% if ref.kind != "note" %}<p class="mem-q"><span class="muted">Original question:</span> {{ ref.question }}</p>{% endif %}
+  {% if ref.kind == "correction" or ref.kind == "note" %}
     <blockquote class="ev-text">{{ ref.excerpt }}</blockquote>
   {% elif ref.excerpt %}
     <p class="muted">Original answer excerpt:</p>

@@ -1,0 +1,11 @@
+<form class="add-note-form" method="post" action="/notebooks/{{ nb_id }}/notes/add"
+      hx-post="/notebooks/{{ nb_id }}/notes/add" hx-target="this" hx-swap="outerHTML">
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <input type="hidden" name="item_id" value="{{ item_id }}">
+  <label class="sr-only" for="add-note-{{ kind }}-{{ item_id }}">Note</label>
+  <select id="add-note-{{ kind }}-{{ item_id }}" name="note_id">
+    <option value="new">New note</option>
+    {% for n in notes %}<option value="{{ n.id }}">{{ n.title }}</option>{% endfor %}
+  </select>
+  <button class="btn btn-sm btn-primary" type="submit">{{ "Save" if kind == "message" else "Add" }}</button>
+</form>

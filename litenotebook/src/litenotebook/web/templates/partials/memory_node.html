@@ -3,10 +3,16 @@
   <h2 class="mem-node-title">{{ node.label }}</h2>
   {% if node.content and node.content != node.label %}<blockquote class="ev-text">{{ node.content }}</blockquote>{% endif %}
   <dl class="kv">
+    {% if node.node_type == "note" and node.note_id %}<dt>Note</dt><dd><a href="/notebooks/{{ nb_id }}/notes/{{ node.note_id }}">Open the note</a></dd>{% endif %}
     {% if node.conversation_title %}<dt>Conversation</dt><dd><a href="/notebooks/{{ nb_id }}/chat/{{ node.conversation_id }}{% if node.message_id %}#msg-{{ node.message_id }}{% endif %}">{{ node.conversation_title }}</a></dd>{% endif %}
     {% if node.node_type == "source_evidence" %}<dt>Live source</dt><dd>{% if node.source_exists %}<a href="/notebooks/{{ nb_id }}/sources/{{ node.source_id }}">still present</a>{% else %}<span class="notice-warn">Original source has been deleted</span> — the text above is the historical snapshot{% endif %}</dd>{% endif %}
     <dt>Created</dt><dd class="mono">{{ node.created_at | ts }}</dd>
   </dl>
+  <div class="actions">
+    <a class="btn btn-sm" href="/notebooks/{{ nb_id }}/memory/graph?node={{ node.id }}">Open in graph</a>
+    <span id="add-note-memory-{{ node.id }}"><a class="btn btn-ghost btn-sm" href="/notebooks/{{ nb_id }}/notes/add-form?kind=memory&amp;id={{ node.id }}"
+       hx-get="/notebooks/{{ nb_id }}/notes/add-form?kind=memory&amp;id={{ node.id }}" hx-target="#add-note-memory-{{ node.id }}" hx-swap="innerHTML">Add to note…</a></span>
+  </div>
   <h3>Connections</h3>
   {% if node.neighbours %}
   <ul class="mem-edges">

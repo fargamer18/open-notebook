@@ -112,6 +112,8 @@ class MemoryRefRecord:
             return "User correction"
         if self.kind == "question":
             return "User statement"
+        if self.kind == "note":
+            return "User note"
         return "Source-backed answer" if self.sources else "Uncited assistant answer"
 
 

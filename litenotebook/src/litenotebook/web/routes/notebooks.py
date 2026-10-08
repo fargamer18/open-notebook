@@ -32,8 +32,8 @@ WORKSPACE_TABS = {
     "sources": ("Sources", "Upload and manage PDFs.", 3),
     "chat": ("Chat", "Ask questions answered from this notebook's sources.", 4),
     "memory": ("Memory", "What earlier conversations established.", 5),
-    "notes": ("Notes", "Write notes and save answers.", 6),
-    "search": ("Search", "Hybrid keyword + semantic search across sources.", 4),
+    "notes": ("Notes", "Your notes, linked to evidence.", 7),
+    "search": ("Search", "Search sources, notes, chats and memory.", 7),
 }
 LIMITS = {"name": MAX_NAME_LENGTH, "description": MAX_DESCRIPTION_LENGTH}
 
@@ -212,7 +212,7 @@ def workspace(
 ) -> Response:
     if tab not in WORKSPACE_TABS:
         tab = "sources"
-    if tab in ("chat", "memory"):
+    if tab in ("chat", "memory", "notes", "search"):
         get_summary(conn, notebook_id)  # 404 for a missing notebook
         return redirect(f"/notebooks/{notebook_id}/{tab}")
     if tab == "sources":

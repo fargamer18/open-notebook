@@ -47,6 +47,7 @@ EXCERPT_CHARS = 420
 TRUST_WEIGHT = {
     "correction": 2.0,
     "source_backed": 1.3,
+    "user_note": 1.2,  # user-authored; below source evidence
     "user_statement": 1.1,
     "assistant_response": 1.0,
 }
@@ -56,10 +57,10 @@ MAX_FTS_TERMS = 16
 
 @dataclass
 class MemoryItem:
-    kind: str  # 'exchange' | 'correction' | 'question'
+    kind: str  # 'exchange' | 'correction' | 'question' | 'note'
     node_id: int
     node_key: str
-    message_id: int  # the assistant answer (or the user question for 'question')
+    message_id: int  # assistant answer / user question id (0 for a note)
     provenance: str
     conversation_id: int | None
     conversation_title: str
@@ -73,6 +74,7 @@ class MemoryItem:
     hops: int = 0
     path: str = ""
     rank: int = 0
+    note_id: int | None = None
 
     @property
     def source_backed(self) -> bool:
@@ -84,6 +86,8 @@ class MemoryItem:
             return "user correction"
         if self.kind == "question":
             return "user statement"
+        if self.kind == "note":
+            return "user note"
         return "source-backed answer" if self.sources else "uncited assistant answer"
 
 
@@ -149,7 +153,7 @@ def search_memory(
         "  LIMIT ?"
         ") "
         "SELECT w.node_id, w.seed, min(w.depth) AS hops, n.node_type, n.key, "
-        "n.message_id FROM walk w JOIN memory_nodes n ON n.id = w.node_id "
+        "n.message_id, n.note_id FROM walk w JOIN memory_nodes n ON n.id = w.node_id "
         "WHERE n.notebook_id = ? GROUP BY w.node_id, w.seed",
         (json.dumps(seeds), max_depth, notebook_id, MAX_WALK_ROWS, notebook_id),
     ).fetchall()
@@ -160,10 +164,14 @@ def search_memory(
     best: dict[tuple[str, int], tuple[float, int, str]] = {}
     for row in walk:
         node_type, message_id = row["node_type"], row["message_id"]
-        if node_type in ("concept", "conversation") or message_id is None:
+        if node_type in ("concept", "conversation"):
             continue
         proximity = strength[row["seed"]] * HOP_DECAY ** row["hops"]
-        if node_type == "question":
+        if row["note_id"] is not None:  # a note, or evidence linked from it
+            anchor = ("note", int(row["note_id"]))
+        elif message_id is None:
+            continue
+        elif node_type == "question":
             anchor = ("question", int(message_id))
         elif node_type == "correction":
             anchor = ("correction", int(message_id))
@@ -291,6 +299,11 @@ def _load_items(
 ) -> list[MemoryItem]:
     items: list[MemoryItem] = []
     for (kind, mid), (proximity, hops, path) in anchors.items():
+        if kind == "note":
+            note = _note_item(conn, notebook_id, mid, proximity, hops, path)
+            if note is not None:
+                items.append(note)
+            continue
         if mid in exclude and kind != "correction":
             continue  # already in the recent-chat window (corrections never are)
         key = {"answer": "answer", "correction": "correction", "question": "question"}[
@@ -343,7 +356,7 @@ def _load_items(
     return items
 
 
-FILTERS = ("all", "useful", "corrections", "dead_ends")
+FILTERS = ("all", "useful", "corrections", "dead_ends", "notes")
 
 
 def list_items(
@@ -362,6 +375,12 @@ def list_items(
             "WHERE o.notebook_id = ? AND o.outcome = 'dead_end' "
             "ORDER BY o.updated_at DESC, o.id DESC LIMIT ?"
         )
+    elif which == "notes":
+        sql = (
+            "SELECT 'note', n.note_id FROM memory_nodes n "
+            "WHERE n.notebook_id = ? AND n.node_type = 'note' "
+            "ORDER BY n.updated_at DESC, n.id DESC LIMIT ?"
+        )
     elif which == "corrections":
         sql = (
             "SELECT 'correction', n.message_id FROM memory_nodes n "
@@ -371,9 +390,11 @@ def list_items(
     else:
         sql = (
             "SELECT CASE n.node_type WHEN 'answer' THEN 'answer' "
-            "WHEN 'correction' THEN 'correction' ELSE 'question' END, n.message_id "
+            "WHEN 'correction' THEN 'correction' WHEN 'note' THEN 'note' "
+            "ELSE 'question' END, coalesce(n.message_id, n.note_id) "
             "FROM memory_nodes n WHERE n.notebook_id = ? AND ("
-            "  n.node_type IN ('answer', 'correction') OR (n.node_type = 'question' "
+            "  n.node_type IN ('answer', 'correction', 'note') "
+            "  OR (n.node_type = 'question' "
             "  AND NOT EXISTS (SELECT 1 FROM messages a JOIN memory_nodes x "
             "  ON x.notebook_id = n.notebook_id AND x.key = 'answer:' || a.id "
             "  WHERE a.reply_to = n.message_id))) "
@@ -413,6 +434,7 @@ class NodeDetail:
     message_id: int | None
     source_id: int | None
     chunk_id: int | None
+    note_id: int | None
     source_exists: bool
     created_at: str
     updated_at: str
@@ -458,6 +480,7 @@ def node_detail(
         message_id=row["message_id"],
         source_id=row["source_id"],
         chunk_id=row["chunk_id"],
+        note_id=row["note_id"],
         source_exists=bool(row["live"]),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -471,3 +494,39 @@ def node_id_for_key(conn: sqlite3.Connection, notebook_id: int, key: str) -> int
         (notebook_id, key),
     ).fetchone()
     return int(row[0]) if row else None
+
+
+def _note_item(
+    conn: sqlite3.Connection,
+    notebook_id: int,
+    note_id: int,
+    proximity: float,
+    hops: int,
+    path: str,
+) -> MemoryItem | None:
+    row = conn.execute(
+        "SELECT m.id, m.key, m.created_at, n.title, n.content FROM memory_nodes m "
+        "JOIN notes n ON n.id = m.note_id WHERE m.notebook_id = ? AND m.key = ?",
+        (notebook_id, f"note:{note_id}"),
+    ).fetchone()
+    if row is None:
+        return None
+    return MemoryItem(
+        kind="note",
+        node_id=row["id"],
+        node_key=row["key"],
+        message_id=0,
+        provenance="user_note",
+        conversation_id=None,
+        conversation_title=row["title"],
+        question=_clip(row["title"], QUESTION_CHARS),
+        excerpt=_clip(row["content"], EXCERPT_CHARS),
+        outcome=None,
+        correction=None,
+        sources=[],
+        created_at=row["created_at"],
+        score=proximity,
+        hops=hops,
+        path=path,
+        note_id=note_id,
+    )

@@ -62,7 +62,10 @@
             <a class="fb{% if m.outcome == 'corrected' %} is-on{% endif %}" href="{{ base }}/correct"
                hx-get="{{ base }}/correct" hx-target="#msg-{{ m.id }}" hx-swap="outerHTML">Correct…</a>
             {% if m.outcome %}<button class="fb fb-clear" type="submit" name="outcome" value="clear">Clear</button>{% endif %}
+            <a class="fb" href="/notebooks/{{ nb_id }}/notes/add-form?kind=message&amp;id={{ m.id }}"
+               hx-get="/notebooks/{{ nb_id }}/notes/add-form?kind=message&amp;id={{ m.id }}" hx-target="#save-note-{{ m.id }}" hx-swap="innerHTML">Save to note…</a>
           </form>
+          <div class="save-note" id="save-note-{{ m.id }}"></div>
         {% endif %}
         {% if feedback_error %}<p class="error" role="alert">{{ feedback_error }}</p>{% endif %}
       </div>

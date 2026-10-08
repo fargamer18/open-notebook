@@ -1,0 +1,2 @@
+{% if error %}<p class="error" role="alert">{{ error }}</p>
+{% else %}<p class="notice" role="status">Saved to <a href="/notebooks/{{ nb_id }}/notes/{{ note.id }}">{{ note.title }}</a>.</p>{% endif %}

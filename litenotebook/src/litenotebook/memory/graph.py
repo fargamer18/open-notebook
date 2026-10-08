@@ -25,11 +25,30 @@ from typing import Any
 from litenotebook.memory.concepts import extract_concepts
 
 NODE_TYPES = frozenset(
-    {"conversation", "question", "answer", "concept", "source_evidence", "correction"}
+    {
+        "conversation",
+        "question",
+        "answer",
+        "concept",
+        "source_evidence",
+        "correction",
+        "note",
+    }
 )
 RELATIONS = frozenset(
-    {"contains", "answered_by", "followed_by", "mentions", "supported_by", "corrects"}
+    {
+        "contains",
+        "answered_by",
+        "followed_by",
+        "mentions",
+        "supported_by",
+        "corrects",
+        "note_mentions",
+        "note_supported_by",
+    }
 )
+NOTE_CONCEPTS = 8
+NOTE_CONCEPT_CHARS = 20000  # concepts come from the start of very long notes
 OUTCOMES = ("useful", "dead_end", "corrected")
 MAX_CORRECTION_CHARS = 2000
 CONCEPTS_PER_TEXT = 6
@@ -62,18 +81,20 @@ def _upsert_node(
     message_id: int | None = None,
     source_id: int | None = None,
     chunk_id: int | None = None,
+    note_id: int | None = None,
 ) -> int:
     assert node_type in NODE_TYPES
     conn.execute(
         "INSERT INTO memory_nodes (notebook_id, key, node_type, label, content, "
-        "provenance, conversation_id, message_id, source_id, chunk_id) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "provenance, conversation_id, message_id, source_id, chunk_id, note_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(notebook_id, key) DO UPDATE SET "
         "node_type = excluded.node_type, label = excluded.label, "
         "content = excluded.content, provenance = excluded.provenance, "
         "conversation_id = excluded.conversation_id, "
         "message_id = excluded.message_id, source_id = excluded.source_id, "
-        f"chunk_id = excluded.chunk_id, updated_at = {NOW_SQL} "
+        "chunk_id = excluded.chunk_id, note_id = excluded.note_id, "
+        f"updated_at = {NOW_SQL} "
         "WHERE memory_nodes.label IS NOT excluded.label "
         "OR memory_nodes.content IS NOT excluded.content "
         "OR memory_nodes.provenance IS NOT excluded.provenance "
@@ -89,6 +110,7 @@ def _upsert_node(
             message_id,
             source_id,
             chunk_id,
+            note_id,
         ),
     )
     row = conn.execute(
@@ -118,10 +140,15 @@ def _edge(
     )
 
 
-def _concepts(conn: sqlite3.Connection, notebook_id: int, text: str) -> list[int]:
+def _concepts(
+    conn: sqlite3.Connection,
+    notebook_id: int,
+    text: str,
+    limit: int = CONCEPTS_PER_TEXT,
+) -> list[int]:
     return [
         _upsert_node(conn, notebook_id, f"concept:{c}", "concept", c, c, "derived")
-        for c in extract_concepts(text, CONCEPTS_PER_TEXT)
+        for c in extract_concepts(text, limit)
     ]
 
 
@@ -265,6 +292,77 @@ def sync_turn(conn: sqlite3.Connection, assistant_message_id: int) -> bool:
     return True
 
 
+def sync_note(conn: sqlite3.Connection, note_id: int) -> bool:
+    """(Re)derive a note's graph: note ─note_mentions→ concepts and
+    note ─note_supported_by→ linked evidence / answers / memory. Idempotent;
+    every edge carries provenance 'note:<id>'."""
+    row = conn.execute(
+        "SELECT id, notebook_id, title, content FROM notes WHERE id = ?", (note_id,)
+    ).fetchone()
+    if row is None:
+        return False
+    nb, prov = row["notebook_id"], f"note:{note_id}"
+    links = conn.execute(
+        "SELECT * FROM note_links WHERE note_id = ? ORDER BY id", (note_id,)
+    ).fetchall()
+    with conn:
+        conn.execute("DELETE FROM memory_edges WHERE provenance = ?", (prov,))
+        n = _upsert_node(
+            conn,
+            nb,
+            f"note:{note_id}",
+            "note",
+            row["title"],
+            row["content"][:4000],
+            "user_note",
+            note_id=note_id,
+        )
+        text = f"{row['title']}\n{row['content'][:NOTE_CONCEPT_CHARS]}"
+        for concept in _concepts(conn, nb, text, NOTE_CONCEPTS):
+            _edge(conn, nb, n, concept, "note_mentions", prov)
+        evidence_keys = []
+        for link in links:
+            target: int | None = None
+            if link["link_type"] == "source_chunk":
+                key = f"note_evidence:{link['id']}"
+                evidence_keys.append(key)
+                target = _upsert_node(
+                    conn,
+                    nb,
+                    key,
+                    "source_evidence",
+                    f"{link['label']} — page {link['page_no']}",
+                    link["excerpt"],
+                    "source_backed",
+                    note_id=note_id,
+                    source_id=link["source_id"],
+                    chunk_id=link["chunk_id"],
+                )
+            else:
+                keys = (
+                    (f"answer:{link['message_id']}", f"question:{link['message_id']}")
+                    if link["link_type"] == "message"
+                    else (link["memory_key"], link["memory_key"])
+                )
+                found = conn.execute(
+                    "SELECT id FROM memory_nodes WHERE notebook_id = ? "
+                    "AND key IN (?, ?) "
+                    "ORDER BY node_type = 'answer' DESC LIMIT 1",
+                    (nb, *keys),
+                ).fetchone()
+                target = int(found[0]) if found else None
+            if target is not None:
+                _edge(conn, nb, n, target, "note_supported_by", prov)
+        stale = conn.execute(
+            "SELECT key FROM memory_nodes WHERE notebook_id = ? AND note_id = ? "
+            "AND node_type = 'source_evidence'",
+            (nb, note_id),
+        ).fetchall()
+        _delete_keys(conn, nb, [r[0] for r in stale if r[0] not in evidence_keys])
+        prune_orphan_concepts(conn, nb)
+    return True
+
+
 def sync_conversation(conn: sqlite3.Connection, conversation_id: int) -> int:
     ids = [
         r[0]
@@ -293,7 +391,16 @@ def backfill(conn: sqlite3.Connection, notebook_id: int | None = None) -> int:
     ).fetchall()
     for r in rows:
         sync_turn(conn, r[0])
-    return len(rows)
+    notes = conn.execute(
+        "SELECT n.id FROM notes n WHERE (? IS NULL OR n.notebook_id = ?) "
+        "AND NOT EXISTS (SELECT 1 FROM memory_nodes m "
+        "    WHERE m.notebook_id = n.notebook_id AND m.key = 'note:' || n.id) "
+        "ORDER BY n.id",
+        (notebook_id, notebook_id),
+    ).fetchall()
+    for r in notes:
+        sync_note(conn, r[0])
+    return len(rows) + len(notes)
 
 
 def rebuild(conn: sqlite3.Connection, notebook_id: int) -> int:
@@ -377,6 +484,8 @@ class MemoryStats:
     exchanges: int = 0
     synced_exchanges: int = 0
     orphan_concepts: int = 0
+    notes: int = 0
+    synced_notes: int = 0
     fts_rows: int = 0
     problems: list[str] = field(default_factory=list)
 
@@ -399,6 +508,8 @@ class MemoryStats:
             "outcomes": self.outcomes,
             "exchanges": self.exchanges,
             "synced_exchanges": self.synced_exchanges,
+            "notes": self.notes,
+            "synced_notes": self.synced_notes,
             "problems": self.problems,
         }
 
@@ -473,6 +584,17 @@ def check(conn: sqlite3.Connection, notebook_id: int) -> MemoryStats:
         "AND n.key = 'correction:' || o.message_id)",
         (notebook_id,),
     ).fetchone()[0]
+    s.notes = conn.execute(
+        "SELECT count(*) FROM notes WHERE notebook_id = ?", (notebook_id,)
+    ).fetchone()[0]
+    s.synced_notes = conn.execute(
+        "SELECT count(*) FROM notes n WHERE n.notebook_id = ? AND EXISTS ("
+        "SELECT 1 FROM memory_nodes m WHERE m.notebook_id = n.notebook_id "
+        "AND m.key = 'note:' || n.id)",
+        (notebook_id,),
+    ).fetchone()[0]
+    if s.synced_notes != s.notes:
+        s.problems.append(f"{s.notes - s.synced_notes} note(s) not in the graph")
     if s.synced_exchanges != s.exchanges:
         s.problems.append(
             f"{s.exchanges - s.synced_exchanges} exchange(s) not in the graph"

@@ -5,10 +5,15 @@
     {% if item.outcome == "useful" %}<span class="tag">Useful</span>{% elif item.outcome == "dead_end" %}<span class="tag tag-muted">Dead end</span>{% elif item.outcome == "corrected" and item.kind == "exchange" %}<span class="tag tag-muted">Superseded by a correction</span>{% endif %}
     {% if search %}<span class="mem-score mono" title="Deterministic memory score">score {{ "%.3f" | format(item.score) }} · {{ item.hops }} hop{{ "" if item.hops == 1 else "s" }}</span>{% endif %}
   </div>
+  {% if item.kind == "note" %}
+  <p class="mem-q"><span class="muted">Note:</span> <a href="/notebooks/{{ nb_id }}/notes/{{ item.note_id }}">{{ item.question }}</a></p>
+  {% if item.excerpt %}<p class="mem-x">{{ item.excerpt }}</p>{% endif %}
+  {% else %}
   <p class="mem-q"><span class="muted">Question:</span> {{ item.question }}</p>
   {% if item.excerpt %}<p class="mem-x"><span class="muted">{{ "Correction" if item.kind == "correction" else "Answer" }}:</span> {{ item.excerpt }}</p>{% endif %}
+  {% endif %}
   <p class="mem-meta">
-    {% if item.conversation_id %}<a href="/notebooks/{{ nb_id }}/chat/{{ item.conversation_id }}#msg-{{ item.message_id }}">{{ item.conversation_title }}</a>{% else %}{{ item.conversation_title }}{% endif %}
+    {% if item.kind == "note" %}your note{% elif item.conversation_id %}<a href="/notebooks/{{ nb_id }}/chat/{{ item.conversation_id }}#msg-{{ item.message_id }}">{{ item.conversation_title }}</a>{% else %}{{ item.conversation_title }}{% endif %}
     · {{ item.created_at | ts }}
     {% for src in item.sources %} · {{ src.filename }} p.{{ src.page }}{% if src.deleted %} <span class="muted">(source deleted)</span>{% endif %}{% endfor %}
     · <a href="/notebooks/{{ nb_id }}/memory/nodes/{{ item.node_id }}">Inspect</a>

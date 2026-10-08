@@ -258,6 +258,7 @@ def cmd_memory_check(
     print(f"  edges ({report.total_edges}): {edges}")
     print(f"  outcomes: {outcomes}")
     print(f"  exchanges in graph: {report.synced_exchanges}/{report.exchanges}")
+    print(f"  notes in graph: {report.synced_notes}/{report.notes}")
     if report.ok:
         print("Memory OK")
         return 0

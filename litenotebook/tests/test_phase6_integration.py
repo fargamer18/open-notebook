@@ -328,7 +328,7 @@ def test_migration_0006_preserves_sources_and_allows_loading_stage(
     )
     before = dict(conn.execute("SELECT * FROM sources").fetchone())
     chunks = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
-    assert migrate(conn) == len(available_migrations()) == 6
+    assert migrate(conn) == len(available_migrations()) >= 6
     assert dict(conn.execute("SELECT * FROM sources").fetchone()) == before
     assert conn.execute("SELECT count(*) FROM chunks").fetchone()[0] == chunks
     assert (

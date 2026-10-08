@@ -1,0 +1,15 @@
+{% set base = "/notebooks/" ~ nb_id ~ "/notes/" ~ note_id %}
+{% if q and not hits %}<p class="muted">No passages match “{{ q }}”.</p>{% endif %}
+<ul class="hit-list">
+  {% for h in hits %}
+    <li class="hit">
+      <div class="hit-head"><span class="hit-title">{{ h.title }}</span> <span class="muted">{{ h.subtitle }}</span>
+        <form method="post" action="{{ base }}/links" hx-post="{{ base }}/links" hx-target="#note-links" hx-swap="innerHTML" class="hit-action">
+          <input type="hidden" name="kind" value="chunk"><input type="hidden" name="item_id" value="{{ h.meta.chunk_id }}">
+          <button class="btn btn-sm" type="submit">Attach</button>
+        </form>
+      </div>
+      <p class="hit-snippet">{{ h.snippet }}</p>
+    </li>
+  {% endfor %}
+</ul>

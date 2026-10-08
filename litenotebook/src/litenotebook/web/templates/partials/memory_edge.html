@@ -1,0 +1,7 @@
+<div class="ev">
+  <div class="ev-head"><h3>Link</h3></div>
+  <p><a href="/notebooks/{{ nb_id }}/memory/nodes/{{ edge.from_id }}">{{ edge.from_label }}</a> <span class="muted">({{ edge.from_type | replace("_", " ") }})</span></p>
+  <p class="mono rel">— {{ edge.relation }} →</p>
+  <p><a href="/notebooks/{{ nb_id }}/memory/nodes/{{ edge.to_id }}">{{ edge.to_label }}</a> <span class="muted">({{ edge.to_type | replace("_", " ") }})</span></p>
+  <dl class="kv"><dt>Derived from</dt><dd class="mono">{{ edge.provenance }}</dd><dt>Created</dt><dd class="mono">{{ edge.created_at | ts }}</dd></dl>
+</div>

@@ -1,0 +1,28 @@
+{% set nb = s.notebook %}
+<section class="panel search-panel" aria-labelledby="search-title">
+  <div class="panel-head">
+    <h2 id="search-title">Search</h2>
+    <span class="muted">Sources, notes, chats and memory · offline · no AI model answers here</span>
+  </div>
+  <form class="search-form" method="get" action="/notebooks/{{ nb.id }}/search" role="search"
+        hx-get="/notebooks/{{ nb.id }}/search" hx-target="#search-results" hx-swap="outerHTML" hx-push-url="true"
+        hx-indicator="#search-busy">
+    <label class="sr-only" for="search-q">Search this notebook</label>
+    <input id="search-q" name="q" value="{{ query }}" maxlength="{{ max_query }}" placeholder="Search this notebook…" autocomplete="off" autofocus>
+    <input type="hidden" name="mode" value="{{ mode }}">
+    <fieldset class="engine">
+      <legend class="sr-only">Source search engine</legend>
+      <label class="check"><input type="radio" name="engine" value="lexical" {% if engine != "hybrid" %}checked{% endif %}> Fast keyword</label>
+      <label class="check"><input type="radio" name="engine" value="hybrid" {% if engine == "hybrid" %}checked{% endif %}> Hybrid (semantic)</label>
+    </fieldset>
+    <button class="btn btn-primary" type="submit">Search</button>
+    <span id="search-busy" class="htmx-indicator muted">Searching…{% if not embedder_ready %} hybrid search may first load the embedding model (~15 s){% endif %}</span>
+  </form>
+  <p class="hint">{% if embedder_ready %}Embedding model is ready.{% else %}Embedding model is sleeping: keyword search never wakes it; Hybrid will load it (~15 s) the first time.{% endif %}</p>
+  <nav class="mem-filters" aria-label="Search sections">
+    {% for m, label in [("all", "All"), ("sources", "Sources"), ("notes", "Notes"), ("chats", "Chats"), ("memory", "Memory")] %}
+      <a href="/notebooks/{{ nb.id }}/search?q={{ query | urlencode }}&amp;mode={{ m }}&amp;engine={{ engine }}" {% if m == mode %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+</section>
+{% include "partials/search_results.html" %}
