@@ -12,9 +12,10 @@
 
 from __future__ import annotations
 
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response
+from starlette.responses import PlainTextResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -58,24 +59,42 @@ def same_origin_problem(request: Request) -> str | None:
     return None
 
 
-class LocalOnlyMiddleware(BaseHTTPMiddleware):
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
-        if host_name(request.headers.get("host", "")) not in ALLOWED_HOSTS:
-            return self._secure(
-                PlainTextResponse("Invalid host header", status_code=400)
-            )
-        if request.method not in SAFE_METHODS:
-            problem = same_origin_problem(request)
+class LocalOnlyMiddleware:
+    """Pure ASGI middleware (no response buffering, so streamed answers and
+    client-disconnect detection pass straight through)."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        if host_name(headers.get("host", "")) not in ALLOWED_HOSTS:
+            await self._reject("Invalid host header", 400, scope, receive, send)
+            return
+        if scope["method"] not in SAFE_METHODS:
+            problem = same_origin_problem(Request(scope))
             if problem:
-                return self._secure(
-                    PlainTextResponse(f"Forbidden: {problem}", status_code=403)
-                )
-        return self._secure(await call_next(request))
+                await self._reject(f"Forbidden: {problem}", 403, scope, receive, send)
+                return
+
+        async def send_secure(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                response_headers = MutableHeaders(scope=message)
+                for name, value in SECURITY_HEADERS.items():
+                    if name.lower() not in response_headers:
+                        response_headers.append(name, value)
+            await send(message)
+
+        await self.app(scope, receive, send_secure)
 
     @staticmethod
-    def _secure(response: Response) -> Response:
+    async def _reject(
+        text: str, status: int, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        response = PlainTextResponse(text, status_code=status)
         for name, value in SECURITY_HEADERS.items():
-            response.headers.setdefault(name, value)
-        return response
+            response.headers[name] = value
+        await response(scope, receive, send)

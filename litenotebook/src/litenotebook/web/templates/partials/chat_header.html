@@ -1,0 +1,37 @@
+{% set base = "/notebooks/" ~ nb_id ~ "/chat/" ~ conversation.id %}
+{% if mode == "edit" %}
+<div class="chat-head is-editing">
+  <form class="inline-form" method="post" action="{{ base }}/rename"
+        hx-post="{{ base }}/rename" hx-target="#chat-header" hx-swap="innerHTML">
+    <label class="sr-only" for="conv-title">Conversation title</label>
+    <input id="conv-title" name="title" required maxlength="{{ max_title }}" value="{{ value if value else conversation.title }}" autofocus>
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-ghost" href="{{ base }}" hx-get="{{ base }}/header" hx-target="#chat-header" hx-swap="innerHTML">Cancel</a>
+  </form>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+</div>
+{% elif mode == "confirm" %}
+<div class="chat-head is-confirming confirm">
+  <p class="confirm-title">Delete this conversation permanently?</p>
+  <dl class="preview">
+    <dt>Conversation</dt><dd>{{ conversation.title }}</dd>
+    <dt>Messages</dt><dd>{{ conversation.message_count }}</dd>
+  </dl>
+  <p class="muted">Its questions, answers and citations are removed. Sources are not affected.</p>
+  <form class="inline-form" method="post" action="{{ base }}/delete"
+        hx-post="{{ base }}/delete" hx-target="#chat-header" hx-swap="innerHTML">
+    <input type="hidden" name="confirm" value="{{ conversation.id }}">
+    <button class="btn btn-danger" type="submit">Delete conversation</button>
+    <a class="btn btn-ghost" href="{{ base }}" hx-get="{{ base }}/header" hx-target="#chat-header" hx-swap="innerHTML">Cancel</a>
+  </form>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+</div>
+{% else %}
+<div class="chat-head">
+  <h2 class="chat-title" id="chat-title">{{ conversation.title }}</h2>
+  <span class="chat-actions">
+    <a class="btn btn-ghost btn-sm" href="{{ base }}/rename" hx-get="{{ base }}/rename" hx-target="#chat-header" hx-swap="innerHTML">Rename</a>
+    <a class="btn btn-ghost btn-sm btn-danger-text" href="{{ base }}/delete" hx-get="{{ base }}/delete" hx-target="#chat-header" hx-swap="innerHTML">Delete</a>
+  </span>
+</div>
+{% endif %}

@@ -1,0 +1,29 @@
+<article class="msg msg-{{ m.role }} msg-{{ m.status }}" id="msg-{{ m.id }}" data-message-id="{{ m.id }}">
+  <header class="msg-head">
+    <span class="msg-role">{{ "You" if m.role == "user" else "Assistant" }}</span>
+    {% if m.status == "generating" %}<span class="pill pill-processing">Generating…</span>
+    {% elif m.status == "failed" %}<span class="pill pill-failed">Failed</span>
+    {% elif m.status == "interrupted" %}<span class="pill pill-failed">Interrupted</span>{% endif %}
+  </header>
+  {% if m.content %}
+  <div class="msg-body">{% if m.role == "user" or not m.citations %}{{ m.content }}{% else %}{{ render_answer(m, nb_id) }}{% endif %}</div>
+  {% endif %}
+  {% if m.role == "assistant" %}
+    {% if m.error %}<p class="error msg-error">{{ m.error }}</p>{% endif %}
+    {% if m.retryable %}
+      <div class="msg-actions"><button class="btn btn-sm" type="button" data-retry-url="/notebooks/{{ nb_id }}/chat/messages/{{ m.id }}/retry">Retry</button></div>
+    {% endif %}
+    {% if m.status == "complete" and m.citations %}
+      <ol class="msg-sources">
+        {% for c in m.citations %}
+          <li><a class="cite{% if not c.chunk_exists %} cite-deleted{% endif %}" href="/notebooks/{{ nb_id }}/chat/citations/{{ c.id }}"
+                 hx-get="/notebooks/{{ nb_id }}/chat/citations/{{ c.id }}" hx-target="#evidence" hx-swap="innerHTML">S{{ c.label }}</a>
+            {{ c.source_filename }} · p. {{ c.page_no }}{% if not c.chunk_exists %} <span class="muted">(source deleted)</span>{% endif %}</li>
+        {% endfor %}
+      </ol>
+    {% endif %}
+    {% if m.status == "complete" and m.model and not m.citations %}
+      <p class="hint">No valid citations in this answer — treat it with care.</p>
+    {% endif %}
+  {% endif %}
+</article>

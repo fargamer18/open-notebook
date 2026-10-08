@@ -1,0 +1,57 @@
+{% set nb = s.notebook %}
+<div class="chat" id="chat"
+     data-notebook-id="{{ nb.id }}"
+     data-send-url="/notebooks/{{ nb.id }}/chat/send"
+     data-chat-url="/notebooks/{{ nb.id }}/chat">
+  <aside class="chat-side" aria-label="Conversations">
+    <a class="btn btn-primary btn-block" href="/notebooks/{{ nb.id }}/chat/new">New chat</a>
+    <div id="conversations" hx-get="/notebooks/{{ nb.id }}/chat/sidebar{% if conversation %}?current={{ conversation.id }}{% endif %}"
+         hx-trigger="conversations-changed from:body">
+      {% with current_id = conversation.id if conversation else none %}{% include "partials/chat_conversations.html" %}{% endwith %}
+    </div>
+  </aside>
+
+  <section class="chat-main" aria-label="Conversation">
+    <div id="chat-header">
+      {% if conversation %}
+        {% with nb_id = nb.id, mode = header_mode or "view", error = header_error, max_title = max_title %}{% include "partials/chat_header.html" %}{% endwith %}
+      {% else %}
+        <div class="chat-head"><h2 class="chat-title" id="chat-title">New chat</h2></div>
+      {% endif %}
+    </div>
+
+    <div class="chat-log" id="chat-log" aria-live="polite">
+      {% for m in messages %}
+        {% with nb_id = nb.id %}{% include "partials/chat_message.html" %}{% endwith %}
+      {% else %}
+        <div class="chat-empty" id="chat-empty">
+          {% if ready_sources %}
+            <p>Ask a question about this notebook's {{ ready_sources }} ready source{{ "" if ready_sources == 1 else "s" }}.</p>
+            <p class="muted">Answers cite their evidence as [S1], [S2]… — click a citation to see the exact passage.</p>
+          {% else %}
+            <p>No ready sources in this notebook yet.</p>
+            <p class="muted"><a href="/notebooks/{{ nb.id }}?tab=sources">Upload a PDF under Sources</a>; chat answers only from Ready sources.</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <form class="composer" id="composer" method="post" action="/notebooks/{{ nb.id }}/chat/send" autocomplete="off">
+      <input type="hidden" name="conversation_id" value="{{ conversation.id if conversation else '' }}">
+      <label class="sr-only" for="question">Question</label>
+      <textarea id="question" name="question" rows="2" maxlength="{{ max_question }}" required
+                placeholder="Ask about this notebook's sources…  (Enter to send, Shift+Enter for a new line)"></textarea>
+      <div class="composer-actions">
+        <button class="btn btn-primary" type="submit" id="send">Send</button>
+        <button class="btn" type="button" id="stop" hidden>Stop generating</button>
+        <span class="muted composer-status" id="composer-status" role="status"></span>
+      </div>
+      <p class="error" id="composer-error" role="alert" hidden></p>
+      <noscript><p class="error">Chat needs JavaScript (a small local script) to stream answers.</p></noscript>
+    </form>
+  </section>
+
+  <aside class="evidence" id="evidence" aria-label="Evidence" aria-live="polite">
+    <p class="muted">Click a citation such as <span class="cite cite-sample">S1</span> to see the exact source passage.</p>
+  </aside>
+</div>

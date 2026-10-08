@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% set nav = "notebooks" %}
+{% set nb = s.notebook %}
+{% block title %}Evidence{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="/">Notebooks</a><span aria-hidden="true">/</span>
+  <a href="/notebooks/{{ nb.id }}/chat">{{ nb.name }}</a><span aria-hidden="true">/</span>
+  <span>Evidence</span>
+</nav>
+<section class="panel evidence-page" id="evidence">
+  {% include "partials/chat_evidence.html" %}
+  <p><a href="/notebooks/{{ nb.id }}/chat">Back to chat</a></p>
+</section>
+{% endblock %}

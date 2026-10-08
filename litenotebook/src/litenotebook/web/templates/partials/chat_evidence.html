@@ -1,0 +1,25 @@
+<div class="ev">
+  <div class="ev-head">
+    <h3>{% if citation %}Evidence S{{ citation.label }}{% else %}Source passage{% endif %}</h3>
+  </div>
+  {% if citation and not citation.chunk_exists %}
+    <p class="notice-warn" role="note">{% if citation.source_exists %}This passage no longer exists in its source.{% else %}Source has been deleted.{% endif %} Showing the snapshot saved with this answer.</p>
+  {% endif %}
+  {% set src_name = live.source_filename if live else citation.source_filename %}
+  {% set page = live.page_no if live else citation.page_no %}
+  {% set chunk_ord = live.ord if live else citation.chunk_ord %}
+  {% set text = live.text if live else citation.chunk_text %}
+  <dl class="kv ev-meta">
+    <dt>Source</dt><dd class="wrap">{{ src_name }}</dd>
+    <dt>Page</dt><dd>{{ page }}</dd>
+    <dt>Chunk</dt><dd>{{ chunk_ord }} <span class="muted">(id {{ live.chunk_id if live else citation.chunk_id }})</span></dd>
+  </dl>
+  <blockquote class="ev-text">{{ text }}</blockquote>
+  {% if live %}
+  <div class="actions ev-nav">
+    {% if live.prev_id %}<a class="btn btn-sm" href="/notebooks/{{ nb_id }}/chat/chunks/{{ live.prev_id }}" hx-get="/notebooks/{{ nb_id }}/chat/chunks/{{ live.prev_id }}" hx-target="#evidence" hx-swap="innerHTML">← Previous chunk</a>{% endif %}
+    {% if live.next_id %}<a class="btn btn-sm" href="/notebooks/{{ nb_id }}/chat/chunks/{{ live.next_id }}" hx-get="/notebooks/{{ nb_id }}/chat/chunks/{{ live.next_id }}" hx-target="#evidence" hx-swap="innerHTML">Next chunk →</a>{% endif %}
+    <a class="btn btn-ghost btn-sm" href="/notebooks/{{ nb_id }}/sources/{{ live.source_id }}">Source details</a>
+  </div>
+  {% endif %}
+</div>

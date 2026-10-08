@@ -5,9 +5,11 @@ Generation only — embeddings never go through this client.
 
 from __future__ import annotations
 
+import json
 import re
 import time
-from dataclasses import dataclass
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -41,6 +43,210 @@ def strip_thinking(text: str) -> str:
     if text.lstrip().lower().startswith("<think>"):  # truncated mid-thought
         return ""
     return text.strip()
+
+
+_OPEN_TAG, _CLOSE_TAG = "<think>", "</think>"
+
+
+def _partial_tag_suffix(text: str, tag: str) -> int:
+    """Length of the longest proper prefix of ``tag`` that ``text`` ends with."""
+    for k in range(min(len(tag) - 1, len(text)), 0, -1):
+        if text.endswith(tag[:k]):
+            return k
+    return 0
+
+
+class ThinkFilter:
+    """Remove ``<think>…</think>`` from a stream of text deltas.
+
+    Tags may be split across deltas ("<thi" + "nk>"), so a possible partial tag
+    at the end of the buffer is held back until the next delta decides it.
+    Matching is case-insensitive. Text inside a think block is dropped; an
+    unclosed block at the end is dropped too. A stray ``</think>`` (the opening
+    tag was in the prompt template) discards whatever came before it if no
+    visible text has been emitted yet. Leading whitespace is not emitted.
+    """
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._inside = False
+        self._started = False  # visible non-whitespace text emitted
+
+    def _emit(self, text: str) -> str:
+        if not self._started:
+            text = text.lstrip()
+            if text:
+                self._started = True
+        return text
+
+    def feed(self, chunk: str) -> str:
+        self._buf += chunk
+        out: list[str] = []
+        while self._buf:
+            low = self._buf.lower()
+            if self._inside:
+                end = low.find(_CLOSE_TAG)
+                if end < 0:
+                    keep = _partial_tag_suffix(low, _CLOSE_TAG)
+                    self._buf = self._buf[len(self._buf) - keep :] if keep else ""
+                    break
+                self._buf = self._buf[end + len(_CLOSE_TAG) :]
+                self._inside = False
+                continue
+            hits = [
+                (i, tag) for tag in (_OPEN_TAG, _CLOSE_TAG) if (i := low.find(tag)) >= 0
+            ]
+            if hits:
+                index, tag = min(hits)
+                before = self._buf[:index]
+                self._buf = self._buf[index + len(tag) :]
+                if tag == _OPEN_TAG:
+                    out.append(before)
+                    self._inside = True
+                elif self._started or "".join(out).strip():
+                    out.append(before)  # stray close tag after real text: drop tag
+                else:
+                    out.clear()  # everything so far was un-tagged thinking
+                continue
+            keep = max(_partial_tag_suffix(low, tag) for tag in (_OPEN_TAG, _CLOSE_TAG))
+            out.append(self._buf[: len(self._buf) - keep])
+            self._buf = self._buf[len(self._buf) - keep :]
+            break
+        return self._emit("".join(out))
+
+    def flush(self) -> str:
+        """End of stream: an unfinished tag prefix is literal text."""
+        rest, self._buf = ("" if self._inside else self._buf), ""
+        return self._emit(rest)
+
+
+@dataclass
+class StreamInfo:
+    finish_reason: str | None = None
+    model: str | None = None
+    timings: dict[str, Any] = field(default_factory=dict)
+    done: bool = False
+
+
+class ChatStream:
+    """Streaming chat completion from an OpenAI-compatible server (async).
+
+    ``deltas()`` yields raw content deltas as llama-server produces them.
+    Leaving the iteration early (cancellation, client disconnect) closes the
+    upstream HTTP response, which makes llama-server stop generating.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        *,
+        api_key: str | None = None,
+        timeout_s: float = 180.0,
+        disable_thinking: bool = True,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/") + "/"
+        self.model = model
+        self.disable_thinking = disable_thinking
+        self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        self._timeout = httpx.Timeout(timeout_s, connect=5.0)
+        self._transport = transport
+        self.info = StreamInfo()
+
+    async def deltas(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 1024,
+        temperature: float = 0.2,
+    ) -> AsyncIterator[str]:
+        payload: dict[str, Any] = {
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if self.model:
+            payload["model"] = self.model
+        if self.disable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                headers=self._headers,
+                timeout=self._timeout,
+                transport=self._transport,
+            ) as client:
+                async with client.stream(
+                    "POST", "chat/completions", json=payload
+                ) as response:
+                    if response.status_code >= 400:
+                        body = (await response.aread())[:300]
+                        raise LLMResponseError(
+                            f"LLM server returned HTTP {response.status_code}: "
+                            f"{body.decode('utf-8', 'replace')}"
+                        )
+                    async for line in response.aiter_lines():
+                        for delta in self._parse_line(line):
+                            yield delta
+                        if self.info.done:
+                            return
+            if self.info.finish_reason is None:
+                raise LLMResponseError("The LLM stream ended unexpectedly")
+        except httpx.ConnectError as e:
+            raise LLMError(
+                f"Cannot reach the LLM server at {self.base_url} — is "
+                f"llama-server running?"
+            ) from e
+        except httpx.TimeoutException as e:
+            raise LLMError("The LLM server timed out") from e
+        except httpx.HTTPError as e:
+            raise LLMError(f"LLM request failed: {type(e).__name__}") from e
+
+    def _parse_line(self, line: str) -> list[str]:
+        line = line.strip()
+        if not line or line.startswith(":"):
+            return []  # keep-alive / SSE comment
+        field_name, _, value = line.partition(":")
+        if field_name in ("event", "id", "retry"):
+            return []
+        if field_name != "data":
+            raise LLMResponseError("The LLM server sent malformed streaming data")
+        value = value.strip()
+        if value == "[DONE]":
+            self.info.done = True
+            return []
+        try:
+            obj = json.loads(value)
+        except ValueError as e:
+            raise LLMResponseError(
+                "The LLM server sent malformed streaming data"
+            ) from e
+        if not isinstance(obj, dict):
+            raise LLMResponseError("The LLM server sent malformed streaming data")
+        if "error" in obj:
+            err = obj["error"]
+            message = err.get("message") if isinstance(err, dict) else err
+            raise LLMResponseError(f"LLM server error: {str(message)[:300]}")
+        if isinstance(obj.get("model"), str):
+            self.info.model = obj["model"]
+        if isinstance(obj.get("timings"), dict):
+            self.info.timings = obj["timings"]
+        choices = obj.get("choices")
+        if not isinstance(choices, list):
+            raise LLMResponseError("The LLM server sent malformed streaming data")
+        out: list[str] = []
+        for choice in choices[:1]:
+            if not isinstance(choice, dict):
+                raise LLMResponseError("The LLM server sent malformed streaming data")
+            if choice.get("finish_reason"):
+                self.info.finish_reason = str(choice["finish_reason"])
+            delta = choice.get("delta") or {}
+            content = delta.get("content") if isinstance(delta, dict) else None
+            if isinstance(content, str) and content:
+                out.append(content)  # reasoning_content is deliberately ignored
+        return out
 
 
 class LLMClient:

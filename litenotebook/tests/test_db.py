@@ -43,7 +43,7 @@ def test_migration_creates_schema(conn):
         "chunks_fts",
         "settings",
     } <= _tables(conn)
-    assert schema_version(conn) == len(available_migrations()) == 3
+    assert schema_version(conn) == len(available_migrations()) == 4
 
 
 def test_pragmas(conn):
@@ -52,8 +52,8 @@ def test_pragmas(conn):
 
 
 def test_migrate_is_idempotent(conn):
-    assert migrate(conn) == 3
-    assert migrate(conn) == 3
+    assert migrate(conn) == 4
+    assert migrate(conn) == 4
 
 
 def test_newer_database_is_rejected(settings):
@@ -191,7 +191,7 @@ def test_phase3_migration_preserves_phase2_data(settings, monkeypatch, tmp_path)
     )
     conn.commit()
 
-    assert migrate(conn) == 3
+    assert migrate(conn) == 4
     rows = {
         r["id"]: (r["status"], r["stage"], r["error"])
         for r in conn.execute("SELECT * FROM sources")

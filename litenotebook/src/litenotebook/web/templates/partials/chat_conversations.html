@@ -1,0 +1,12 @@
+{% set nb = s.notebook %}
+<ul class="conv-list">
+  {% for c in conversations %}
+    <li><a class="conv{% if c.id == current_id %} is-current{% endif %}" href="/notebooks/{{ nb.id }}/chat/{{ c.id }}"
+           {% if c.id == current_id %}aria-current="page"{% endif %} title="{{ c.title }}">
+      <span class="conv-title">{{ c.title }}</span>
+      <span class="conv-meta">{{ c.message_count // 2 }} question{{ "" if c.message_count // 2 == 1 else "s" }} · {{ c.updated_at | ts }}</span>
+    </a></li>
+  {% else %}
+    <li class="muted conv-empty">No conversations yet.</li>
+  {% endfor %}
+</ul>

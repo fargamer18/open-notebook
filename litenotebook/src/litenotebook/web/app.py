@@ -18,19 +18,27 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from litenotebook import __version__
+from litenotebook.chat import (
+    CitationNotFoundError,
+    ConversationNotFoundError,
+    MessageNotFoundError,
+    recover_generating,
+)
 from litenotebook.config import Settings, load_settings
 from litenotebook.db import connect, open_db
 from litenotebook.notebooks import NotebookNotFoundError
-from litenotebook.services.ingestion import (
+from litenotebook.services.chat import GenerationGuard
+from litenotebook.services.embedding import (
     EmbedderFactory,
-    IngestionWorker,
+    SharedEmbedder,
     default_embedder_factory,
 )
+from litenotebook.services.ingestion import IngestionWorker
 from litenotebook.services.settings import SettingsError
 from litenotebook.services.uploads import clean_stale_uploads
 from litenotebook.sources import SourceNotFoundError, recover_interrupted
 from litenotebook.web.deps import render
-from litenotebook.web.routes import health, notebooks, settings, sources
+from litenotebook.web.routes import chat, health, notebooks, settings, sources
 from litenotebook.web.security import LocalOnlyMiddleware
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -62,6 +70,8 @@ def create_app(
         if interrupted:
             log.warning("Interrupted sources marked failed: %s", interrupted)
         clean_stale_uploads(app_settings)
+        if interrupted_answers := recover_generating(keeper):
+            log.warning("Interrupted answers marked: %d", interrupted_answers)
         worker.start()
         try:
             yield
@@ -69,7 +79,9 @@ def create_app(
             worker.stop()
             keeper.close()
 
-    worker = IngestionWorker(app_settings, embedder_factory)
+    # One lazily created MiniLM shared by ingestion and chat retrieval.
+    embedder = SharedEmbedder(embedder_factory)
+    worker = IngestionWorker(app_settings, lambda: embedder)
 
     app = FastAPI(
         title="LiteNotebook",
@@ -83,11 +95,14 @@ def create_app(
     app.state.env = env
     app.state.llm_transport = llm_transport
     app.state.worker = worker
+    app.state.embedder = embedder
+    app.state.generation_guard = GenerationGuard()
 
     app.add_middleware(LocalOnlyMiddleware)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(notebooks.router)
     app.include_router(sources.router)
+    app.include_router(chat.router)
     app.include_router(settings.router)
     app.include_router(health.router)
 
@@ -110,6 +125,21 @@ def create_app(
             {"title": "Not found", "message": str(exc)},
             status_code=404,
         )
+
+    async def chat_not_found(request: Request, exc: Exception) -> HTMLResponse:
+        return render(
+            request,
+            "error.html",
+            {"title": "Not found", "message": str(exc)},
+            status_code=404,
+        )
+
+    for missing in (
+        ConversationNotFoundError,
+        MessageNotFoundError,
+        CitationNotFoundError,
+    ):
+        app.add_exception_handler(missing, chat_not_found)
 
     @app.exception_handler(SettingsError)
     async def bad_settings(request: Request, exc: SettingsError) -> HTMLResponse:

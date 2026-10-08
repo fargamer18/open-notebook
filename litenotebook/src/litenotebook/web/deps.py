@@ -47,6 +47,15 @@ def timestamp(value: str | None) -> str:
 TEMPLATES.env.filters.update(filesize=filesize, duration=duration, ts=timestamp)
 
 
+def _render_answer(message: Any, notebook_id: int) -> Any:
+    from litenotebook.web.render import render_answer
+
+    return render_answer(message, notebook_id)
+
+
+TEMPLATES.env.globals["render_answer"] = _render_answer
+
+
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
     conn = connect(app_settings(request).db_path)
     try:

@@ -2,7 +2,8 @@
 
 FAISS (semantic) and FTS5/BM25 (lexical) candidates are fused with Reciprocal
 Rank Fusion, near-duplicates are dropped, and the top k are returned. Every
-query is restricted to exactly one notebook.
+query is restricted to exactly one notebook and to its ``ready`` sources (FAISS
+candidates from any other source are dropped when rows are fetched).
 """
 
 from __future__ import annotations
@@ -114,7 +115,9 @@ class Retriever:
             rows = self.conn.execute(
                 "SELECT c.id, bm25(chunks_fts) AS score FROM chunks_fts "
                 "JOIN chunks c ON c.id = chunks_fts.rowid "
+                "JOIN sources s ON s.id = c.source_id "
                 "WHERE chunks_fts MATCH ? AND c.notebook_id = ? "
+                "AND s.status = 'ready' "
                 "ORDER BY score LIMIT ?",
                 (match, notebook_id, limit),
             ).fetchall()
@@ -128,6 +131,13 @@ class Retriever:
     ) -> list[tuple[int, float]]:
         vector = self.embedder.encode([query])[0]
         return self.store.search(notebook_id, vector, limit)
+
+    def has_ready_sources(self, notebook_id: int) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM sources WHERE notebook_id = ? AND status = 'ready' LIMIT 1",
+            (notebook_id,),
+        ).fetchone()
+        return row is not None
 
     def search(
         self, notebook_id: int, query: str, top_k: int | None = None
@@ -146,10 +156,11 @@ class Retriever:
             "SELECT c.id, c.source_id, c.page_no, c.ord, c.char_start, c.char_end, "
             "c.text, s.original_filename FROM chunks c "
             "JOIN sources s ON s.id = c.source_id "
-            "WHERE c.notebook_id = ? AND c.id IN (SELECT value FROM json_each(?))",
-            (notebook_id, "[" + ",".join(str(i) for i in fused) + "]"),
+            "WHERE c.notebook_id = ? AND s.notebook_id = ? AND s.status = 'ready' "
+            "AND c.id IN (SELECT value FROM json_each(?))",
+            (notebook_id, notebook_id, "[" + ",".join(str(i) for i in fused) + "]"),
         ).fetchall()
-        by_id = {r["id"]: r for r in rows}  # also enforces notebook scope
+        by_id = {r["id"]: r for r in rows}  # enforces notebook + ready scope
 
         sem = {cid: (rank, score) for rank, (cid, score) in enumerate(semantic, 1)}
         lex = {cid: (rank, score) for rank, (cid, score) in enumerate(lexical, 1)}

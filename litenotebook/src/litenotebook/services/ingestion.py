@@ -24,24 +24,18 @@ import logging
 import queue
 import sqlite3
 import threading
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from litenotebook.config import Settings
 from litenotebook.db import connect
+from litenotebook.services.embedding import EmbedderFactory, default_embedder_factory
 
 if TYPE_CHECKING:
     from litenotebook.embed.embedder import TextEmbedder
 
 log = logging.getLogger(__name__)
 
-EmbedderFactory = Callable[[], "TextEmbedder"]
-
-
-def default_embedder_factory() -> TextEmbedder:
-    from litenotebook.embed.embedder import MiniLMEmbedder
-
-    return MiniLMEmbedder()
+__all__ = ["EmbedderFactory", "IngestionWorker", "default_embedder_factory"]
 
 
 class IngestionWorker:

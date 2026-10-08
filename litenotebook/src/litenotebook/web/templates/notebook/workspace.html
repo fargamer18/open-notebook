@@ -2,6 +2,7 @@
 {% set nav = "notebooks" %}
 {% set nb = s.notebook %}
 {% block title %}{{ nb.name }}{% endblock %}
+{% block scripts %}{% if tab == "chat" %}<script src="/static/chat.js" defer></script>{% endif %}{% endblock %}
 {% block content %}
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Notebooks</a><span aria-hidden="true">/</span><span>{{ nb.name }}</span></nav>
 
@@ -18,13 +19,15 @@
 
 <nav class="tabs" aria-label="Workspace">
   {% for key, (label, _desc, _phase) in tabs.items() %}
-    <a href="/notebooks/{{ nb.id }}?tab={{ key }}" {% if key == tab %}aria-current="page"{% endif %}>{{ label }}</a>
+    <a href="{{ '/notebooks/%d/chat' % nb.id if key == 'chat' else '/notebooks/%d?tab=%s' % (nb.id, key) }}" {% if key == tab %}aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
 </nav>
 
 {% set label, desc, phase = tabs[tab] %}
 {% if tab == "sources" %}
   {% include "notebook/sources_panel.html" %}
+{% elif tab == "chat" %}
+  {% include "notebook/chat_panel.html" %}
 {% else %}
 <section class="panel placeholder" aria-labelledby="tab-title">
   <h2 id="tab-title">{{ label }}</h2>

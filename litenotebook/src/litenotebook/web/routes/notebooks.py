@@ -30,7 +30,7 @@ Db = Annotated[sqlite3.Connection, Depends(get_db)]
 
 WORKSPACE_TABS = {
     "sources": ("Sources", "Upload and manage PDFs.", 3),
-    "chat": ("Chat", "Ask questions answered from this notebook's sources.", 5),
+    "chat": ("Chat", "Ask questions answered from this notebook's sources.", 4),
     "notes": ("Notes", "Write notes and save answers.", 6),
     "search": ("Search", "Hybrid keyword + semantic search across sources.", 4),
 }
@@ -205,12 +205,15 @@ def delete(
     return render(request, "partials/notebook_deleted.html", {"result": result})
 
 
-@router.get("/notebooks/{notebook_id}", response_class=HTMLResponse)
+@router.get("/notebooks/{notebook_id}", response_model=None)
 def workspace(
     request: Request, conn: Db, notebook_id: int, tab: str = "sources"
-) -> HTMLResponse:
+) -> Response:
     if tab not in WORKSPACE_TABS:
         tab = "sources"
+    if tab == "chat":
+        get_summary(conn, notebook_id)  # 404 for a missing notebook
+        return redirect(f"/notebooks/{notebook_id}/chat")
     if tab == "sources":
         from litenotebook.web.routes.sources import panel_context
 
