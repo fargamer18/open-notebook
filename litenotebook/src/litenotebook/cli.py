@@ -24,6 +24,7 @@ from litenotebook.ingest.chunker import ChunkingError
 from litenotebook.ingest.pipeline import IngestError, ingest_pdf
 from litenotebook.llm.client import LLMClient, LLMError
 from litenotebook.notebooks import (
+    Notebook,
     NotebookError,
     create_notebook,
     get_notebook_by_name,
@@ -208,6 +209,96 @@ def cmd_llm_check(
     return 0 if report.ok else 1
 
 
+def _notebook_arg(conn: sqlite3.Connection, value: str) -> Notebook:
+    """A notebook given by name or numeric id."""
+    from litenotebook.notebooks import get_notebook
+
+    if value.strip().isdigit():
+        try:
+            return get_notebook(conn, int(value))
+        except NotebookError:
+            pass
+    return get_notebook_by_name(conn, value)
+
+
+def cmd_memory_rebuild(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    from litenotebook.memory.graph import check, rebuild
+
+    nb = _notebook_arg(conn, args.notebook)
+    synced = rebuild(conn, nb.id)
+    report = check(conn, nb.id)
+    print(
+        f"Rebuilt memory for {nb.name!r} from {synced} exchange(s): "
+        f"{report.total_nodes} nodes, {report.total_edges} edges "
+        f"(outcomes and corrections kept: {sum(report.outcomes.values())})"
+    )
+    return 0 if report.ok else 1
+
+
+def cmd_memory_check(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    from litenotebook.memory.graph import check
+
+    nb = _notebook_arg(conn, args.notebook)
+    report = check(conn, nb.id)
+    nodes = ", ".join(f"{k} {v}" for k, v in sorted(report.nodes.items())) or "none"
+    edges = ", ".join(f"{k} {v}" for k, v in sorted(report.edges.items())) or "none"
+    outcomes = (
+        ", ".join(f"{k} {v}" for k, v in sorted(report.outcomes.items())) or "none"
+    )
+    print(f"Memory for {nb.name!r}")
+    print(f"  nodes ({report.total_nodes}): {nodes}")
+    print(f"  edges ({report.total_edges}): {edges}")
+    print(f"  outcomes: {outcomes}")
+    print(f"  exchanges in graph: {report.synced_exchanges}/{report.exchanges}")
+    if report.ok:
+        print("Memory OK")
+        return 0
+    for problem in report.problems:
+        print(f"  problem: {problem}")
+    print("Run `litenotebook memory rebuild` to re-derive the graph.")
+    return 1
+
+
+def cmd_memory_search(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    from litenotebook.memory.search import search_memory
+
+    nb = _notebook_arg(conn, args.notebook)
+    found = search_memory(conn, nb.id, args.query, include_dead_ends=True, limit=args.k)
+    if not found.items:
+        print("No memory matches.")
+        return 0
+    for item in found.items:
+        outcome = f" · {item.outcome}" if item.outcome else ""
+        print(
+            f"#{item.rank}  {item.kind:<10}  score {item.score:.3f}  "
+            f"{item.hops} hop(s)  {item.trust}{outcome}"
+        )
+        print(f"     conversation: {item.conversation_title}")
+        print(f"     question: {item.question}")
+        if item.excerpt:
+            print(
+                f"     {'correction' if item.kind == 'correction' else 'answer'}: "
+                f"{item.excerpt[:200]}"
+            )
+        for src in item.sources:
+            gone = " (source deleted)" if src["deleted"] else ""
+            print(f"     cited: {src['filename']} p.{src['page']}{gone}")
+    t = found.timings
+    print(
+        f"({len(found.seeds)} seed(s), {found.reached} node visit(s); "
+        f"seed {t.get('seed', 0) * 1000:.2f} ms, "
+        f"traverse {t.get('traverse', 0) * 1000:.2f} ms, "
+        f"total {t.get('total', 0) * 1000:.2f} ms)"
+    )
+    return 0
+
+
 def cmd_serve(
     args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
 ) -> int:
@@ -288,6 +379,21 @@ def build_parser() -> argparse.ArgumentParser:
     llm_sub.add_parser("check", help="check the LLM server").set_defaults(
         func=cmd_llm_check
     )
+
+    memory = sub.add_parser("memory", help="graph memory of earlier conversations")
+    memory_sub = memory.add_subparsers(dest="memory_command", required=True)
+    for name, func, help_ in (
+        ("rebuild", cmd_memory_rebuild, "re-derive the graph (keeps corrections)"),
+        ("check", cmd_memory_check, "report consistency statistics"),
+    ):
+        p = memory_sub.add_parser(name, help=help_)
+        p.add_argument("--notebook", required=True, help="notebook name or id")
+        p.set_defaults(func=func)
+    msearch = memory_sub.add_parser("search", help="debug graph-memory retrieval")
+    msearch.add_argument("--notebook", required=True, help="notebook name or id")
+    msearch.add_argument("-k", type=int, default=6, help="results to show")
+    msearch.add_argument("query")
+    msearch.set_defaults(func=cmd_memory_search)
 
     serve = sub.add_parser("serve", help="run the local web app")
     serve.add_argument("--host", help="loopback address (default 127.0.0.1)")

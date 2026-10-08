@@ -21,11 +21,13 @@ from litenotebook import __version__
 from litenotebook.chat import (
     CitationNotFoundError,
     ConversationNotFoundError,
+    MemoryRefNotFoundError,
     MessageNotFoundError,
     recover_generating,
 )
 from litenotebook.config import Settings, load_settings
 from litenotebook.db import connect, open_db
+from litenotebook.memory.graph import backfill
 from litenotebook.notebooks import NotebookNotFoundError
 from litenotebook.services.chat import GenerationGuard
 from litenotebook.services.embedding import (
@@ -38,7 +40,14 @@ from litenotebook.services.settings import SettingsError
 from litenotebook.services.uploads import clean_stale_uploads
 from litenotebook.sources import SourceNotFoundError, recover_interrupted
 from litenotebook.web.deps import render
-from litenotebook.web.routes import chat, health, notebooks, settings, sources
+from litenotebook.web.routes import (
+    chat,
+    health,
+    memory,
+    notebooks,
+    settings,
+    sources,
+)
 from litenotebook.web.security import LocalOnlyMiddleware
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -72,6 +81,10 @@ def create_app(
         clean_stale_uploads(app_settings)
         if interrupted_answers := recover_generating(keeper):
             log.warning("Interrupted answers marked: %d", interrupted_answers)
+        # Deterministic, idempotent: derive graph memory for any exchange that
+        # has none yet (e.g. conversations from before Phase 5). No LLM calls.
+        if remembered := backfill(keeper):
+            log.info("Memory graph backfilled for %d exchange(s)", remembered)
         worker.start()
         try:
             yield
@@ -103,6 +116,7 @@ def create_app(
     app.include_router(notebooks.router)
     app.include_router(sources.router)
     app.include_router(chat.router)
+    app.include_router(memory.router)
     app.include_router(settings.router)
     app.include_router(health.router)
 
@@ -138,6 +152,8 @@ def create_app(
         ConversationNotFoundError,
         MessageNotFoundError,
         CitationNotFoundError,
+        MemoryRefNotFoundError,
+        memory.MemoryNodeNotFoundError,
     ):
         app.add_exception_handler(missing, chat_not_found)
 

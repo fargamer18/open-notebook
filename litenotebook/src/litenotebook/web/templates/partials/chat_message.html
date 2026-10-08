@@ -6,7 +6,7 @@
     {% elif m.status == "interrupted" %}<span class="pill pill-failed">Interrupted</span>{% endif %}
   </header>
   {% if m.content %}
-  <div class="msg-body">{% if m.role == "user" or not m.citations %}{{ m.content }}{% else %}{{ render_answer(m, nb_id) }}{% endif %}</div>
+  <div class="msg-body">{% if m.role == "user" or (not m.citations and not m.memory_refs) %}{{ m.content }}{% else %}{{ render_answer(m, nb_id) }}{% endif %}</div>
   {% endif %}
   {% if m.role == "assistant" %}
     {% if m.error %}<p class="error msg-error">{{ m.error }}</p>{% endif %}
@@ -22,8 +22,50 @@
         {% endfor %}
       </ol>
     {% endif %}
-    {% if m.status == "complete" and m.model and not m.citations %}
+    {% if m.status == "complete" and m.memory_refs %}
+      <ol class="msg-sources msg-memory">
+        {% for r in m.memory_refs %}
+          <li><a class="cite cite-memory" href="/notebooks/{{ nb_id }}/memory/refs/{{ r.id }}"
+                 hx-get="/notebooks/{{ nb_id }}/memory/refs/{{ r.id }}" hx-target="#evidence" hx-swap="innerHTML">M{{ r.label }}</a>
+            {{ r.trust }} · {{ r.conversation_title }}</li>
+        {% endfor %}
+      </ol>
+    {% endif %}
+    {% if m.status == "complete" and m.model and not m.citations and not m.memory_refs %}
       <p class="hint">No valid citations in this answer — treat it with care.</p>
+    {% endif %}
+    {% if m.outcome == "corrected" and m.correction %}
+      <div class="correction"><span class="tag tag-warn">Your correction</span> {{ m.correction }}</div>
+    {% endif %}
+    {% if m.rateable %}
+      {% set base = "/notebooks/" ~ nb_id ~ "/chat/messages/" ~ m.id %}
+      <div class="feedback">
+        {% if feedback_mode == "correct" %}
+          <form class="correct-form" method="post" action="{{ base }}/outcome"
+                hx-post="{{ base }}/outcome" hx-target="#msg-{{ m.id }}" hx-swap="outerHTML">
+            <input type="hidden" name="outcome" value="corrected">
+            <label class="sr-only" for="correction-{{ m.id }}">Correction</label>
+            <textarea id="correction-{{ m.id }}" name="correction" rows="2" maxlength="2000" required
+                      placeholder="What is the correct answer? (the original answer is kept)">{{ correction_value or m.correction or "" }}</textarea>
+            <div class="actions">
+              <button class="btn btn-sm btn-primary" type="submit">Save correction</button>
+              <a class="btn btn-sm btn-ghost" href="{{ base }}" hx-get="{{ base }}" hx-target="#msg-{{ m.id }}" hx-swap="outerHTML">Cancel</a>
+            </div>
+          </form>
+        {% else %}
+          <form class="fb-form" method="post" action="{{ base }}/outcome"
+                hx-post="{{ base }}/outcome" hx-target="#msg-{{ m.id }}" hx-swap="outerHTML">
+            <button class="fb{% if m.outcome == 'useful' %} is-on{% endif %}" type="submit" name="outcome" value="useful"
+                    aria-pressed="{{ 'true' if m.outcome == 'useful' else 'false' }}">Useful</button>
+            <button class="fb{% if m.outcome == 'dead_end' %} is-on{% endif %}" type="submit" name="outcome" value="dead_end"
+                    aria-pressed="{{ 'true' if m.outcome == 'dead_end' else 'false' }}">Dead end</button>
+            <a class="fb{% if m.outcome == 'corrected' %} is-on{% endif %}" href="{{ base }}/correct"
+               hx-get="{{ base }}/correct" hx-target="#msg-{{ m.id }}" hx-swap="outerHTML">Correct…</a>
+            {% if m.outcome %}<button class="fb fb-clear" type="submit" name="outcome" value="clear">Clear</button>{% endif %}
+          </form>
+        {% endif %}
+        {% if feedback_error %}<p class="error" role="alert">{{ feedback_error }}</p>{% endif %}
+      </div>
     {% endif %}
   {% endif %}
 </article>

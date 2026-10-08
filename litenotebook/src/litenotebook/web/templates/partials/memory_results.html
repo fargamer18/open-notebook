@@ -1,0 +1,13 @@
+<div id="memory-results">
+  {% if query %}
+    <p class="muted mem-summary">{{ items | length }} result{{ "" if items | length == 1 else "s" }} for “{{ query }}”
+      {% if search and search.timings %}<span class="mono">· {{ "%.1f" | format(search.timings.get("total", 0) * 1000) }} ms, {{ search.seeds | length }} seed{{ "" if search.seeds | length == 1 else "s" }}, {{ search.reached }} nodes visited</span>{% endif %}</p>
+  {% endif %}
+  {% if items %}
+    <ul class="mem-list">
+      {% for item in items %}{% include "partials/memory_item.html" %}{% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">{% if query %}No remembered conversation matches.{% elif filter != "all" %}Nothing in this filter yet.{% else %}No memory yet. Ask questions in Chat; each finished answer is remembered here.{% endif %}</p>
+  {% endif %}
+</div>

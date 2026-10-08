@@ -335,7 +335,7 @@ def test_phase4_migration_preserves_populated_phase3_db(
         for t in ("notebooks", "sources", "pages", "chunks", "settings")
     }
 
-    assert migrate(conn) == len(available_migrations()) == 4
+    assert migrate(conn) == len(available_migrations()) >= 4
     after = {t: conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in before}
     assert after == before
     assert conn.execute("SELECT name FROM notebooks").fetchone()[0] == "Maths"

@@ -1,0 +1,26 @@
+<div class="ev">
+  <div class="ev-head"><h3>Memory M{{ ref.label }}</h3></div>
+  <p class="muted">Historical context from an earlier conversation — not document evidence. This is the snapshot the answer was given.</p>
+  <dl class="kv ev-meta">
+    <dt>Memory type</dt><dd>{{ ref.trust }}</dd>
+    <dt>Conversation</dt><dd>{% if ref.conversation_exists %}<a href="/notebooks/{{ nb_id }}/chat/{{ ref.conversation_id }}">{{ ref.conversation_title }}</a>{% else %}{{ ref.conversation_title }} <span class="muted">(conversation deleted)</span>{% endif %}</dd>
+    {% if ref.outcome %}<dt>Outcome</dt><dd>{{ {"useful": "Useful", "dead_end": "Dead end", "corrected": "Corrected"}[ref.outcome] }}</dd>{% endif %}
+    <dt>Source-backed</dt><dd>{{ "yes" if ref.sources else "no" }}</dd>
+    <dt>Created</dt><dd class="mono">{{ ref.remembered_at | ts }}</dd>
+  </dl>
+  <p class="mem-q"><span class="muted">Original question:</span> {{ ref.question }}</p>
+  {% if ref.kind == "correction" %}
+    <blockquote class="ev-text">{{ ref.excerpt }}</blockquote>
+  {% elif ref.excerpt %}
+    <p class="muted">Original answer excerpt:</p>
+    <blockquote class="ev-text">{{ ref.excerpt }}</blockquote>
+  {% endif %}
+  {% if ref.correction and ref.kind != "correction" %}<p class="correction"><span class="tag tag-warn">Correction</span> {{ ref.correction }}</p>{% endif %}
+  {% if ref.sources %}
+    <p class="muted">Cited in the original answer:</p>
+    <ul class="mem-edges">
+      {% for src in ref.sources %}<li>{{ src.filename }} — page {{ src.page }}, chunk {{ src.chunk }}{% if src.deleted %} <span class="notice-warn">Original source has been deleted.</span>{% endif %}</li>{% endfor %}
+    </ul>
+  {% endif %}
+  {% if live_node_id %}<div class="actions"><a class="btn btn-sm btn-ghost" href="/notebooks/{{ nb_id }}/memory/nodes/{{ live_node_id }}">Inspect memory node</a></div>{% endif %}
+</div>

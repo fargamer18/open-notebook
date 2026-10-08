@@ -120,9 +120,14 @@
             if (userEl) delete userEl.dataset.transient;
             if (data.created_conversation) onConversationCreated(data);
           } else if (event === "status") {
-            statusEl.textContent = data.stage === "generating"
-              ? "Generating from " + data.sources + " passage" + (data.sources === 1 ? "" : "s") + "…"
-              : "Retrieving evidence…";
+            if (data.stage === "generating") {
+              const parts = [];
+              if (data.sources) parts.push(data.sources + " passage" + (data.sources === 1 ? "" : "s"));
+              if (data.memories) parts.push(data.memories + " memor" + (data.memories === 1 ? "y" : "ies"));
+              statusEl.textContent = "Generating from " + (parts.join(" + ") || "the notebook") + "…";
+            } else {
+              statusEl.textContent = "Retrieving evidence…";
+            }
           } else if (event === "delta") {
             const follow = nearBottom();
             answer.appendChild(document.createTextNode(data.t));

@@ -55,6 +55,10 @@ class ChatBusyError(ChatError):
     pass
 
 
+class MemoryRefNotFoundError(ChatError):
+    pass
+
+
 @dataclass(frozen=True)
 class Conversation:
     id: int
@@ -82,6 +86,54 @@ class CitationRecord:
 
 
 @dataclass(frozen=True)
+class MemoryRefRecord:
+    """An [M#] used by an answer: an immutable snapshot of the memory shown."""
+
+    id: int
+    message_id: int
+    label: int
+    ordinal: int
+    node_key: str
+    kind: str
+    provenance: str
+    conversation_id: int | None
+    conversation_title: str
+    question: str
+    excerpt: str
+    outcome: str | None
+    correction: str | None
+    sources: list[dict[str, Any]]
+    remembered_at: str
+    conversation_exists: bool
+
+    @property
+    def trust(self) -> str:
+        if self.kind == "correction":
+            return "User correction"
+        if self.kind == "question":
+            return "User statement"
+        return "Source-backed answer" if self.sources else "Uncited assistant answer"
+
+
+@dataclass(frozen=True)
+class RememberedItem:
+    """What gets snapshotted for one valid [M#] label."""
+
+    label: int
+    node_key: str
+    kind: str
+    provenance: str
+    conversation_id: int | None
+    conversation_title: str
+    question: str
+    excerpt: str
+    outcome: str | None
+    correction: str | None
+    sources: list[dict[str, Any]]
+    remembered_at: str
+
+
+@dataclass(frozen=True)
 class Message:
     id: int
     conversation_id: int
@@ -95,6 +147,20 @@ class Message:
     created_at: str
     completed_at: str | None
     citations: list[CitationRecord] = field(default_factory=list)
+    memory_refs: list[MemoryRefRecord] = field(default_factory=list)
+    outcome: str | None = None
+    correction: str | None = None
+
+    @property
+    def rateable(self) -> bool:
+        return (
+            self.role == "assistant"
+            and self.status == "complete"
+            and self.model is not None
+        )
+
+    def memory_ref(self, label: int) -> MemoryRefRecord | None:
+        return next((r for r in self.memory_refs if r.label == label), None)
 
     @property
     def retryable(self) -> bool:
@@ -247,6 +313,10 @@ def delete_conversation(
             "DELETE FROM conversations WHERE id = ? AND notebook_id = ?",
             (conversation_id, notebook_id),
         )
+        # its memory nodes cascaded; drop concepts nothing mentions any more
+        from litenotebook.memory.graph import prune_orphan_concepts
+
+        prune_orphan_concepts(conn, notebook_id)
     return conversation
 
 
@@ -278,7 +348,12 @@ def _citation(row: sqlite3.Row) -> CitationRecord:
     )
 
 
-def _message(row: sqlite3.Row, citations: list[CitationRecord]) -> Message:
+def _message(
+    row: sqlite3.Row,
+    citations: list[CitationRecord],
+    memory_refs: list[MemoryRefRecord] | None = None,
+    outcome: tuple[str, str | None] | None = None,
+) -> Message:
     try:
         meta: dict[str, Any] = json.loads(row["meta"] or "{}")
     except (TypeError, ValueError):
@@ -296,6 +371,9 @@ def _message(row: sqlite3.Row, citations: list[CitationRecord]) -> Message:
         created_at=row["created_at"],
         completed_at=row["completed_at"],
         citations=citations,
+        memory_refs=memory_refs or [],
+        outcome=outcome[0] if outcome else None,
+        correction=outcome[1] if outcome else None,
     )
 
 
@@ -315,15 +393,75 @@ def _citations_for(
     return out
 
 
+_MEMREF_SELECT = (
+    "SELECT r.*, EXISTS (SELECT 1 FROM conversations c "
+    "WHERE c.id = r.conversation_id) AS conversation_exists "
+    "FROM message_memory_refs r"
+)
+
+
+def _memory_ref(row: sqlite3.Row) -> MemoryRefRecord:
+    try:
+        sources = json.loads(row["sources"] or "[]")
+    except (TypeError, ValueError):
+        sources = []
+    return MemoryRefRecord(
+        id=row["id"],
+        message_id=row["message_id"],
+        label=row["label"],
+        ordinal=row["ordinal"],
+        node_key=row["node_key"],
+        kind=row["kind"],
+        provenance=row["provenance"],
+        conversation_id=row["conversation_id"],
+        conversation_title=row["conversation_title"],
+        question=row["question"],
+        excerpt=row["excerpt"],
+        outcome=row["outcome"],
+        correction=row["correction"],
+        sources=sources if isinstance(sources, list) else [],
+        remembered_at=row["remembered_at"],
+        conversation_exists=bool(row["conversation_exists"]),
+    )
+
+
+def _extras_for(
+    conn: sqlite3.Connection, message_ids: Sequence[int]
+) -> tuple[dict[int, list[MemoryRefRecord]], dict[int, tuple[str, str | None]]]:
+    refs: dict[int, list[MemoryRefRecord]] = {i: [] for i in message_ids}
+    outcomes: dict[int, tuple[str, str | None]] = {}
+    if not message_ids:
+        return refs, outcomes
+    ids = json.dumps(list(message_ids))
+    for row in conn.execute(
+        _MEMREF_SELECT + " WHERE r.message_id IN (SELECT value FROM json_each(?)) "
+        "ORDER BY r.message_id, r.ordinal",
+        (ids,),
+    ):
+        refs[row["message_id"]].append(_memory_ref(row))
+    for row in conn.execute(
+        "SELECT message_id, outcome, correction FROM memory_outcomes "
+        "WHERE message_id IN (SELECT value FROM json_each(?))",
+        (ids,),
+    ):
+        outcomes[row["message_id"]] = (row["outcome"], row["correction"])
+    return refs, outcomes
+
+
 def list_messages(conn: sqlite3.Connection, conversation_id: int) -> list[Message]:
     rows = conn.execute(
         "SELECT * FROM messages WHERE conversation_id = ? ORDER BY id",
         (conversation_id,),
     ).fetchall()
-    citations = _citations_for(
-        conn, [r["id"] for r in rows if r["role"] == "assistant"]
-    )
-    return [_message(r, citations.get(r["id"], [])) for r in rows]
+    answer_ids = [r["id"] for r in rows if r["role"] == "assistant"]
+    citations = _citations_for(conn, answer_ids)
+    refs, outcomes = _extras_for(conn, answer_ids)
+    return [
+        _message(
+            r, citations.get(r["id"], []), refs.get(r["id"]), outcomes.get(r["id"])
+        )
+        for r in rows
+    ]
 
 
 def get_message(conn: sqlite3.Connection, notebook_id: int, message_id: int) -> Message:
@@ -334,7 +472,33 @@ def get_message(conn: sqlite3.Connection, notebook_id: int, message_id: int) -> 
     ).fetchone()
     if row is None:
         raise MessageNotFoundError(f"Message {message_id} not found in this notebook")
-    return _message(row, _citations_for(conn, [message_id])[message_id])
+    refs, outcomes = _extras_for(conn, [message_id])
+    return _message(
+        row,
+        _citations_for(conn, [message_id])[message_id],
+        refs[message_id],
+        outcomes.get(message_id),
+    )
+
+
+def get_memory_ref(
+    conn: sqlite3.Connection, notebook_id: int, ref_id: int
+) -> MemoryRefRecord:
+    row = conn.execute(
+        _MEMREF_SELECT + " JOIN messages m ON m.id = r.message_id "
+        "JOIN conversations c2 ON c2.id = m.conversation_id "
+        "WHERE r.id = ? AND c2.notebook_id = ?",
+        (ref_id, notebook_id),
+    ).fetchone()
+    if row is None:
+        raise MemoryRefNotFoundError(
+            f"Memory reference {ref_id} not found in this notebook"
+        )
+    from litenotebook.memory.search import refresh_source_state
+
+    ref = _memory_ref(row)
+    refresh_source_state(conn, ref.sources)
+    return ref
 
 
 def get_citation(
@@ -421,6 +585,9 @@ def start_retry(
         conn.execute(
             "DELETE FROM message_citations WHERE message_id = ?", (message.id,)
         )
+        conn.execute(
+            "DELETE FROM message_memory_refs WHERE message_id = ?", (message.id,)
+        )
         cur = conn.execute(
             "UPDATE messages SET status = 'generating', content = '', error = NULL, "
             "model = NULL, meta = NULL, completed_at = NULL "
@@ -463,9 +630,10 @@ def complete_message(
     *,
     model: str | None,
     citations: Iterable[CitedChunk] = (),
+    memory_refs: Iterable[RememberedItem] = (),
     meta: dict[str, Any] | None = None,
 ) -> bool:
-    """generating → complete, with citation snapshots, in one transaction."""
+    """generating → complete, with [S#]/[M#] snapshots, in one transaction."""
     with conn:
         cur = conn.execute(
             f"UPDATE messages SET status = 'complete', content = ?, model = ?, "
@@ -492,6 +660,31 @@ def complete_message(
                     c.chunk_text,
                 )
                 for ordinal, c in enumerate(citations)
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO message_memory_refs (message_id, label, ordinal, node_key, "
+            "kind, provenance, conversation_id, conversation_title, question, "
+            "excerpt, outcome, correction, sources, remembered_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    message_id,
+                    r.label,
+                    ordinal,
+                    r.node_key,
+                    r.kind,
+                    r.provenance,
+                    r.conversation_id,
+                    r.conversation_title,
+                    r.question,
+                    r.excerpt,
+                    r.outcome,
+                    r.correction,
+                    json.dumps(r.sources),
+                    r.remembered_at,
+                )
+                for ordinal, r in enumerate(memory_refs)
             ],
         )
     return True

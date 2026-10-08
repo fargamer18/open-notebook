@@ -1,0 +1,29 @@
+{% set nb = s.notebook %}
+<section class="panel mem-panel" aria-labelledby="memory-title">
+  <div class="panel-head">
+    <h2 id="memory-title">Memory</h2>
+    <span class="muted">Built from earlier conversations · no AI model involved</span>
+  </div>
+  <dl class="mem-stats">
+    <div><dt>Memory nodes</dt><dd>{{ stats.total_nodes }}</dd></div>
+    <div><dt>Concepts</dt><dd>{{ stats.nodes.get("concept", 0) }}</dd></div>
+    <div><dt>Useful</dt><dd>{{ stats.outcomes.get("useful", 0) }}</dd></div>
+    <div><dt>Corrected</dt><dd>{{ stats.outcomes.get("corrected", 0) }}</dd></div>
+    <div><dt>Dead ends</dt><dd>{{ stats.outcomes.get("dead_end", 0) }}</dd></div>
+    <div><dt>Links</dt><dd>{{ stats.total_edges }}</dd></div>
+  </dl>
+  <form class="mem-search" method="get" action="/notebooks/{{ nb.id }}/memory" role="search"
+        hx-get="/notebooks/{{ nb.id }}/memory" hx-target="#memory-results" hx-swap="outerHTML" hx-push-url="true">
+    <label class="sr-only" for="mem-q">Search memory</label>
+    <input id="mem-q" name="q" value="{{ query }}" maxlength="300" placeholder="Search earlier conversations, e.g. telescope aperture" autocomplete="off">
+    <button class="btn" type="submit">Search</button>
+  </form>
+  <nav class="mem-filters" aria-label="Filter memory">
+    {% for f, label in [("all", "All"), ("useful", "Useful"), ("corrections", "Corrections"), ("dead_ends", "Dead ends")] %}
+      <a href="/notebooks/{{ nb.id }}/memory?filter={{ f }}" {% if f == filter and not query %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+</section>
+<section class="panel flush">
+  {% include "partials/memory_results.html" %}
+</section>

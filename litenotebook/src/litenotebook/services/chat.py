@@ -31,6 +31,7 @@ from litenotebook.chat import (
     INTERRUPTED_MESSAGE,
     CitedChunk,
     Exchange,
+    RememberedItem,
     complete_message,
     end_message,
     history_turns,
@@ -38,8 +39,10 @@ from litenotebook.chat import (
 from litenotebook.config import Settings
 from litenotebook.db import connect
 from litenotebook.llm.client import ChatStream, LLMError, ThinkFilter
-from litenotebook.rag.citations import resolve
-from litenotebook.rag.prompts import NO_RESULTS_ANSWER, build_messages
+from litenotebook.memory.graph import sync_turn
+from litenotebook.memory.search import MemoryItem, search_memory
+from litenotebook.rag.citations import parse_memory_labels, resolve
+from litenotebook.rag.prompts import HISTORY_TURNS, build_messages
 
 if TYPE_CHECKING:
     from litenotebook.retrieval.hybrid import SearchResult
@@ -51,6 +54,11 @@ log = logging.getLogger(__name__)
 NO_READY_SOURCES = (
     "No ready sources are available in this notebook yet. Upload a PDF under "
     "Sources and wait until it is Ready, then ask again."
+)
+NO_EVIDENCE_OR_MEMORY = (
+    "No relevant passages in this notebook's sources and no relevant earlier "
+    "conversations were found for this question, so it cannot be answered from "
+    "the notebook."
 )
 STOPPED_MESSAGE = "Generation stopped. Retry to generate a new answer."
 EMPTY_ANSWER = "The model returned an empty answer. Retry."
@@ -180,6 +188,46 @@ class ChatGeneration:
         finally:
             conn.close()
 
+    def _memory(self) -> list[MemoryItem]:
+        """Graph memory (SQLite only, no MiniLM). Exchanges already in the
+        recent-chat window are skipped so nothing is shown twice."""
+        conn = connect(self.settings.db_path)
+        try:
+            started = time.perf_counter()
+            recent = {
+                int(r[0])
+                for r in conn.execute(
+                    "SELECT a.id FROM messages a WHERE a.conversation_id = ? "
+                    "AND a.role = 'assistant' AND a.status = 'complete' "
+                    "AND a.model IS NOT NULL AND a.reply_to < ? "
+                    "ORDER BY a.id DESC LIMIT ?",
+                    (
+                        self.exchange.conversation.id,
+                        self.exchange.user_message_id,
+                        HISTORY_TURNS,
+                    ),
+                )
+            }
+            found = search_memory(
+                conn,
+                self.notebook_id,
+                self.exchange.question,
+                # never remember the current exchange (e.g. a retried question)
+                exclude_message_ids=recent
+                | {self.message_id, self.exchange.user_message_id},
+            )
+            self.timings["memory"] = round(time.perf_counter() - started, 4)
+            return found.items
+        finally:
+            conn.close()
+
+    def _remember(self, conn: Any) -> None:
+        """Update the memory graph for this exchange (deterministic, no LLM)."""
+        try:
+            sync_turn(conn, self.message_id)
+        except Exception:
+            log.exception("Memory graph update failed for message %s", self.message_id)
+
     # --- the stream ----------------------------------------------------------------
 
     async def events(self) -> AsyncGenerator[bytes, None]:
@@ -198,24 +246,32 @@ class ChatGeneration:
                 },
             )
             try:
-                if not await anyio.to_thread.run_sync(self._has_ready_sources):
-                    complete_message(conn, mid, NO_READY_SOURCES, model=None)
-                    yield sse("done", {"message_id": mid, "status": "complete"})
-                    return
-                yield sse("status", {"stage": "retrieving"})
-                results = await anyio.to_thread.run_sync(self._retrieve)
+                ready = await anyio.to_thread.run_sync(self._has_ready_sources)
+                results: list[SearchResult] = []
+                if ready:
+                    yield sse("status", {"stage": "retrieving"})
+                    results = await anyio.to_thread.run_sync(self._retrieve)
+                memories = await anyio.to_thread.run_sync(self._memory)
                 history = await anyio.to_thread.run_sync(self._history)
             except Exception as e:
                 message = _retrieval_error(e)
                 end_message(conn, mid, "failed", message, meta=self._meta(started))
                 yield sse("error", {"message_id": mid, "message": message})
                 return
-            if not results:
-                complete_message(conn, mid, NO_RESULTS_ANSWER, model=None)
+            if not results and not memories:
+                text = NO_EVIDENCE_OR_MEMORY if ready else NO_READY_SOURCES
+                complete_message(conn, mid, text, model=None, meta=self._meta(started))
                 yield sse("done", {"message_id": mid, "status": "complete"})
                 return
 
-            yield sse("status", {"stage": "generating", "sources": len(results)})
+            yield sse(
+                "status",
+                {
+                    "stage": "generating",
+                    "sources": len(results),
+                    "memories": len(memories),
+                },
+            )
             stream = ChatStream(
                 self.llm.llm_base_url,
                 self.llm.llm_model,
@@ -227,7 +283,7 @@ class ChatGeneration:
             llm_started = time.perf_counter()
             try:
                 async for delta in stream.deltas(
-                    build_messages(self.exchange.question, results, history),
+                    build_messages(self.exchange.question, results, history, memories),
                     max_tokens=ANSWER_MAX_TOKENS,
                     temperature=ANSWER_TEMPERATURE,
                 ):
@@ -294,12 +350,16 @@ class ChatGeneration:
             ]
             meta = self._meta(started, stream)
             meta["invalid_labels"] = report.invalid_labels
+            remembered, invalid_memory = _memory_refs(content, memories)
+            meta["invalid_memory_labels"] = invalid_memory
+            meta["memories_supplied"] = len(memories)
             complete_message(
                 conn,
                 mid,
                 content,
                 model=stream.info.model or self.llm.llm_model or "llm",
                 citations=cited,
+                memory_refs=remembered,
                 meta=meta,
             )
             self.timings["persist"] = round(time.perf_counter() - persist_started, 4)
@@ -328,6 +388,7 @@ class ChatGeneration:
                 log.exception("Could not mark message %s interrupted", mid)
             raise
         finally:
+            self._remember(conn)
             conn.close()
             self.guard.release(mid)
 
@@ -352,3 +413,33 @@ def _retrieval_error(error: Exception) -> str:
         return str(error)
     log.exception("Retrieval failed", exc_info=error)
     return "Retrieval failed; details are in the server log. Retry."
+
+
+def _memory_refs(
+    content: str, memories: list[MemoryItem]
+) -> tuple[list[RememberedItem], list[int]]:
+    """Snapshot each valid [M#]; labels outside the supplied memory are invalid."""
+    valid: list[RememberedItem] = []
+    invalid: list[int] = []
+    for label in parse_memory_labels(content):
+        if not 1 <= label <= len(memories):
+            invalid.append(label)
+            continue
+        item = memories[label - 1]
+        valid.append(
+            RememberedItem(
+                label=label,
+                node_key=item.node_key,
+                kind=item.kind,
+                provenance=item.provenance,
+                conversation_id=item.conversation_id,
+                conversation_title=item.conversation_title,
+                question=item.question,
+                excerpt=item.excerpt,
+                outcome=item.outcome,
+                correction=item.correction,
+                sources=item.sources,
+                remembered_at=item.created_at,
+            )
+        )
+    return valid, invalid

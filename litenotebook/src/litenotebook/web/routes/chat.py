@@ -314,6 +314,89 @@ async def retry(request: Request, notebook_id: int, message_id: int) -> Response
     return _stream(request, notebook_id, result)
 
 
+def _message_response(
+    request: Request,
+    conn: sqlite3.Connection,
+    notebook_id: int,
+    message_id: int,
+    *,
+    status_code: int = 200,
+    **extra: Any,
+) -> HTMLResponse:
+    return render(
+        request,
+        "partials/chat_message.html",
+        {
+            "m": get_message(conn, notebook_id, message_id),
+            "nb_id": notebook_id,
+            **extra,
+        },
+        status_code=status_code,
+    )
+
+
+@router.get("/messages/{message_id}/correct", response_class=HTMLResponse)
+def correction_form(
+    request: Request, conn: Db, notebook_id: int, message_id: int
+) -> Response:
+    message = get_message(conn, notebook_id, message_id)
+    if not is_htmx(request):
+        return redirect(
+            f"{chat_url(notebook_id, message.conversation_id)}#msg-{message_id}"
+        )
+    return _message_response(
+        request, conn, notebook_id, message_id, feedback_mode="correct"
+    )
+
+
+@router.post("/messages/{message_id}/outcome", response_model=None)
+def outcome(
+    request: Request,
+    conn: Db,
+    notebook_id: int,
+    message_id: int,
+    outcome: Annotated[str, Form()] = "",
+    correction: Annotated[str, Form()] = "",
+) -> Response:
+    """Useful / dead end / corrected / clear. Never calls the LLM and never
+    rewrites the original answer; the memory graph is updated at once."""
+    from litenotebook.memory.graph import OutcomeError, set_outcome
+
+    message = get_message(conn, notebook_id, message_id)  # scope check
+    choice = {
+        "useful": "useful",
+        "dead_end": "dead_end",
+        "corrected": "corrected",
+        "clear": None,
+    }
+    if outcome not in choice:
+        error: str | None = "Choose Useful, Dead end or Correct"
+    else:
+        error = None
+        try:
+            set_outcome(conn, notebook_id, message_id, choice[outcome], correction)
+        except OutcomeError as e:
+            error = str(e)
+    if error is not None:
+        if is_htmx(request):
+            return _message_response(
+                request,
+                conn,
+                notebook_id,
+                message_id,
+                status_code=422,
+                feedback_error=error,
+                feedback_mode="correct" if outcome == "corrected" else None,
+                correction_value=correction,
+            )
+        return _error(error, 422)
+    if not is_htmx(request):
+        return redirect(
+            f"{chat_url(notebook_id, message.conversation_id)}#msg-{message_id}"
+        )
+    return _message_response(request, conn, notebook_id, message_id)
+
+
 @router.post("/messages/{message_id}/stop", response_model=None)
 def stop(request: Request, conn: Db, notebook_id: int, message_id: int) -> Response:
     get_message(conn, notebook_id, message_id)  # scope check
@@ -383,6 +466,9 @@ def rename(
 ) -> Response:
     try:
         rename_conversation(conn, notebook_id, conversation_id, title)
+        from litenotebook.memory.graph import sync_conversation
+
+        sync_conversation(conn, conversation_id)  # memory shows the new title
     except ConversationNotFoundError:
         raise
     except ChatError as e:

@@ -380,6 +380,49 @@ progress::-moz-progress-bar { background: var(--accent); }
   .chat-main { max-height: none; }
 }
 
+/* --- memory ------------------------------------------------------------------ */
+
+.cite-memory { background: #1d2230; color: #9fb3e8; }
+.cite-memory:hover { background: #262d40; color: #c0cff5; }
+.msg-memory { margin-top: 0.2rem; }
+.tag-warn { color: var(--warn); background: #2a2416; border-color: #3a3220; }
+.tag-muted { color: var(--muted); background: var(--surface-2); border-color: var(--border); }
+.correction { margin: 0.4rem 0 0; font-size: 0.9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.feedback { margin-top: 0.35rem; }
+.fb-form { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.fb {
+  font: inherit; font-size: 0.75rem; color: var(--faint); background: none; cursor: pointer;
+  border: 1px solid transparent; border-radius: 999px; padding: 0.05rem 0.55rem;
+}
+.fb:hover { color: var(--text); border-color: var(--border); text-decoration: none; }
+.fb.is-on { color: var(--accent); border-color: var(--accent-bg); background: var(--accent-bg); }
+.fb-clear { color: var(--faint); }
+.correct-form textarea {
+  width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); padding: 0.4rem 0.55rem; font: inherit; margin-bottom: 0.35rem;
+}
+
+.mem-stats { display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; margin: 0.25rem 0 0.9rem; }
+.mem-stats dt { color: var(--faint); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.mem-stats dd { margin: 0; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.mem-search { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; }
+.mem-filters { display: flex; gap: 0.25rem; }
+.mem-filters a { color: var(--muted); padding: 0.2rem 0.6rem; border-radius: var(--radius); font-size: 0.85rem; }
+.mem-filters a[aria-current="page"] { color: var(--text); background: var(--surface-2); }
+.mem-summary { padding: 0.6rem 1.1rem 0; margin: 0; font-size: 0.85rem; }
+.mem-list { list-style: none; margin: 0; padding: 0; }
+.mem-item { padding: 0.65rem 1.1rem; border-bottom: 1px solid var(--border); }
+.mem-item:last-child { border-bottom: none; }
+.mem-item.is-dead { opacity: 0.6; }
+.mem-head { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin: 0 0 0.25rem; }
+.mem-head .tag { margin-left: 0; }
+.mem-score { margin-left: auto; color: var(--faint); font-size: 0.75rem; }
+.mem-q, .mem-x { margin: 0.1rem 0; overflow-wrap: anywhere; }
+.mem-meta { margin: 0.25rem 0 0; color: var(--faint); font-size: 0.8rem; }
+.mem-node-title { font-size: 1.05rem; overflow-wrap: anywhere; }
+.mem-edges { margin: 0.3rem 0 0; padding-left: 1.1rem; font-size: 0.9rem; }
+.mem-edges .rel { color: var(--faint); font-size: 0.8rem; }
+
 /* --- small windows -------------------------------------------------------- */
 
 @media (max-width: 640px) {
