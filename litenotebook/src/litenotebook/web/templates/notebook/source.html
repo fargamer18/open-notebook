@@ -43,6 +43,7 @@
   {% endif %}
 
   <div class="actions">
+    {% if src.status == "ready" %}<a class="btn btn-primary" href="{{ base }}/read">Open in reader</a>{% endif %}
     {% if src.status == "failed" %}
       <form method="post" action="{{ base }}/retry"><button class="btn" type="submit">Retry ingestion</button></form>
     {% endif %}

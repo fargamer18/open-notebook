@@ -1,0 +1,33 @@
+{% set base = "/notebooks/" ~ nb_id ~ "/sources/" ~ a.source_id ~ "/annotations/" ~ a.id %}
+<li class="ann ann-{{ a.color }}{% if mode != 'view' %} is-editing{% endif %}" id="ann-{{ a.id }}">
+  <div class="ann-head">
+    <a class="ann-page" href="/notebooks/{{ nb_id }}/sources/{{ a.source_id }}/read?annotation={{ a.id }}"
+       data-reader-page="{{ a.page_no }}" data-reader-annotation="{{ a.id }}" data-reader-source="{{ a.source_id }}">Page {{ a.page_no }}</a>
+    <span class="muted">{{ "Highlight" if a.annotation_type == "highlight" else "Comment" }} · {{ a.updated_at | ts }}</span>
+  </div>
+  {% if a.selected_text %}<blockquote class="ann-text">{{ a.selected_text }}</blockquote>{% endif %}
+  {% if mode == "edit" %}
+    <form class="ann-form" method="post" action="{{ base }}" hx-post="{{ base }}" hx-target="#ann-{{ a.id }}" hx-swap="outerHTML">
+      <label class="sr-only" for="ann-comment-{{ a.id }}">Comment</label>
+      <textarea id="ann-comment-{{ a.id }}" name="comment" rows="3" maxlength="10000">{{ a.comment }}</textarea>
+      <label class="sr-only" for="ann-color-{{ a.id }}">Colour</label>
+      <select id="ann-color-{{ a.id }}" name="color">{% for c in colors %}<option value="{{ c }}" {% if c == a.color %}selected{% endif %}>{{ c | capitalize }}</option>{% endfor %}</select>
+      <button class="btn btn-sm btn-primary" type="submit">Save</button>
+    </form>
+  {% elif mode == "confirm" %}
+    <form class="inline-form" method="post" action="{{ base }}/delete" hx-post="{{ base }}/delete" hx-target="#ann-{{ a.id }}" hx-swap="outerHTML">
+      <input type="hidden" name="confirm" value="{{ a.id }}">
+      <span>Delete this annotation?</span>
+      <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+    </form>
+  {% else %}
+    {% if a.comment %}<p class="ann-comment">{{ a.comment }}</p>{% endif %}
+    <div class="ann-actions">
+      <button class="fb" type="button" hx-get="{{ base }}/edit" hx-target="#ann-{{ a.id }}" hx-swap="outerHTML">Edit</button>
+      <button class="fb" type="button" hx-get="{{ base }}/delete" hx-target="#ann-{{ a.id }}" hx-swap="outerHTML">Delete…</button>
+      <button class="fb" type="button" hx-get="/notebooks/{{ nb_id }}/notes/add-form?kind=annotation&amp;id={{ a.id }}" hx-target="#ann-note-{{ a.id }}">Add to note…</button>
+    </div>
+    <div id="ann-note-{{ a.id }}"></div>
+  {% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+</li>

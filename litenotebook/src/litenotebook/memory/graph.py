@@ -323,7 +323,7 @@ def sync_note(conn: sqlite3.Connection, note_id: int) -> bool:
         evidence_keys = []
         for link in links:
             target: int | None = None
-            if link["link_type"] == "source_chunk":
+            if link["link_type"] in ("source_chunk", "annotation"):
                 key = f"note_evidence:{link['id']}"
                 evidence_keys.append(key)
                 target = _upsert_node(

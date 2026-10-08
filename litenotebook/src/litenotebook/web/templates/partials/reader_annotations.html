@@ -1,0 +1,10 @@
+<div class="r-annotations" hx-get="/notebooks/{{ nb_id }}/sources/{{ src.id }}/annotations" hx-trigger="annotations-changed from:body" hx-swap="outerHTML">
+  <h3>Annotations <span class="muted">({{ items | length }})</span></h3>
+  {% if items %}
+  <ul class="ann-list">
+    {% for a in items %}{% with mode = "view" %}{% include "partials/reader_annotation.html" %}{% endwith %}{% endfor %}
+  </ul>
+  {% else %}
+    <p class="muted">Select text on the page to highlight or annotate it.</p>
+  {% endif %}
+</div>

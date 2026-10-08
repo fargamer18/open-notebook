@@ -14,6 +14,10 @@
             <span class="tag">Chat</span>
             {% if l.exists %}<a href="/notebooks/{{ nb_id }}/chat/{{ l.conversation_id }}#msg-{{ l.message_id }}">{{ l.label }}</a>{% else %}<span>{{ l.label }}</span>{% endif %}
             <span class="muted">{{ "Assistant" if l.details.get("role") == "assistant" else "You" }}</span>
+          {% elif l.link_type == "annotation" %}
+            <span class="tag">Annotation</span>
+            <span>{{ l.label }} — page {{ l.page_no }}</span>
+            {% if l.details.get("comment") %}<span class="muted">“{{ l.details.get("comment") }}”</span>{% endif %}
           {% else %}
             <span class="tag">Memory</span>
             {% if l.exists %}<a href="/notebooks/{{ nb_id }}/memory/nodes/{{ l.memory_node_id }}">{{ l.label }}</a>{% else %}<span>{{ l.label }}</span>{% endif %}
@@ -25,6 +29,12 @@
           </form>
         </div>
         {% if not l.exists %}<p class="notice-warn">Original item has been deleted — showing the saved snapshot.</p>{% endif %}
+        {% if l.source_id %}
+          {% if not l.source_live %}<p class="notice-warn">Original source has been deleted.</p>
+          {% elif l.link_type == "annotation" and l.exists %}<p><a class="fb" href="/notebooks/{{ nb_id }}/sources/{{ l.source_id }}/read?annotation={{ l.annotation_id }}">Open in PDF</a></p>
+          {% elif l.link_type == "source_chunk" and l.exists %}<p><a class="fb" href="/notebooks/{{ nb_id }}/sources/{{ l.source_id }}/read?chunk={{ l.chunk_id }}">Open in PDF</a></p>
+          {% elif l.page_no %}<p><a class="fb" href="/notebooks/{{ nb_id }}/sources/{{ l.source_id }}/read?page={{ l.page_no }}">Open page {{ l.page_no }} in PDF</a></p>{% endif %}
+        {% endif %}
         {% if l.excerpt %}<blockquote class="ev-text">{{ l.excerpt }}</blockquote>{% endif %}
         {% if l.citations %}<p class="muted link-cites">Cited: {% for c in l.citations %}[S{{ c.label }}] {{ c.filename }} p.{{ c.page }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
       </li>

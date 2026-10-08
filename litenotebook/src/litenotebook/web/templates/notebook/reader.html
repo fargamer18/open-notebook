@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% set nav = "notebooks" %}
+{% set nb = s.notebook %}
+{% block title %}{{ src.original_filename }}{% endblock %}
+{% block scripts %}<script src="/static/reader.js" defer></script><script src="/static/chat.js" defer></script><script src="/static/notes.js" defer></script>{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="/">Notebooks</a><span aria-hidden="true">/</span>
+  <a href="/notebooks/{{ nb.id }}?tab=sources">{{ nb.name }}</a><span aria-hidden="true">/</span>
+  <span>{{ src.original_filename }}</span>
+</nav>
+<div class="reader-layout" id="reader"
+     data-notebook-id="{{ nb.id }}" data-source-id="{{ src.id }}" data-pages="{{ page_count }}"
+     data-page="{{ start_page }}" data-zoom="{{ zoom }}"
+     data-focus-kind="{{ focus_kind }}" data-focus-id="{{ focus_id }}">
+  <section class="reader-main" aria-label="PDF reader">
+    <div class="reader-toolbar" role="toolbar" aria-label="Reader controls">
+      <button class="btn btn-sm" type="button" id="r-prev" title="Previous page (PageUp / ←)">‹</button>
+      <label class="sr-only" for="r-page">Page</label>
+      <input id="r-page" class="r-page" type="number" min="1" max="{{ page_count }}" value="{{ start_page }}">
+      <span class="muted">/ {{ page_count }}</span>
+      <button class="btn btn-sm" type="button" id="r-next" title="Next page (PageDown / →)">›</button>
+      <span class="r-sep" aria-hidden="true"></span>
+      <button class="btn btn-sm" type="button" id="r-zoom-out" title="Zoom out (Ctrl -)">−</button>
+      <span class="mono r-zoom" id="r-zoom">100%</span>
+      <button class="btn btn-sm" type="button" id="r-zoom-in" title="Zoom in (Ctrl +)">+</button>
+      <button class="btn btn-sm btn-ghost" type="button" id="r-fit">Fit width</button>
+      <button class="btn btn-sm btn-ghost" type="button" id="r-page-comment" title="Add a comment to this page">Comment on page</button>
+      <span class="r-status muted" id="r-status" role="status">Loading page…</span>
+    </div>
+    <div class="reader-viewport" id="r-viewport" tabindex="0">
+      <div class="reader-page" id="r-pagebox">
+        <img id="r-img" alt="Page {{ start_page }} of {{ src.original_filename }}">
+        <div class="hl-layer" id="r-hl" aria-hidden="true"></div>
+        <div class="text-layer" id="r-text"></div>
+      </div>
+    </div>
+    <div class="sel-tools" id="r-sel" hidden>
+      <span class="muted">Highlight</span>
+      {% for c in colors %}<button class="swatch sw-{{ c }}" type="button" data-color="{{ c }}" title="{{ c | capitalize }}"><span class="sr-only">{{ c }}</span></button>{% endfor %}
+      <button class="btn btn-sm" type="button" id="r-annotate">Annotate…</button>
+      <button class="btn btn-sm" type="button" id="r-to-note">Add to note…</button>
+      <div class="sel-comment" id="r-comment-box" hidden>
+        <label class="sr-only" for="r-comment">Comment</label>
+        <textarea id="r-comment" rows="3" maxlength="10000" placeholder="Your comment"></textarea>
+        <button class="btn btn-sm btn-primary" type="button" id="r-comment-save">Save annotation</button>
+      </div>
+      <div id="r-sel-note"></div>
+      <p class="error" id="r-sel-error" hidden></p>
+    </div>
+  </section>
+  <div class="reader-resize" id="r-resize" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+  <aside class="reader-side" aria-label="Side panel">
+    <nav class="reader-tabs" aria-label="Side panel">
+      <button class="tab-btn is-on" type="button" hx-get="/notebooks/{{ nb.id }}/sources/{{ src.id }}/annotations" hx-target="#reader-panel">Annotations</button>
+      <button class="tab-btn" type="button" hx-get="/notebooks/{{ nb.id }}/reader/panel/notes" hx-target="#reader-panel">Notes</button>
+      <button class="tab-btn" type="button" hx-get="/notebooks/{{ nb.id }}/reader/panel/chat" hx-target="#reader-panel">Chat</button>
+    </nav>
+    <div id="reader-panel" hx-get="/notebooks/{{ nb.id }}/sources/{{ src.id }}/annotations" hx-trigger="load">
+      <p class="muted">Loading…</p>
+    </div>
+  </aside>
+</div>
+{% endblock %}

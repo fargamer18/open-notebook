@@ -468,8 +468,11 @@ def delete_source(
     store: FaissStore,
 ) -> Source:
     """Delete a source: row (pages/chunks/FTS cascade), stored file, FAISS vectors."""
-    source = delete_source_record(conn, notebook_id, source_id)
+    from litenotebook.reader.render import remove_cache
+
+    source = delete_source_record(conn, notebook_id, source_id)  # annotations cascade
     remove_stored_file(settings, source)
+    remove_cache(settings, notebook_id, source_id)  # derived page renders
     store.sync(notebook_id)
     return source
 

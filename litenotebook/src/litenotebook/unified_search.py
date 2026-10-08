@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from litenotebook.embed.embedder import TextEmbedder
 
 MAX_QUERY_CHARS = 500
-MODES = ("all", "sources", "notes", "chats", "memory")
+MODES = ("all", "sources", "notes", "annotations", "chats", "memory")
 ENGINES = ("lexical", "hybrid")
 PER_SECTION_ALL = 5
 PER_SECTION = 20
@@ -198,6 +198,39 @@ def search_notes(
     ]
 
 
+def search_annotations(
+    conn: sqlite3.Connection, notebook_id: int, query: str, limit: int
+) -> list[Hit]:
+    match = fts_query(query)
+    if match is None:
+        return []
+    rows = _rows(
+        conn,
+        "SELECT a.id, a.source_id, a.page_no, a.comment, a.annotation_type, "
+        "s.original_filename, "
+        f"snippet(annotations_fts, 0, '{_OPEN}', '{_CLOSE}', '…', {SNIPPET_TOKENS}) "
+        "AS snip FROM annotations_fts "
+        "JOIN annotations a ON a.id = annotations_fts.rowid "
+        "JOIN sources s ON s.id = a.source_id "
+        "WHERE annotations_fts MATCH ? AND a.notebook_id = ? AND s.notebook_id = ? "
+        "ORDER BY bm25(annotations_fts), a.id DESC LIMIT ?",
+        (match, notebook_id, notebook_id, limit),
+    )
+    return [
+        Hit(
+            section="annotations",
+            title=f"{r['original_filename']} — page {r['page_no']}",
+            subtitle=("Highlight" if r["annotation_type"] == "highlight" else "Comment")
+            + (f" · {_clip(r['comment'], 120)}" if r["comment"] else ""),
+            url=f"/notebooks/{notebook_id}/sources/{r['source_id']}/read"
+            f"?annotation={r['id']}",
+            snippet=highlight(r["snip"]) if r["snip"] else Markup(""),
+            meta={"annotation_id": r["id"], "page": r["page_no"]},
+        )
+        for r in rows
+    ]
+
+
 def search_chats(
     conn: sqlite3.Connection, notebook_id: int, query: str, limit: int
 ) -> list[Hit]:
@@ -301,6 +334,8 @@ def unified_search(
                     hits = search_sources_lexical(conn, notebook_id, query, limit)
             elif section == "notes":
                 hits = search_notes(conn, notebook_id, query, limit)
+            elif section == "annotations":
+                hits = search_annotations(conn, notebook_id, query, limit)
             elif section == "chats":
                 hits = search_chats(conn, notebook_id, query, limit)
             else:

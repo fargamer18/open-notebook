@@ -1,0 +1,31 @@
+<div class="r-notes">
+  {% if note %}
+    <p><a href="/notebooks/{{ nb_id }}/reader/panel/notes" hx-get="/notebooks/{{ nb_id }}/reader/panel/notes" hx-target="#reader-panel">← All notes</a>
+       · <a href="/notebooks/{{ nb_id }}/notes/{{ note.id }}">Open full note</a></p>
+    {% set base = "/notebooks/" ~ nb_id ~ "/notes/" ~ note.id %}
+    <form class="note-editor compact" id="note-editor" method="post" action="{{ base }}" data-autosave-url="{{ base }}/autosave">
+      <input type="hidden" name="revision" value="{{ note.revision }}">
+      <div class="note-head">
+        <label class="sr-only" for="note-title">Title</label>
+        <input id="note-title" class="note-title" name="title" maxlength="200" required value="{{ note.title }}" autocomplete="off">
+        <span class="save-state" id="save-state" role="status" data-state="saved">Saved</span>
+      </div>
+      <label class="sr-only" for="note-content">Note</label>
+      <textarea id="note-content" name="content" class="note-content" placeholder="Write your notes here (plain text)…">{{ note.content }}</textarea>
+      <span id="note-updated" hidden>{{ note.updated_at | ts }}</span>
+    </form>
+    <div id="note-links">{% include "partials/note_links.html" %}</div>
+  {% else %}
+    <form method="post" action="/notebooks/{{ nb_id }}/notes" class="new-note">
+      <label class="sr-only" for="r-new-note">New note title</label>
+      <input id="r-new-note" name="title" maxlength="200" placeholder="New note title" autocomplete="off">
+      <button class="btn btn-primary btn-sm" type="submit">New note</button>
+    </form>
+    <ul class="conv-list">
+      {% for n in notes %}
+        <li><a class="conv" href="/notebooks/{{ nb_id }}/notes/{{ n.id }}" hx-get="/notebooks/{{ nb_id }}/reader/panel/notes?note={{ n.id }}" hx-target="#reader-panel">
+          <span class="conv-title">{{ n.title }}</span><span class="conv-meta">{{ n.updated_at | ts }}</span></a></li>
+      {% else %}<li class="muted conv-empty">No notes yet.</li>{% endfor %}
+    </ul>
+  {% endif %}
+</div>

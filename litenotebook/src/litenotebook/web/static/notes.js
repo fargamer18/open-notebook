@@ -3,13 +3,14 @@
  */
 (function () {
   "use strict";
-  const form = document.getElementById("note-editor");
-  if (!form) return;
+  function setup(form) {
+  if (!form || form.dataset.ready) return;
+  form.dataset.ready = "1";
   const url = form.dataset.autosaveUrl;
   const title = form.elements.title;
   const content = form.elements.content;
   const revision = form.elements.revision;
-  const state = document.getElementById("save-state");
+  const state = form.querySelector("#save-state") || document.getElementById("save-state");
   const updated = document.getElementById("note-updated");
   const DEBOUNCE_MS = 800;
   let timer = null, saving = false, dirty = false, failed = false, conflict = false, retryMs = 2000;
@@ -83,9 +84,18 @@
   });
   form.addEventListener("submit", () => { dirty = false; });  // plain-form fallback
   window.addEventListener("beforeunload", (event) => {
-    if (dirty || saving) {
+    if ((dirty || saving) && form.isConnected) {
       event.preventDefault();
       event.returnValue = "";
     }
   });
+  }
+
+  function scan() { setup(document.getElementById("note-editor")); }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", scan);
+  } else {
+    scan();
+  }
+  document.addEventListener("htmx:load", scan);
 })();

@@ -23,7 +23,7 @@ NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
 MAX_TITLE_CHARS = 200
 MAX_CONTENT_BYTES = 1024 * 1024
 EXCERPT_CHARS = 600
-LINK_TYPES = ("source_chunk", "message", "memory_node")
+LINK_TYPES = ("source_chunk", "message", "memory_node", "annotation")
 
 
 class NoteError(ValueError):
@@ -68,6 +68,8 @@ class NoteLink:
     details: dict[str, Any]
     created_at: str
     exists: bool = True  # filled in at read time
+    source_live: bool = False  # the original PDF can still be opened
+    annotation_id: int | None = None
     memory_node_id: int | None = None
     citations: list[dict[str, Any]] = field(default_factory=list)
 
@@ -215,8 +217,9 @@ def _insert_link(
         conn.execute(
             "INSERT INTO note_links (note_id, link_type, target_key, source_id, "
             "chunk_id, "
-            "message_id, conversation_id, memory_key, label, excerpt, page_no, "
-            "chunk_ord, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "message_id, conversation_id, memory_key, annotation_id, label, excerpt, "
+            "page_no, chunk_ord, details) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(note_id, target_key) DO NOTHING",
             (
                 note_id,
@@ -227,6 +230,7 @@ def _insert_link(
                 v.get("message_id"),
                 v.get("conversation_id"),
                 v.get("memory_key"),
+                v.get("annotation_id"),
                 v["label"],
                 v.get("excerpt", ""),
                 v.get("page_no"),
@@ -356,6 +360,28 @@ def link_memory_node(
     )
 
 
+def link_annotation(
+    conn: sqlite3.Connection, notebook_id: int, note_id: int, annotation_id: int
+) -> int:
+    """Link a reader highlight/annotation (snapshot of text, comment, page)."""
+    from litenotebook.reader.annotations import get_annotation
+
+    get_note(conn, notebook_id, note_id)
+    a = get_annotation(conn, notebook_id, annotation_id)
+    return _insert_link(
+        conn,
+        note_id,
+        "annotation",
+        f"annotation:{a.id}",
+        source_id=a.source_id,
+        annotation_id=a.id,
+        page_no=a.page_no,
+        label=a.source_filename,
+        excerpt=a.selected_text,
+        details={"comment": a.comment, "color": a.color, "type": a.annotation_type},
+    )
+
+
 def remove_link(
     conn: sqlite3.Connection, notebook_id: int, note_id: int, link_id: int
 ) -> None:
@@ -396,8 +422,25 @@ def list_links(
             chunk_ord=r["chunk_ord"],
             details=details if isinstance(details, dict) else {},
             created_at=r["created_at"],
+            annotation_id=r["annotation_id"],
         )
-        if link.link_type == "source_chunk":
+        if link.source_id is not None:
+            link.source_live = (
+                conn.execute(
+                    "SELECT 1 FROM sources WHERE id = ? AND notebook_id = ?",
+                    (link.source_id, notebook_id),
+                ).fetchone()
+                is not None
+            )
+        if link.link_type == "annotation":
+            link.exists = (
+                conn.execute(
+                    "SELECT 1 FROM annotations WHERE id = ? AND notebook_id = ?",
+                    (link.annotation_id, notebook_id),
+                ).fetchone()
+                is not None
+            )
+        elif link.link_type == "source_chunk":
             link.exists = (
                 conn.execute(
                     "SELECT 1 FROM chunks WHERE id = ? AND source_id = ? "

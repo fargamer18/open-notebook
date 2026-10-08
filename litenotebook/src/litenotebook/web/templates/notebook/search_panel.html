@@ -20,7 +20,7 @@
   </form>
   <p class="hint">{% if embedder_ready %}Embedding model is ready.{% else %}Embedding model is sleeping: keyword search never wakes it; Hybrid will load it (~15 s) the first time.{% endif %}</p>
   <nav class="mem-filters" aria-label="Search sections">
-    {% for m, label in [("all", "All"), ("sources", "Sources"), ("notes", "Notes"), ("chats", "Chats"), ("memory", "Memory")] %}
+    {% for m, label in [("all", "All"), ("sources", "Sources"), ("notes", "Notes"), ("annotations", "Annotations"), ("chats", "Chats"), ("memory", "Memory")] %}
       <a href="/notebooks/{{ nb.id }}/search?q={{ query | urlencode }}&amp;mode={{ m }}&amp;engine={{ engine }}" {% if m == mode %}aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </nav>

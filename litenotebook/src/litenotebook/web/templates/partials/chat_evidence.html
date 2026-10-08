@@ -15,6 +15,15 @@
     <dt>Chunk</dt><dd>{{ chunk_ord }} <span class="muted">(id {{ live.chunk_id if live else citation.chunk_id }})</span></dd>
   </dl>
   <blockquote class="ev-text">{{ text }}</blockquote>
+  {% if citation and citation.chunk_exists %}
+    <p><a class="btn btn-sm" href="/notebooks/{{ nb_id }}/sources/{{ citation.source_id }}/read?citation={{ citation.id }}"
+          data-reader-source="{{ citation.source_id }}" data-reader-page="{{ citation.page_no }}" data-reader-citation="{{ citation.id }}">Open in PDF</a></p>
+  {% elif citation %}
+    <p><button class="btn btn-sm" type="button" disabled>Open in PDF</button> <span class="notice-warn">Original source has been deleted</span></p>
+  {% elif live %}
+    <p><a class="btn btn-sm" href="/notebooks/{{ nb_id }}/sources/{{ live.source_id }}/read?chunk={{ live.chunk_id }}"
+          data-reader-source="{{ live.source_id }}" data-reader-page="{{ live.page_no }}" data-reader-chunk="{{ live.chunk_id }}">Open in PDF</a></p>
+  {% endif %}
   {% set add_kind = "citation" if citation else "chunk" %}
   {% set add_id = citation.id if citation else live.chunk_id %}
   <div class="add-note" id="add-note-{{ add_kind }}-{{ add_id }}">

@@ -30,6 +30,7 @@ from litenotebook.db import connect, open_db
 from litenotebook.memory.graph import backfill
 from litenotebook.notebooks import NotebookNotFoundError
 from litenotebook.notes import NoteNotFoundError
+from litenotebook.reader.annotations import AnnotationNotFoundError
 from litenotebook.services.chat import GenerationGuard
 from litenotebook.services.embedding import (
     EmbedderFactory,
@@ -47,6 +48,7 @@ from litenotebook.web.routes import (
     memory,
     notebooks,
     notes,
+    reader,
     search,
     settings,
     sources,
@@ -123,6 +125,8 @@ def create_app(
     app.include_router(memory.router)
     app.include_router(notes.router)
     app.include_router(search.router)
+    app.include_router(reader.router)
+    app.include_router(reader.panels)
     app.include_router(settings.router)
     app.include_router(health.router)
 
@@ -161,6 +165,7 @@ def create_app(
         MemoryRefNotFoundError,
         memory.MemoryNodeNotFoundError,
         NoteNotFoundError,
+        AnnotationNotFoundError,
     ):
         app.add_exception_handler(missing, chat_not_found)
 

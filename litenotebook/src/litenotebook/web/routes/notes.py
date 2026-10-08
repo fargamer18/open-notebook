@@ -22,6 +22,7 @@ from litenotebook.notes import (
     create_note,
     delete_note,
     get_note,
+    link_annotation,
     link_chunk,
     link_citation,
     link_memory_node,
@@ -42,7 +43,7 @@ from litenotebook.web.deps import get_db, is_htmx, redirect, render
 
 router = APIRouter(prefix="/notebooks/{notebook_id}/notes")
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
-ADD_KINDS = ("chunk", "citation", "message", "memory")
+ADD_KINDS = ("chunk", "citation", "message", "memory", "annotation")
 
 
 def note_url(notebook_id: int, note_id: int | None = None) -> str:
@@ -182,6 +183,11 @@ def _add(
         elif kind == "citation":
             c = get_citation(conn, notebook_id, item_id)
             title = f"Evidence: {c.source_filename} p.{c.page_no}"
+        elif kind == "annotation":
+            from litenotebook.reader.annotations import get_annotation
+
+            a = get_annotation(conn, notebook_id, item_id)
+            title = f"Annotation: {a.source_filename} p.{a.page_no}"
         else:
             row = conn.execute(
                 "SELECT label FROM memory_nodes WHERE id = ? AND notebook_id = ?",
@@ -191,9 +197,12 @@ def _add(
                 raise NoteNotFoundError("That memory item is not in this notebook")
             title = f"Memory: {row[0]}"
         note_id = create_note(conn, notebook_id, title[:MAX_TITLE_CHARS]).id
-    {"chunk": link_chunk, "citation": link_citation, "memory": link_memory_node}[kind](
-        conn, notebook_id, note_id, item_id
-    )
+    {
+        "chunk": link_chunk,
+        "citation": link_citation,
+        "memory": link_memory_node,
+        "annotation": link_annotation,
+    }[kind](conn, notebook_id, note_id, item_id)
     return note_id
 
 

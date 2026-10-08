@@ -1,0 +1,135 @@
+"""Server-side page rendering with a derived, deletable on-disk cache.
+
+Pages are rendered lazily with PyMuPDF (passive rendering: PDF JavaScript,
+actions and links are never executed) into
+``<data>/notebooks/<nb>/cache/pages/<source>/<page>-<scale>.png``. Paths are
+built from integer ids only; the stored PDF is never modified and documents
+are opened per request and closed again. Scales are quantised so the cache
+holds a small, bounded set of variants.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import shutil
+import sqlite3
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+
+from litenotebook.config import Settings
+from litenotebook.sources import Source, get_source, stored_file
+
+SCALES = (1.0, 1.5, 2.0, 2.5, 3.0)
+MAX_PIXELS_SIDE = 4000
+
+
+class ReaderError(ValueError):
+    pass
+
+
+class PageNotFoundError(ReaderError):
+    pass
+
+
+@dataclass(frozen=True)
+class ReaderSource:
+    source: Source
+    path: Path
+    page_count: int
+
+
+def nearest_scale(value: float) -> float:
+    return min(SCALES, key=lambda s: (abs(s - value), s))
+
+
+def open_source(
+    conn: sqlite3.Connection, settings: Settings, notebook_id: int, source_id: int
+) -> ReaderSource:
+    """Notebook-scoped source with its stored PDF (never a client path)."""
+    source = get_source(conn, notebook_id, source_id)  # SourceNotFoundError
+    path = stored_file(settings, source)
+    if path is None:
+        raise ReaderError("The PDF file of this source is not available")
+    page_count = source.page_count
+    if not page_count:
+        import pymupdf
+
+        with pymupdf.open(path, filetype="pdf") as doc:
+            page_count = int(doc.page_count)
+    return ReaderSource(source, path, int(page_count))
+
+
+def check_page(reader: ReaderSource, page_no: int) -> int:
+    if not 1 <= int(page_no) <= reader.page_count:
+        raise PageNotFoundError(
+            f"Page {page_no} does not exist (this PDF has {reader.page_count} pages)"
+        )
+    return int(page_no)
+
+
+def cache_root(settings: Settings, notebook_id: int) -> Path:
+    return settings.notebook_dir(int(notebook_id)) / "cache" / "pages"
+
+
+def cache_dir(settings: Settings, notebook_id: int, source_id: int) -> Path:
+    return cache_root(settings, notebook_id) / str(int(source_id))
+
+
+def render_page(
+    settings: Settings, reader: ReaderSource, page_no: int, scale: float
+) -> tuple[Path, bool]:
+    """Path of the cached PNG for this page/scale; renders it on a miss.
+    Returns (path, was_cached)."""
+    page_no = check_page(reader, page_no)
+    scale = nearest_scale(scale)
+    target = (
+        cache_dir(settings, reader.source.notebook_id, reader.source.id)
+        / f"{page_no}-{int(scale * 100)}.png"
+    )
+    if target.is_file():
+        return target, True
+    import pymupdf
+
+    with pymupdf.open(reader.path, filetype="pdf") as doc:
+        page = doc[page_no - 1]
+        longest = max(page.rect.width, page.rect.height) or 1.0
+        effective = min(scale, MAX_PIXELS_SIDE / longest)
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(effective, effective), alpha=False)
+        data = pix.tobytes("png")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        tmp.write_bytes(data)
+        tmp.replace(target)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return target, False
+
+
+def remove_cache(settings: Settings, notebook_id: int, source_id: int) -> bool:
+    """Delete one source's render cache — only inside the notebook's cache dir."""
+    root = cache_root(settings, notebook_id)
+    target = cache_dir(settings, notebook_id, source_id)
+    if not target.exists() or target.is_symlink():
+        with contextlib.suppress(OSError):
+            if target.is_symlink():
+                target.unlink()
+        return False
+    try:
+        resolved, base = target.resolve(strict=True), root.resolve(strict=True)
+    except OSError:
+        return False
+    if resolved.parent != base or not resolved.is_relative_to(
+        settings.data_dir.resolve()
+    ):
+        return False
+    shutil.rmtree(resolved, ignore_errors=True)
+    return True
+
+
+def cache_size(settings: Settings, notebook_id: int, source_id: int) -> int:
+    directory = cache_dir(settings, notebook_id, source_id)
+    if not directory.is_dir():
+        return 0
+    return sum(f.stat().st_size for f in directory.glob("*.png") if f.is_file())

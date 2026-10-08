@@ -7,8 +7,10 @@
 (function () {
   "use strict";
 
-  const chat = document.getElementById("chat");
-  if (!chat) return;
+  function setup(chat) {
+  if (!chat || chat.dataset.ready) return;
+  chat.dataset.ready = "1";
+  const inReader = chat.dataset.inReader === "1";
   const form = document.getElementById("composer");
   const log = document.getElementById("chat-log");
   const textarea = document.getElementById("question");
@@ -156,7 +158,7 @@
   function onConversationCreated(data) {
     form.elements.conversation_id.value = data.conversation_id;
     const url = chatUrl + "/" + data.conversation_id;
-    history.replaceState(null, "", url);
+    if (!inReader) history.replaceState(null, "", url);
     const title = document.getElementById("chat-title");
     if (title) title.textContent = data.title;
     const sidebar = document.getElementById("conversations");
@@ -231,4 +233,16 @@
   });
 
   scrollIfFollowing(true);
+  }
+
+  function scan(root) {
+    const chat = root && root.id === "chat" ? root : document.getElementById("chat");
+    if (chat) setup(chat);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => scan(document));
+  } else {
+    scan(document);
+  }
+  document.addEventListener("htmx:load", (event) => scan(event.target));
 })();

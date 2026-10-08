@@ -2,6 +2,7 @@
 <ul class="conv-list">
   {% for c in conversations %}
     <li><a class="conv{% if c.id == current_id %} is-current{% endif %}" href="/notebooks/{{ nb.id }}/chat/{{ c.id }}"
+           {% if in_reader %}hx-get="/notebooks/{{ nb.id }}/reader/panel/chat?c={{ c.id }}" hx-target="#reader-panel"{% endif %}
            {% if c.id == current_id %}aria-current="page"{% endif %} title="{{ c.title }}">
       <span class="conv-title">{{ c.title }}</span>
       <span class="conv-meta">{{ c.message_count // 2 }} question{{ "" if c.message_count // 2 == 1 else "s" }} · {{ c.updated_at | ts }}</span>

@@ -77,8 +77,9 @@ def data(conn, settings, notebook, tmp_path):
 
 def test_all_mode_finds_every_category(conn, settings, notebook, data):
     r = unified_search(conn, settings, notebook.id, TERM)
-    assert set(r.sections) == {"sources", "notes", "chats", "memory"}
-    assert all(r.sections[s] for s in r.sections), r.sections
+    assert set(r.sections) == {"sources", "notes", "annotations", "chats", "memory"}
+    assert all(r.sections[s] for s in ("sources", "notes", "chats", "memory"))
+    assert r.sections["annotations"] == []  # none made in this test
     src = r.sections["sources"][0]
     assert src.title == f"{notebook.id}.pdf" and src.meta["match"] == "lexical"
     assert "<mark>" in str(src.snippet) and src.url.endswith(
@@ -351,7 +352,8 @@ def test_search_page_lexical_does_not_spawn_worker(web):
     sections = dict(
         re.findall(r'id="sec-(\w+)">\w+ <span class="muted">\((\d+)', r.text)
     )
-    assert all(int(v) > 0 for v in sections.values()) and len(sections) == 4
+    assert len(sections) == 5 and sections.pop("annotations") == "0"
+    assert all(int(v) > 0 for v in sections.values())
     for mode in ("sources", "notes", "chats", "memory"):
         assert c.get(f"/notebooks/{nb}/search?q={TERM}&mode={mode}").status_code == 200
     assert pids(web["tmp"]) == [] and web["holder"] == {}
@@ -377,7 +379,7 @@ def test_hybrid_search_spawns_the_worker(web):
 def test_search_results_are_scoped_on_the_web(web):
     c = web["c"]
     r = c.get(f"/notebooks/{web['other']}/search?q={TERM}", headers=HX_SEARCH).text
-    assert re.findall(r"\((\d+)\)", r) == ["0", "0", "0", "0"]
+    assert re.findall(r"\((\d+)\)", r) == ["0", "0", "0", "0", "0"]
 
 
 def test_graph_routes(web):

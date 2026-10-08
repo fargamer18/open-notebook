@@ -1,10 +1,11 @@
 {% set nb = s.notebook %}
-<div class="chat" id="chat"
+<div class="chat{% if in_reader %} in-reader{% endif %}" id="chat" {% if in_reader %}data-in-reader="1"{% endif %}
      data-notebook-id="{{ nb.id }}"
      data-send-url="/notebooks/{{ nb.id }}/chat/send"
      data-chat-url="/notebooks/{{ nb.id }}/chat">
   <aside class="chat-side" aria-label="Conversations">
-    <a class="btn btn-primary btn-block" href="/notebooks/{{ nb.id }}/chat/new">New chat</a>
+    <a class="btn btn-primary btn-block" href="/notebooks/{{ nb.id }}/chat/new"
+       {% if in_reader %}hx-get="/notebooks/{{ nb.id }}/reader/panel/chat?c=0" hx-target="#reader-panel"{% endif %}>New chat</a>
     <div id="conversations" hx-get="/notebooks/{{ nb.id }}/chat/sidebar{% if conversation %}?current={{ conversation.id }}{% endif %}"
          hx-trigger="conversations-changed from:body">
       {% with current_id = conversation.id if conversation else none %}{% include "partials/chat_conversations.html" %}{% endwith %}
