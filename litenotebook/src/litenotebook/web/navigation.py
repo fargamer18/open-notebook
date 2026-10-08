@@ -29,6 +29,7 @@ FLASH_MESSAGES: dict[str, tuple[str, str]] = {
     "note-created": ("success", "Note created"),
     "note-deleted": ("success", "Note deleted"),
     "settings-saved": ("success", "Settings saved"),
+    "restore-cancelled": ("info", "Pending restore cancelled"),
 }
 
 

@@ -14,7 +14,6 @@ only as display metadata, and the content is validated as a PDF later.
 from __future__ import annotations
 
 import contextlib
-import os
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 
 from litenotebook.config import Settings
+from litenotebook.platform_utils.filesystem import create_exclusive
 
 FILE_FIELD = "file"
 MAX_FIELDS = 10
@@ -51,16 +51,16 @@ class ReceivedUpload:
             self.path.unlink(missing_ok=True)
 
 
-def _limit_message(settings: Settings) -> str:
-    return f"The file is larger than the {settings.max_upload_mb} MiB upload limit"
+def _limit_message(max_bytes: int) -> str:
+    return f"The file is larger than the {max_bytes // (1024 * 1024)} MiB upload limit"
 
 
 class _Receiver:
     """python-multipart callbacks; collects small fields, writes the file part."""
 
-    def __init__(self, settings: Settings, tmp_path: Path) -> None:
-        self.settings = settings
-        self.tmp_path = tmp_path
+    def __init__(self, max_bytes: int, kind: str) -> None:
+        self.max_bytes = max_bytes
+        self.kind = kind
         self.fields: dict[str, str] = {}
         self.filename: str | None = None
         self.size = 0
@@ -113,7 +113,7 @@ class _Receiver:
         self._part_name = name
         if b"filename" in options:
             if name != FILE_FIELD or self._seen_file:
-                self.fail("Upload exactly one PDF in the “file” field", 400)
+                self.fail(f"Upload exactly one {self.kind} in the “file” field", 400)
                 return
             self._seen_file, self._part_is_file = True, True
             self.filename = options[b"filename"].decode("utf-8", "replace")
@@ -126,8 +126,8 @@ class _Receiver:
         chunk = data[start:end]
         if self._part_is_file:
             self.size += len(chunk)
-            if self.size > self.settings.max_upload_bytes:
-                self.fail(_limit_message(self.settings), 413)
+            if self.size > self.max_bytes:
+                self.fail(_limit_message(self.max_bytes), 413)
                 return
             self.pending.append(bytes(chunk))
             self.pending_bytes += len(chunk)
@@ -147,14 +147,25 @@ class _Receiver:
         return data
 
 
-async def receive_upload(request: Request, settings: Settings) -> ReceivedUpload:
-    """Stream a ``multipart/form-data`` upload to disk. Raises ``UploadError``."""
+async def receive_upload(
+    request: Request,
+    settings: Settings,
+    *,
+    max_bytes: int | None = None,
+    kind: str = "PDF",
+    tmp_dir: Path | None = None,
+) -> ReceivedUpload:
+    """Stream a ``multipart/form-data`` upload to disk. Raises ``UploadError``.
+
+    Defaults are the PDF upload; archive uploads pass their own limit, label
+    and temp directory."""
     content_type, params = parse_options_header(request.headers.get("content-type", ""))
     boundary = params.get(b"boundary")
     if content_type != b"multipart/form-data" or not boundary:
-        raise UploadError("Upload the PDF as multipart/form-data", 415)
+        raise UploadError(f"Upload the {kind} as multipart/form-data", 415)
 
-    limit = settings.max_upload_bytes + FORM_OVERHEAD_BYTES
+    max_bytes = settings.max_upload_bytes if max_bytes is None else max_bytes
+    limit = max_bytes + FORM_OVERHEAD_BYTES
     declared = request.headers.get("content-length")
     if declared is not None:
         try:
@@ -162,21 +173,20 @@ async def receive_upload(request: Request, settings: Settings) -> ReceivedUpload
         except ValueError as e:
             raise UploadError("Invalid Content-Length", 400) from e
         if declared_bytes > limit:  # reject before reading a single byte
-            raise UploadError(_limit_message(settings), 413)
+            raise UploadError(_limit_message(max_bytes), 413)
 
-    tmp_dir = settings.upload_tmp_dir
+    tmp_dir = settings.upload_tmp_dir if tmp_dir is None else tmp_dir
     await run_in_threadpool(tmp_dir.mkdir, parents=True, exist_ok=True)
     tmp_path = tmp_dir / f"{uuid.uuid4().hex}.part"
-    receiver = _Receiver(settings, tmp_path)
+    receiver = _Receiver(max_bytes, kind)
     parser = MultipartParser(boundary, receiver.callbacks(), max_size=limit)  # type: ignore[arg-type]
-    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    out: IO[bytes] = os.fdopen(fd, "wb")
+    out: IO[bytes] = create_exclusive(tmp_path)  # binary mode on Windows too
     received = 0
     try:
         async for chunk in request.stream():
             received += len(chunk)
             if received > limit:
-                raise UploadError(_limit_message(settings), 413)
+                raise UploadError(_limit_message(max_bytes), 413)
             parser.write(chunk)
             if receiver.error is not None:
                 raise receiver.error
@@ -200,7 +210,7 @@ async def receive_upload(request: Request, settings: Settings) -> ReceivedUpload
 
     if receiver.filename is None:
         tmp_path.unlink(missing_ok=True)
-        raise UploadError("Choose a PDF file to upload", 400)
+        raise UploadError(f"Choose a {kind} file to upload", 400)
     if receiver.size == 0:
         tmp_path.unlink(missing_ok=True)
         raise UploadError("The uploaded file is empty", 400)

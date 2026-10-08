@@ -377,6 +377,26 @@
     });
   }
 
+  // --- long synchronous forms (export, import, verify, restore) -------------
+
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!form.matches || !form.matches("[data-busy-form]") || event.defaultPrevented) return;
+    const button = form.querySelector("button[type=submit]");
+    const label = form.querySelector(".busy-label");
+    if (label) label.hidden = false;
+    if (button) {
+      // Defer: disabling synchronously would drop the button from the submission.
+      setTimeout(() => { button.disabled = true; }, 0);
+      // A download leaves the page in place: re-enable after a while.
+      setTimeout(() => { button.disabled = false; if (label) label.hidden = true; }, 15000);
+    }
+  });
+  window.addEventListener("pageshow", () => {
+    document.querySelectorAll("[data-busy-form] button[type=submit]").forEach((b) => { b.disabled = false; });
+    document.querySelectorAll("[data-busy-form] .busy-label").forEach((l) => { l.hidden = true; });
+  });
+
   // --- boot -----------------------------------------------------------------
 
   function boot() {

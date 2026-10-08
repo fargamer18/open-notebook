@@ -181,7 +181,7 @@ def register_source(
             dest = settings.source_file(notebook.id, source_id)
             conn.execute(
                 "UPDATE sources SET stored_path = ? WHERE id = ?",
-                (str(dest.relative_to(settings.data_dir)), source_id),
+                (dest.relative_to(settings.data_dir).as_posix(), source_id),
             )
             _place(path, dest, move=move)
     except sqlite3.IntegrityError as e:  # lost a race with an identical upload

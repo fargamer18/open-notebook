@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% set nav = "settings" %}
+{% block title %}Backup &amp; Restore{% endblock %}
+{% block content %}
+{{ crumbs([("Settings", "/settings"), ("Backup & Restore", "")]) }}
+<section class="page-head">
+  <h1>Backup &amp; Restore</h1>
+  <p class="muted">Portable ZIP archives with your PDFs, notes, chats, annotations and memory. Search indexes are rebuilt on import; nothing secret (API keys) is included.</p>
+</section>
+
+{% if error %}<div class="panel notice-panel notice-error" role="alert"><p class="error">{{ error }}</p></div>{% endif %}
+
+{% if pending %}
+<section class="panel notice-panel" aria-labelledby="pending-title">
+  <h2 id="pending-title">A restore is waiting</h2>
+  <p>A verified backup (created {{ pending.archive_created_at }}) is staged with {{ pending.notebooks | length }} notebook{{ "" if pending.notebooks | length == 1 else "s" }}. It replaces the current data the next time LiteNotebook starts; the current data is kept as a safety copy.</p>
+  <form method="post" action="/backup/restore/cancel"><button class="btn" type="submit">Cancel the pending restore</button></form>
+</section>
+{% endif %}
+
+<section class="panel" aria-labelledby="export-title">
+  <h2 id="export-title">Export a notebook</h2>
+  <p class="muted">One notebook as a ZIP you can import on any LiteNotebook (Linux or Windows).</p>
+  {% if summaries %}
+  <ul class="plain-list">
+    {% for s in summaries %}
+    <li><a href="/notebooks/{{ s.notebook.id }}/export">{{ s.notebook.name }}</a> <span class="muted">· {{ s.sources }} source{{ "" if s.sources == 1 else "s" }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No notebooks yet.</p>{% endif %}
+</section>
+
+<section class="panel" aria-labelledby="import-title">
+  <h2 id="import-title">Import a notebook</h2>
+  <p class="muted">Adds the notebook(s) from an export or a full backup as new notebooks — nothing existing is changed. A name that is already taken gets “(Imported)” added.</p>
+  <form class="upload-form" method="post" action="/backup/import" enctype="multipart/form-data"
+        data-busy-form>
+    <div class="field grow">
+      <label for="import-file">Archive (.zip, up to {{ max_archive_mb }} MiB)</label>
+      <input id="import-file" name="file" type="file" accept=".zip,application/zip" required>
+    </div>
+    <div class="field">
+      <label for="import-name">New name <span class="muted">(optional)</span></label>
+      <input id="import-name" name="name" maxlength="100" autocomplete="off">
+    </div>
+    <button class="btn btn-primary" type="submit">Import</button>
+    <span class="muted busy-label" role="status" hidden>Validating, copying sources and rebuilding indexes…</span>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="backup-title">
+  <h2 id="backup-title">Create a full backup</h2>
+  <p class="muted">Every notebook and the non-secret settings (LLM endpoint, model name, sources per answer) in one ZIP — the export of all data. Keep it somewhere other than this disk.</p>
+  <form method="post" action="/backup/create" data-busy-form>
+    <button class="btn btn-primary" type="submit">Create backup</button>
+    <span class="muted busy-label" role="status" hidden>Preparing the backup…</span>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="verify-title">
+  <h2 id="verify-title">Verify a backup</h2>
+  <p class="muted">Checks every file, checksum and row in an archive without changing anything.</p>
+  <form class="upload-form" method="post" action="/backup/verify" enctype="multipart/form-data" data-busy-form>
+    <div class="field grow">
+      <label for="verify-file">Archive (.zip)</label>
+      <input id="verify-file" name="file" type="file" accept=".zip,application/zip" required>
+    </div>
+    <button class="btn" type="submit">Verify</button>
+    <span class="muted busy-label" role="status" hidden>Validating…</span>
+  </form>
+</section>
+
+<section class="panel danger-zone" aria-labelledby="restore-title">
+  <h2 id="restore-title">Restore from a full backup</h2>
+  <p><strong>Replaces all current data</strong> with the backup. You will see a preview and must confirm. The backup is verified and rebuilt in a separate folder first; the switch happens when LiteNotebook next starts, and the current data folder is kept as a safety copy{% if safety_count %} (there {{ "is" if safety_count == 1 else "are" }} already {{ safety_count }} such cop{{ "y" if safety_count == 1 else "ies" }} next to your data folder){% endif %}.</p>
+  <form class="upload-form" method="post" action="/backup/restore/preview" enctype="multipart/form-data" data-busy-form>
+    <div class="field grow">
+      <label for="restore-file">Full backup (.zip)</label>
+      <input id="restore-file" name="file" type="file" accept=".zip,application/zip" required>
+    </div>
+    <button class="btn btn-danger" type="submit">Preview restore…</button>
+    <span class="muted busy-label" role="status" hidden>Validating…</span>
+  </form>
+</section>
+{% endblock %}

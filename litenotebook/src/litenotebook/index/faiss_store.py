@@ -76,11 +76,9 @@ def _lock_for(path: Path) -> threading.Lock:
 
 
 def _fsync_dir(directory: Path) -> None:
-    fd = os.open(directory, os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    from litenotebook.platform_utils.filesystem import fsync_dir
+
+    fsync_dir(directory)  # no-op on Windows, which cannot fsync a directory
 
 
 def _atomic_write(path: Path, writer: Callable[[Path], None]) -> None:

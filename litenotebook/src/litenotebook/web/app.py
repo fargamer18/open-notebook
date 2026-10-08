@@ -7,6 +7,7 @@ and loads the embedding stack on its first job.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
@@ -36,6 +37,7 @@ from litenotebook.db import connect, open_db
 from litenotebook.memory.graph import backfill
 from litenotebook.notebooks import NotebookNotFoundError
 from litenotebook.notes import NoteNotFoundError
+from litenotebook.platform_utils.filesystem import InstanceLock, remove_tree
 from litenotebook.reader.annotations import AnnotationNotFoundError
 from litenotebook.services.chat import GenerationGuard
 from litenotebook.services.embedding import (
@@ -49,6 +51,7 @@ from litenotebook.services.uploads import clean_stale_uploads
 from litenotebook.sources import SourceNotFoundError, recover_interrupted
 from litenotebook.web.deps import render
 from litenotebook.web.routes import (
+    backup,
     chat,
     health,
     memory,
@@ -77,6 +80,7 @@ def create_app(
     injection points for tests. The ingestion worker runs only inside the
     lifespan (i.e. under uvicorn or ``with TestClient(app)``)."""
     app_settings = app_settings or load_settings(env)
+    _apply_staged_restore(app_settings)  # before anything opens the database
     app_settings.data_dir.mkdir(parents=True, exist_ok=True)
     open_db(app_settings.db_path).close()  # apply migrations once at startup
 
@@ -86,11 +90,19 @@ def create_app(
         # checkpoints and deletes the WAL file every time the last one closes,
         # and recreating it costs 0.1-1 s per write on slow filesystems such as
         # NTFS via FUSE. This idle connection keeps the WAL file in place.
+        # Advisory "a server uses this data directory" lock: a restore waits
+        # for it to be released instead of swapping files under a live server.
+        instance = InstanceLock(app_settings.data_dir)
+        if not instance.acquire():
+            log.warning(
+                "Another LiteNotebook instance may be using this data directory"
+            )
         keeper = connect(app_settings.db_path)
         interrupted = recover_interrupted(keeper)
         if interrupted:
             log.warning("Interrupted sources marked failed: %s", interrupted)
         clean_stale_uploads(app_settings)
+        clean_archive_tmp(app_settings)
         if interrupted_answers := recover_generating(keeper):
             log.warning("Interrupted answers marked: %d", interrupted_answers)
         # Deterministic, idempotent: derive graph memory for any exchange that
@@ -104,6 +116,7 @@ def create_app(
             worker.stop()
             embedder.close()  # stops and reaps the MiniLM child process
             keeper.close()
+            instance.release()
 
     # One lazily created MiniLM shared by ingestion and chat retrieval.
     embedder = SharedEmbedder(embedder_factory or worker_embedder_factory(app_settings))
@@ -137,6 +150,7 @@ def create_app(
     app.include_router(settings.router)
     app.include_router(health.router)
     app.include_router(shell.router)
+    app.include_router(backup.router)
 
     async def missing_item(request: Request, exc: Exception) -> HTMLResponse:
         # A missing notebook gets no "back to notebook" link.
@@ -188,6 +202,36 @@ def create_app(
         )
 
     return app
+
+
+def _apply_staged_restore(settings: Settings) -> None:
+    from litenotebook.archive.restore import RestoreBusyError, apply_pending_restore
+
+    try:
+        applied = apply_pending_restore(settings.data_dir)
+    except RestoreBusyError as e:
+        log.warning("%s", e)
+        return
+    if applied is not None:
+        log.warning(
+            "Restore applied from backup created %s; previous data kept as %s",
+            applied.marker.get("archive_created_at"),
+            applied.safety_dir.name if applied.safety_dir else "(none)",
+        )
+
+
+def clean_archive_tmp(settings: Settings) -> int:
+    """Archive uploads, unsent downloads and import staging left by an
+    interrupted run (startup only, so nothing is in use)."""
+    root = settings.archive_tmp_dir
+    if not root.is_dir() or root.is_symlink():
+        return 0
+    removed = 0
+    for path in root.iterdir():
+        with contextlib.suppress(OSError):
+            remove_tree(path)
+            removed += 1
+    return removed
 
 
 ERROR_PAGES = {

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% set nav = "notebooks" %}
+{% set nb = s.notebook %}
+{% block title %}Export · {{ nb.name }}{% endblock %}
+{% block content %}
+{{ crumbs([("Notebooks", "/"), (nb.name, "/notebooks/%d?tab=sources" % nb.id), ("Export", "")]) }}
+<header class="ws-head"><div class="ws-title"><h1>Export {{ nb.name }}</h1></div></header>
+{% include "partials/nb_nav.html" %}
+<section class="panel" aria-labelledby="export-summary">
+  <h2 id="export-summary">What the archive will contain</h2>
+  <dl class="kv">
+    <dt>Notebook</dt><dd>{{ nb.name }}</dd>
+    <dt>Sources</dt><dd>{{ summary.sources }} PDF{{ "" if summary.sources == 1 else "s" }} <span class="muted">({{ summary.source_bytes | filesize }})</span></dd>
+    <dt>Chunks</dt><dd>{{ summary.chunks }} <span class="muted">with their stored embeddings</span></dd>
+    <dt>Notes</dt><dd>{{ summary.notes }}</dd>
+    <dt>Chats</dt><dd>{{ summary.conversations }} <span class="muted">({{ summary.messages }} messages, citations and memory references)</span></dd>
+    <dt>Annotations</dt><dd>{{ summary.annotations }}</dd>
+    <dt>Estimated size</dt><dd>about {{ (summary.source_bytes + summary.chunks * 2600) | filesize }}</dd>
+  </dl>
+  <p class="hint">Not included: search indexes (rebuilt on import), rendered page images, temporary files, settings and API keys.</p>
+  {% if summary.busy %}
+    <p class="error" role="alert">A source is still being processed; wait for it to finish before exporting.</p>
+  {% else %}
+  <form method="post" action="/notebooks/{{ nb.id }}/export" data-busy-form>
+    <button class="btn btn-primary" type="submit">Export notebook</button>
+    <span class="muted busy-label" role="status" hidden>Preparing the archive…</span>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

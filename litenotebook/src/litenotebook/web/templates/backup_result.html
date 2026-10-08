@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% set nav = "settings" %}
+{% set titles = {"import": "Import complete", "verify": "Backup verified", "restore-preview": "Restore preview", "restore-staged": "Restore staged"} %}
+{% block title %}{{ titles[mode] }}{% endblock %}
+{% block content %}
+{{ crumbs([("Settings", "/settings"), ("Backup & Restore", "/backup"), (titles[mode], "")]) }}
+<section class="page-head"><h1>{{ titles[mode] }}</h1></section>
+
+{% macro archive_facts(v) -%}
+<dl class="kv">
+  <dt>Archive</dt><dd>{{ "Full backup" if v.kind == "backup" else "Notebook export" }} · format v{{ v.manifest.export_format_version }} · schema {{ v.manifest.schema_version }}</dd>
+  <dt>Created</dt><dd class="mono">{{ v.manifest.created_at }} <span class="muted">by LiteNotebook {{ v.manifest.app_version }}</span></dd>
+  <dt>Size</dt><dd>{{ v.size | filesize }} <span class="muted">({{ v.expanded_bytes | filesize }} expanded, {{ v.entries }} files)</span></dd>
+  <dt>Checksums</dt><dd>All {{ v.entries - 2 }} file checksums valid <span class="muted">({{ "%.2f" | format(v.seconds) }} s)</span></dd>
+  <dt>SHA-256</dt><dd class="mono wrap">{{ v.sha256 }}</dd>
+</dl>
+{%- endmacro %}
+
+{% if mode == "import" %}
+  <section class="panel" aria-labelledby="stages-title">
+    <h2 id="stages-title">Stages</h2>
+    <ol class="steps">{% for s in stages %}<li>{{ s }}</li>{% endfor %}</ol>
+  </section>
+  {% for r in results %}
+  <section class="panel" aria-labelledby="nb-{{ loop.index }}">
+    <div class="panel-head">
+      <h2 id="nb-{{ loop.index }}">{{ r.name }}</h2>
+      <a class="btn btn-primary btn-sm" href="/notebooks/{{ r.notebook_id }}">Open notebook</a>
+    </div>
+    {% if r.renamed %}<p class="notice-warn">A notebook named “{{ r.original_name }}” already existed, so this one was imported as “{{ r.name }}”.</p>{% endif %}
+    {% set c = r.report.counts %}
+    <dl class="kv">
+      <dt>Sources</dt><dd>{{ c.sources }} ({{ c.ready_sources }} ready) · {{ c.pages }} pages</dd>
+      <dt>Chunks</dt><dd>{{ c.chunks }} ({{ c.embedded_chunks }} with embeddings)</dd>
+      <dt>Notes</dt><dd>{{ c.notes }}</dd>
+      <dt>Chats</dt><dd>{{ c.conversations }} ({{ c.messages }} messages, {{ c.citations }} source citations, {{ c.memory_refs }} memory references)</dd>
+      <dt>Annotations</dt><dd>{{ c.annotations }}</dd>
+      <dt>Memory</dt><dd>{{ c.memory_nodes }} nodes · {{ c.outcomes }} outcomes ({{ c.corrections }} corrections)</dd>
+      <dt>FAISS index</dt><dd>{{ r.report.faiss }} {{ "✓ rebuilt" if r.report.faiss_ok else "— problem" }}</dd>
+      <dt>Integrity</dt><dd>{{ "OK" if r.report.ok else "Problems found" }}</dd>
+      <dt>Time</dt><dd>{{ "%.2f" | format(r.seconds) }} s</dd>
+    </dl>
+    {% for w in r.warnings %}<p class="notice-warn">{{ w }}</p>{% endfor %}
+  </section>
+  {% endfor %}
+
+{% elif mode == "verify" %}
+  <section class="panel" aria-labelledby="facts-title">
+    <h2 id="facts-title">The archive is valid</h2>
+    <p class="muted">Nothing was imported or changed.</p>
+    {{ archive_facts(verify) }}
+  </section>
+  <section class="panel flush" aria-labelledby="contents-title">
+    <h2 class="search-section-title" id="contents-title">Contents</h2>
+    <table class="data-table">
+      <thead><tr><th scope="col">Notebook</th><th scope="col">Sources</th><th scope="col">Chunks</th><th scope="col">Notes</th><th scope="col">Chats</th><th scope="col">Annotations</th></tr></thead>
+      <tbody>
+      {% for nb in verify.notebooks %}
+        <tr><th scope="row">{{ nb.meta.name }}</th><td>{{ nb.counts.sources }} <span class="muted">({{ nb.counts.source_bytes | filesize }})</span></td><td>{{ nb.counts.chunks }}</td><td>{{ nb.counts.notes }}</td><td>{{ nb.counts.conversations }}</td><td>{{ nb.counts.annotations }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% for w in verify.warnings %}<p class="notice-warn">{{ w }}</p>{% endfor %}
+
+{% elif mode == "restore-preview" %}
+  <section class="panel" aria-labelledby="facts-title">
+    <h2 id="facts-title">This backup is valid</h2>
+    {{ archive_facts(verify) }}
+    <p>{{ preview.notebooks | length }} notebook{{ "" if preview.notebooks | length == 1 else "s" }}, {{ preview.sources }} source{{ "" if preview.sources == 1 else "s" }}:
+      {% for nb in preview.notebooks %}{{ nb.name }} ({{ nb.sources }} sources, {{ nb.chunks }} chunks){% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% for w in preview.warnings %}<p class="notice-warn">{{ w }}</p>{% endfor %}
+  </section>
+  <section class="panel danger-zone" aria-labelledby="confirm-title">
+    <h2 id="confirm-title">Replace all current data?</h2>
+    <p>Every current notebook, source, chat, note and annotation will be replaced by the backup's contents. The current data folder is <strong>kept</strong> as a safety copy next to it, and the switch happens when LiteNotebook next starts.</p>
+    <form method="post" action="/backup/restore/confirm" data-busy-form>
+      <input type="hidden" name="token" value="{{ token }}">
+      <label class="check"><input type="checkbox" name="understand" value="1" required> I understand this replaces all current data</label>
+      <div class="field narrow">
+        <label for="confirm-word">Type {{ confirm_word }} to confirm</label>
+        <input id="confirm-word" name="confirm" required autocomplete="off" pattern="{{ confirm_word }}">
+      </div>
+      <div class="actions">
+        <button class="btn btn-danger" type="submit">Stage restore</button>
+        <a class="btn btn-ghost" href="/backup">Cancel</a>
+        <span class="muted busy-label" role="status" hidden>Rebuilding the backup in a staging folder and checking it…</span>
+      </div>
+    </form>
+  </section>
+
+{% elif mode == "restore-staged" %}
+  <section class="panel notice-panel" aria-labelledby="staged-title">
+    <h2 id="staged-title">Restore is ready</h2>
+    <p>The backup was rebuilt in a staging folder and passed every integrity check ({{ staged.notebooks | length }} notebook{{ "" if staged.notebooks | length == 1 else "s" }}).</p>
+    <ul class="plain-list">{% for nb in staged.notebooks %}<li>{{ nb.name }} — {{ nb.sources }} sources, {{ nb.chunks }} chunks, FAISS {{ nb.faiss }}</li>{% endfor %}</ul>
+    <p><strong>Restart LiteNotebook to finish.</strong> On start it swaps the staged data in and keeps your current data folder as a safety copy. Nothing has changed yet.</p>
+    <form method="post" action="/backup/restore/cancel"><button class="btn" type="submit">Cancel the restore</button></form>
+  </section>
+{% endif %}
+<p><a href="/backup">← Back to Backup &amp; Restore</a></p>
+{% endblock %}

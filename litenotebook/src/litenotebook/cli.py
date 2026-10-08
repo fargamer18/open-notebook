@@ -4,6 +4,9 @@ python -m litenotebook.cli notebook create demo
 python -m litenotebook.cli ingest --notebook demo document.pdf
 python -m litenotebook.cli search --notebook demo "question"
 python -m litenotebook.cli ask --notebook demo "question"
+python -m litenotebook.cli export notebook demo demo.zip
+python -m litenotebook.cli import notebook demo.zip [--name "New name"]
+python -m litenotebook.cli backup create|verify|restore backup.zip
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
+from litenotebook.archive.format import ArchiveError
 from litenotebook.config import ConfigError, Settings, load_settings
 from litenotebook.db import open_db
 from litenotebook.embed.embedder import EmbeddingError
@@ -52,6 +56,7 @@ USER_ERRORS = (
     IndexMismatchError,
     ChunkingError,
     EmbeddingError,
+    ArchiveError,
 )
 
 
@@ -304,6 +309,178 @@ def cmd_memory_search(
     return 0
 
 
+# --- export / import / backup ---------------------------------------------------------
+
+
+def _human(n: float) -> str:
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if n < 1024 or unit == "GiB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} GiB"
+
+
+def _print_report(report: object) -> None:
+    from litenotebook.archive.integrity import NotebookReport
+
+    assert isinstance(report, NotebookReport)
+    c = report.counts
+    print(f"  {report.name}")
+    print(
+        f"    {c['sources']} sources ({c['ready_sources']} ready) · "
+        f"{c['pages']} pages · {c['chunks']} chunks · {c['notes']} notes · "
+        f"{c['conversations']} chats "
+        f"({c['messages']} messages) · {c['annotations']} annotations"
+    )
+    print(
+        f"    memory: {c['memory_nodes']} nodes, {c['outcomes']} outcomes "
+        f"({c['corrections']} corrections) · FAISS {report.faiss}"
+        f"{'' if report.faiss_ok else ' (problem)'}"
+    )
+    for problem in report.problems:
+        print(f"    problem: {problem}")
+
+
+def cmd_export_notebook(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    from litenotebook.archive.export import export_notebook
+
+    nb = _notebook_arg(conn, args.notebook)
+    result = export_notebook(conn, settings, nb.id, args.output)
+    c = result.counts
+    print(
+        f"Exported {nb.name!r}: {c['sources']} sources, {c['chunks']} chunks, "
+        f"{c['notes']} notes, {c['conversations']} chats, {c['annotations']} "
+        f"annotations → {result.path} ({_human(result.size)}, {result.seconds:.2f}s)"
+    )
+    print(f"SHA-256 {result.sha256}")
+    return 0
+
+
+def cmd_import_notebook(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    from litenotebook.archive.importer import import_archive
+
+    report, results = import_archive(
+        conn,
+        settings,
+        args.archive,
+        name=args.name,
+        progress=(lambda stage: print(stage)) if args.verbose else None,
+    )
+    if report.kind == "backup":
+        print(f"Imported every notebook of a full backup ({len(results)}):")
+    for result in results:
+        renamed = f" (renamed from {result.original_name!r})" if result.renamed else ""
+        print(f"Imported {result.name!r}{renamed} in {result.seconds:.2f}s")
+        _print_report(result.report)
+        for warning in result.warnings:
+            print(f"    warning: {warning}")
+    return 0
+
+
+def cmd_backup_create(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    from litenotebook.archive.export import create_backup
+
+    result = create_backup(conn, settings, args.output)
+    c = result.counts
+    print(
+        f"Backup of {c['notebooks']} notebook(s), {c.get('sources', 0)} sources, "
+        f"{c.get('chunks', 0)} chunks → {result.path} ({_human(result.size)}, "
+        f"{result.seconds:.2f}s)"
+    )
+    print(f"SHA-256 {result.sha256}")
+    return 0
+
+
+def cmd_backup_verify(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    """Read-only: validates everything, changes nothing."""
+    from litenotebook.archive.format import Limits
+    from litenotebook.archive.reader import verify_archive
+    from litenotebook.db import schema_version
+
+    report = verify_archive(
+        args.archive,
+        Limits.from_settings(settings),
+        current_schema=schema_version(conn),
+    )
+    m = report.manifest
+    print(
+        f"OK: {m['kind']} archive, format v{m['export_format_version']}, schema "
+        f"{m['schema_version']}, created {m['created_at']} by LiteNotebook "
+        f"{m['app_version']}"
+    )
+    print(
+        f"{report.entries} entries, {_human(report.size)} "
+        f"({_human(report.expanded_bytes)} expanded); every checksum valid "
+        f"({report.seconds:.2f}s)"
+    )
+    for nb in report.notebooks:
+        c = nb.counts
+        print(
+            f"  {nb.meta['name']}: {c['sources']} sources "
+            f"({_human(c['source_bytes'])}), {c['chunks']} chunks, {c['notes']} notes, "
+            f"{c['conversations']} chats, {c['annotations']} annotations"
+        )
+    if report.settings:
+        print(f"  settings: {', '.join(r['key'] for r in report.settings)}")
+    for warning in report.warnings:
+        print(f"warning: {warning}")
+    print(f"SHA-256 {report.sha256}")
+    return 0
+
+
+def cmd_backup_restore(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    from litenotebook.archive.restore import (
+        RestoreBusyError,
+        apply_pending_restore,
+        stage_restore,
+    )
+
+    conn.close()  # nothing may hold the database while directories are swapped
+    if not args.yes:
+        print(
+            "Restore replaces ALL current LiteNotebook data with the backup. The "
+            "current data directory is kept as a .pre-restore copy.\n"
+            "Run again with --yes to confirm.",
+            file=sys.stderr,
+        )
+        return 2
+    staged = stage_restore(settings, args.archive, progress=print)
+    print(f"Staged {len(staged.notebooks)} notebook(s); integrity checks passed.")
+    try:
+        applied = apply_pending_restore(settings.data_dir)
+    except RestoreBusyError as e:
+        print(str(e))
+        return 0
+    if applied is not None:
+        print(f"Restored into {applied.data_dir}")
+        if applied.safety_dir is not None:
+            print(f"Previous data kept at {applied.safety_dir}")
+    return 0
+
+
+def cmd_backup_cancel(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    from litenotebook.archive.restore import cancel_restore
+
+    print(
+        "Pending restore cancelled."
+        if cancel_restore(settings.data_dir)
+        else "No restore is pending."
+    )
+    return 0
+
+
 def cmd_serve(
     args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
 ) -> int:
@@ -399,6 +576,38 @@ def build_parser() -> argparse.ArgumentParser:
     msearch.add_argument("-k", type=int, default=6, help="results to show")
     msearch.add_argument("query")
     msearch.set_defaults(func=cmd_memory_search)
+
+    export = sub.add_parser("export", help="export data to a portable archive")
+    export_sub = export.add_subparsers(dest="export_command", required=True)
+    p = export_sub.add_parser("notebook", help="export one notebook to a ZIP")
+    p.add_argument("notebook", help="notebook name or id")
+    p.add_argument("output", type=Path)
+    p.set_defaults(func=cmd_export_notebook)
+
+    imp = sub.add_parser("import", help="import data from an archive")
+    imp_sub = imp.add_subparsers(dest="import_command", required=True)
+    p = imp_sub.add_parser("notebook", help="import a notebook export (new ids)")
+    p.add_argument("archive", type=Path)
+    p.add_argument("--name", help="name for the imported notebook (must be free)")
+    p.set_defaults(func=cmd_import_notebook)
+
+    backup = sub.add_parser("backup", help="full backups of all LiteNotebook data")
+    backup_sub = backup.add_subparsers(dest="backup_command", required=True)
+    p = backup_sub.add_parser("create", help="write every notebook to one ZIP")
+    p.add_argument("output", type=Path)
+    p.set_defaults(func=cmd_backup_create)
+    p = backup_sub.add_parser("verify", help="check an archive (changes nothing)")
+    p.add_argument("archive", type=Path)
+    p.set_defaults(func=cmd_backup_verify)
+    p = backup_sub.add_parser(
+        "restore", help="replace all data with a backup (keeps a safety copy)"
+    )
+    p.add_argument("archive", type=Path)
+    p.add_argument("--yes", action="store_true", help="confirm the replacement")
+    p.set_defaults(func=cmd_backup_restore)
+    backup_sub.add_parser(
+        "cancel-restore", help="discard a staged, not yet applied restore"
+    ).set_defaults(func=cmd_backup_cancel)
 
     serve = sub.add_parser("serve", help="run the local web app")
     serve.add_argument("--host", help="loopback address (default 127.0.0.1)")

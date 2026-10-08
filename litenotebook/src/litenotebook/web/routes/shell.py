@@ -82,6 +82,7 @@ def palette_commands(
                 _cmd(group, "Notes", f"{base}/notes", "write"),
                 _cmd(group, "Memory", f"{base}/memory", "remembered history"),
                 _cmd(group, "Memory graph", f"{base}/memory/graph", "concepts map"),
+                _cmd(group, "Export this notebook", f"{base}/export", "backup zip"),
             ]
             for sid, name in conn.execute(
                 "SELECT id, original_filename FROM sources WHERE notebook_id = ? "
@@ -99,6 +100,7 @@ def palette_commands(
         _cmd("LiteNotebook", "New notebook", "/?new=1", "create"),
         _cmd("LiteNotebook", "Search all notebooks", "/search", "find"),
         _cmd("LiteNotebook", "Settings", "/settings", "llm model status"),
+        _cmd("LiteNotebook", "Backup & Restore", "/backup", "export import verify zip"),
         _cmd("LiteNotebook", "Keyboard shortcuts", "", "help keys", action="shortcuts"),
     ]
     for nb in list_notebooks(conn)[:MAX_PALETTE_NOTEBOOKS]:

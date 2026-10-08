@@ -125,7 +125,9 @@ def data_files(app_settings):
     return sorted(
         str(p.relative_to(root))
         for p in root.rglob("*")
-        if p.is_file() and not p.name.startswith("litenotebook.sqlite3")
+        if p.is_file()
+        and not p.name.startswith("litenotebook.sqlite3")
+        and p.name != ".instance.lock"  # the server's data-directory lock (Phase 10)
     )
 
 

@@ -61,6 +61,13 @@ class Settings:
     # Uploads (web): PDFs larger than this are rejected while streaming.
     max_upload_mb: int = DEFAULT_MAX_UPLOAD_MB
 
+    # Backup / export archives (ZIP). Archives are hostile input: every limit
+    # below is enforced while reading, not taken from the ZIP headers.
+    archive_max_mb: int = 4096  # compressed archive (upload or file)
+    archive_max_expanded_mb: int = 8192  # sum of all uncompressed entries
+    archive_max_entry_mb: int = 2048  # any single entry (e.g. one PDF)
+    archive_max_files: int = 20000
+
     # MiniLM runs in a child process that exits after this long without work
     # (its memory goes back to the OS); the next embedding restarts it.
     embed_worker_idle_s: int = 120
@@ -85,6 +92,15 @@ class Settings:
             raise ConfigError("llm_base_url must be an http(s) URL")
         if not 1 <= self.max_upload_mb <= 4096:
             raise ConfigError("max_upload_mb must be between 1 and 4096")
+        for name in (
+            "archive_max_mb",
+            "archive_max_expanded_mb",
+            "archive_max_entry_mb",
+        ):
+            if not 1 <= getattr(self, name) <= 1_048_576:
+                raise ConfigError(f"{name} must be between 1 and 1048576")
+        if not 10 <= self.archive_max_files <= 1_000_000:
+            raise ConfigError("archive_max_files must be between 10 and 1000000")
         if not 1 <= self.embed_worker_idle_s <= 86400:
             raise ConfigError("embed_worker_idle_s must be between 1 and 86400")
         if not 10 <= self.embed_worker_start_timeout_s <= 3600:
@@ -116,6 +132,12 @@ class Settings:
     def source_file(self, notebook_id: int, source_id: int) -> Path:
         """Storage path for an uploaded source: built from integer ids only."""
         return self.sources_dir(int(notebook_id)) / f"{int(source_id)}.pdf"
+
+    @property
+    def archive_tmp_dir(self) -> Path:
+        """Archive uploads, exports in progress and import staging (same
+        filesystem as the data, so staged files move by rename)."""
+        return self.data_dir / "tmp" / "archives"
 
     @property
     def upload_tmp_dir(self) -> Path:
@@ -156,6 +178,10 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         ("max_upload_mb", "MAX_UPLOAD_MB"),
         ("embed_worker_idle_s", "EMBED_WORKER_IDLE_SECONDS"),
         ("embed_worker_start_timeout_s", "EMBED_WORKER_START_TIMEOUT"),
+        ("archive_max_mb", "ARCHIVE_MAX_MB"),
+        ("archive_max_expanded_mb", "ARCHIVE_MAX_EXPANDED_MB"),
+        ("archive_max_entry_mb", "ARCHIVE_MAX_ENTRY_MB"),
+        ("archive_max_files", "ARCHIVE_MAX_FILES"),
     ):
         if (number := get_int(name)) is not None:
             overrides[key] = number

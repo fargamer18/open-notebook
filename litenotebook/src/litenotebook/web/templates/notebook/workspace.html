@@ -19,6 +19,7 @@
     <h1>{{ nb.name }}</h1>
     {% if nb.description %}<p class="muted ws-desc">{{ nb.description }}</p>{% endif %}
   </div>
+  <a class="btn btn-ghost btn-sm ws-export" href="/notebooks/{{ nb.id }}/export">Export…</a>
   <dl class="meta-row">
     <div><dt>Sources</dt><dd id="ws-sources">{{ s.sources }}</dd></div>
     <div><dt>Chunks</dt><dd id="ws-chunks">{{ s.chunks }}</dd></div>
