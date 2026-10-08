@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% set nav = "settings" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Settings</h1>
+  <p class="muted">Stored locally in SQLite. <span class="mono">LITENOTEBOOK_*</span> environment variables take precedence and are never saved.</p>
+</section>
+
+<section class="panel" id="settings-form-panel">
+  {% include "partials/settings_form.html" %}
+</section>
+
+<section class="panel">
+  <h2>LLM server</h2>
+  <p class="muted">Checks the <em>saved</em> endpoint with <span class="mono">GET /models</span>. No text is generated.</p>
+  <div class="actions">
+    <form method="post" action="/settings/test" hx-post="/settings/test" hx-target="#llm-status"
+          hx-indicator="#llm-busy">
+      <button class="btn" type="submit">Test connection</button>
+    </form>
+    <form method="post" action="/settings/models" hx-post="/settings/models" hx-target="#llm-status"
+          hx-indicator="#llm-busy">
+      <button class="btn" type="submit">Refresh models</button>
+    </form>
+    <span id="llm-busy" class="htmx-indicator muted">Checking…</span>
+  </div>
+  <div id="llm-status" aria-live="polite">
+    {% if report %}{% include "partials/settings_status.html" %}{% endif %}
+  </div>
+</section>
+{% endblock %}

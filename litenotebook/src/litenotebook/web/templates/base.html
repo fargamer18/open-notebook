@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}, {"code": "...", "swap": false}]}'>
+  <title>{% block title %}LiteNotebook{% endblock %} · LiteNotebook</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>LiteNotebook</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/" {% if nav == "notebooks" %}aria-current="page"{% endif %}>Notebooks</a>
+      <a href="/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Settings</a>
+    </nav>
+    <div class="health" id="health" hx-get="/health/badge" hx-trigger="load, every 60s"
+         aria-live="polite">
+      <span class="dot"></span><span class="muted">LLM status…</span>
+    </div>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

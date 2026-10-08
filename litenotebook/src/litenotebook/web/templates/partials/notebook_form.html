@@ -1,0 +1,15 @@
+<form class="create-form" method="post" action="/notebooks"
+      hx-post="/notebooks" hx-target="#notebook-create" hx-swap="innerHTML">
+  <div class="field">
+    <label for="nb-name">Name</label>
+    <input id="nb-name" name="name" required maxlength="{{ limits.name }}"
+           value="{{ form.name or '' }}" placeholder="e.g. Linear algebra" autocomplete="off">
+  </div>
+  <div class="field grow">
+    <label for="nb-description">Description <span class="muted">(optional)</span></label>
+    <input id="nb-description" name="description" maxlength="{{ limits.description }}"
+           value="{{ form.description or '' }}" autocomplete="off">
+  </div>
+  <button class="btn btn-primary" type="submit">Create notebook</button>
+</form>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}

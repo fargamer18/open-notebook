@@ -1,0 +1,62 @@
+"""Request-scoped helpers shared by the route modules."""
+
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Iterator, Mapping
+from pathlib import Path
+from typing import Any
+
+import httpx
+from fastapi import Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from litenotebook.config import Settings
+from litenotebook.db import connect
+from litenotebook.services.settings import SettingsService
+
+TEMPLATES = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
+def get_db(request: Request) -> Iterator[sqlite3.Connection]:
+    conn = connect(app_settings(request).db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def app_settings(request: Request) -> Settings:
+    settings: Settings = request.app.state.settings
+    return settings
+
+
+def settings_service(request: Request, conn: sqlite3.Connection) -> SettingsService:
+    env: Mapping[str, str] | None = request.app.state.env
+    return SettingsService(conn, env)
+
+
+def llm_transport(request: Request) -> httpx.BaseTransport | None:
+    transport: httpx.BaseTransport | None = request.app.state.llm_transport
+    return transport
+
+
+def is_htmx(request: Request) -> bool:
+    return request.headers.get("hx-request") == "true"
+
+
+def render(
+    request: Request,
+    template: str,
+    context: dict[str, Any] | None = None,
+    *,
+    status_code: int = 200,
+) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(
+        request, template, context or {}, status_code=status_code
+    )
+
+
+def redirect(url: str) -> RedirectResponse:
+    return RedirectResponse(url, status_code=303)

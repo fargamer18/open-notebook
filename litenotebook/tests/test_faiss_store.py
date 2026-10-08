@@ -167,6 +167,12 @@ def test_indexes_are_isolated_per_notebook(conn, settings, embedder, store, tmp_
     assert not set(chunk_ids(conn, a.id)) & set(chunk_ids(conn, b.id))
 
 
+def test_new_empty_notebook_without_index_is_ok(conn, store, notebook):
+    status = store.check(notebook.id)
+    assert status.ok and status.sqlite_count == 0 and status.index_count is None
+    assert store.load(notebook.id).ntotal == 0  # still loads (built on demand)
+
+
 def test_chunk_ids_are_never_reused(
     conn, settings, notebook, embedder, store, tmp_path
 ):

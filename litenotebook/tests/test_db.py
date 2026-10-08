@@ -35,8 +35,15 @@ def test_creates_database_file_and_parent_dirs(settings):
 
 
 def test_migration_creates_schema(conn):
-    assert {"notebooks", "sources", "pages", "chunks", "chunks_fts"} <= _tables(conn)
-    assert schema_version(conn) == len(available_migrations()) == 1
+    assert {
+        "notebooks",
+        "sources",
+        "pages",
+        "chunks",
+        "chunks_fts",
+        "settings",
+    } <= _tables(conn)
+    assert schema_version(conn) == len(available_migrations()) == 2
 
 
 def test_pragmas(conn):
@@ -45,8 +52,8 @@ def test_pragmas(conn):
 
 
 def test_migrate_is_idempotent(conn):
-    assert migrate(conn) == 1
-    assert migrate(conn) == 1
+    assert migrate(conn) == 2
+    assert migrate(conn) == 2
 
 
 def test_newer_database_is_rejected(settings):

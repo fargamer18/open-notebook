@@ -1,0 +1,56 @@
+{% set src = settings.sources %}
+{% macro env_note(key) -%}
+  {% if src[key] == "env" %}<p class="hint">Set by <span class="mono">{{ settings.env_vars[key] }}</span>; edit the environment to change it.</p>{% endif %}
+{%- endmacro %}
+{% macro field_error(name) -%}
+  {% if errors[name] %}<p class="error" role="alert">{{ errors[name] }}</p>{% endif %}
+{%- endmacro %}
+<form class="settings-form" method="post" action="/settings"
+      hx-post="/settings" hx-target="#settings-form-panel" hx-swap="innerHTML">
+  <h2>Generation</h2>
+
+  <div class="field">
+    <label for="llm_base_url">Endpoint URL</label>
+    <input id="llm_base_url" name="llm_base_url" class="mono" autocomplete="off"
+           value="{{ form.get("llm_base_url") if form.get("llm_base_url") is not none else settings.llm_base_url }}"
+           {% if src["llm.base_url"] == "env" %}disabled{% endif %} required>
+    <p class="hint">OpenAI-compatible base URL of llama-server, e.g. <span class="mono">http://127.0.0.1:8080/v1</span></p>
+    {{ env_note("llm.base_url") }}{{ field_error("llm.base_url") }}
+  </div>
+
+  <div class="field">
+    <label for="llm_model">Model</label>
+    <input id="llm_model" name="llm_model" class="mono" list="model-options" autocomplete="off"
+           value="{{ form.get("llm_model") if form.get("llm_model") is not none else settings.llm_model }}"
+           {% if src["llm.model"] == "env" %}disabled{% endif %}>
+    <datalist id="model-options"></datalist>
+    <p class="hint">Used for generation only (embeddings always use MiniLM). Leave empty to use whatever the server has loaded.</p>
+    {{ env_note("llm.model") }}{{ field_error("llm.model") }}
+  </div>
+
+  <div class="field">
+    <label for="llm_api_key">API key</label>
+    <input id="llm_api_key" name="llm_api_key" type="password" class="mono" autocomplete="off"
+           placeholder="{{ 'Configured — leave blank to keep it' if settings.api_key_configured else 'Not set (not needed for a local llama-server)' }}"
+           {% if src["llm.api_key"] == "env" %}disabled{% endif %}>
+    {% if settings.api_key_configured and src["llm.api_key"] != "env" %}
+      <label class="check"><input type="checkbox" name="clear_api_key" value="1"> Remove the stored key</label>
+    {% endif %}
+    {{ env_note("llm.api_key") }}{{ field_error("llm.api_key") }}
+  </div>
+
+  <h2>Retrieval</h2>
+  <div class="field narrow">
+    <label for="rag_top_k">Sources per answer (top-k)</label>
+    <input id="rag_top_k" name="rag_top_k" type="number" min="{{ top_k_range[0] }}" max="{{ top_k_range[1] }}"
+           value="{{ form.get("rag_top_k") if form.get("rag_top_k") is not none else settings.rag_top_k }}"
+           {% if src["rag.top_k"] == "env" %}disabled{% endif %} required>
+    {{ env_note("rag.top_k") }}{{ field_error("rag.top_k") }}
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Save settings</button>
+    {% if saved %}<span class="notice" role="status">Saved.</span>{% endif %}
+    {% if errors %}<span class="error">Not saved — fix the highlighted fields.</span>{% endif %}
+  </div>
+</form>

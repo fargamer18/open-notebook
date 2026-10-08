@@ -177,6 +177,8 @@ class FaissStore:
             status.needs_rebuild = True
             return status
         if index is None:
+            if len(expected) == 0:
+                return status  # nothing embedded yet: no index is the correct state
             problems.append("index file missing")
             status.needs_rebuild = True
             return status
@@ -283,7 +285,8 @@ class FaissStore:
                 raise IndexMismatchError("; ".join(status.problems))
             self.sync(notebook_id)
         index, _ = self._read(notebook_id)
-        assert index is not None
+        if index is None:  # empty notebook: nothing to index yet
+            return new_index(self._notebook_model(notebook_id)[1])
         return index
 
     def search(

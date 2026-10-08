@@ -1,0 +1,21 @@
+{% set state = "ok" if report.ok else ("warn" if report.reachable else "err") %}
+<div class="status status-{{ state }}">
+  <p class="status-line">
+    <span class="dot dot-{{ state }}" aria-hidden="true"></span>
+    <strong>{% if report.ok %}Connected{% elif report.reachable %}Check the model{% else %}Unreachable{% endif %}</strong>
+    <span class="muted mono">{{ "%.0f" | format(report.elapsed_ms) }} ms</span>
+  </p>
+  <p>{{ report.message }}</p>
+  {% if report.models %}
+    <h3>Available models</h3>
+    <ul class="model-list">
+      {% for m in report.models %}
+        <li class="mono">{{ m }}{% if m == selected %} <span class="tag">selected</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    <p class="hint">Discovery never changes your selection. To switch, pick a model in the Model field and save.</p>
+  {% endif %}
+</div>
+<datalist id="model-options" hx-swap-oob="true">
+  {% for m in report.models %}<option value="{{ m }}"></option>{% endfor %}
+</datalist>

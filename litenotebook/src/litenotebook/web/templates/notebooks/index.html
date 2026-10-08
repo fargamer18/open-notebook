@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set nav = "notebooks" %}
+{% block title %}Notebooks{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Notebooks</h1>
+  <p class="muted">Each notebook keeps its own sources, search index and chats.</p>
+</section>
+
+<section class="panel" id="notebook-create">
+  {% include "partials/notebook_form.html" %}
+</section>
+
+<section class="panel flush">
+  <ul class="nb-list" id="notebook-list">
+    {% for s in summaries %}
+      {% if editing_id == s.notebook.id %}
+        {% with mode = "edit", error = edit_error, value = edit_value %}{% include "partials/notebook_row.html" %}{% endwith %}
+      {% elif confirming_id == s.notebook.id %}
+        {% with mode = "confirm", error = confirm_error %}{% include "partials/notebook_row.html" %}{% endwith %}
+      {% else %}
+        {% with mode = "view" %}{% include "partials/notebook_row.html" %}{% endwith %}
+      {% endif %}
+    {% endfor %}
+  </ul>
+  <p class="empty" id="notebook-empty" {% if summaries %}hidden{% endif %}>No notebooks yet. Create one above.</p>
+</section>
+{% endblock %}

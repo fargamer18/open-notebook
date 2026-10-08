@@ -1,0 +1,50 @@
+{% set nb = s.notebook %}
+{% set target = "#nb-" ~ nb.id %}
+{% if mode == "edit" %}
+<li class="nb-row is-editing" id="nb-{{ nb.id }}">
+  <form class="inline-form" method="post" action="/notebooks/{{ nb.id }}/rename"
+        hx-post="/notebooks/{{ nb.id }}/rename" hx-target="{{ target }}" hx-swap="outerHTML">
+    <label class="sr-only" for="rename-{{ nb.id }}">New name for {{ nb.name }}</label>
+    <input id="rename-{{ nb.id }}" name="name" required maxlength="{{ limits.name }}"
+           value="{{ value if value else nb.name }}" autocomplete="off" autofocus>
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-ghost" href="/" hx-get="/notebooks/{{ nb.id }}/row"
+       hx-target="{{ target }}" hx-swap="outerHTML">Cancel</a>
+  </form>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+</li>
+{% elif mode == "confirm" %}
+<li class="nb-row is-confirming" id="nb-{{ nb.id }}">
+  <div class="confirm">
+    <p class="confirm-title">Delete this notebook permanently?</p>
+    <dl class="preview">
+      <dt>Notebook</dt><dd>{{ nb.name }}</dd>
+      <dt>Sources</dt><dd>{{ s.sources }}</dd>
+      <dt>Chunks</dt><dd>{{ s.chunks }}</dd>
+    </dl>
+    <p class="muted">Its sources, extracted text, embeddings and search index are removed. This cannot be undone.</p>
+    <form class="inline-form" method="post" action="/notebooks/{{ nb.id }}/delete"
+          hx-post="/notebooks/{{ nb.id }}/delete" hx-target="{{ target }}" hx-swap="outerHTML">
+      <input type="hidden" name="confirm" value="{{ nb.id }}">
+      <button class="btn btn-danger" type="submit">Delete notebook</button>
+      <a class="btn btn-ghost" href="/" hx-get="/notebooks/{{ nb.id }}/row"
+         hx-target="{{ target }}" hx-swap="outerHTML">Cancel</a>
+    </form>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  </div>
+</li>
+{% else %}
+<li class="nb-row" id="nb-{{ nb.id }}">
+  <div class="nb-main">
+    <a class="nb-name" href="/notebooks/{{ nb.id }}">{{ nb.name }}</a>
+    {% if nb.description %}<span class="nb-desc">{{ nb.description }}</span>{% endif %}
+  </div>
+  <span class="nb-meta">{{ s.sources }} sources · {{ s.chunks }} chunks</span>
+  <span class="nb-actions">
+    <a class="btn btn-ghost btn-sm" href="/notebooks/{{ nb.id }}/rename"
+       hx-get="/notebooks/{{ nb.id }}/rename" hx-target="{{ target }}" hx-swap="outerHTML">Rename</a>
+    <a class="btn btn-ghost btn-sm btn-danger-text" href="/notebooks/{{ nb.id }}/delete"
+       hx-get="/notebooks/{{ nb.id }}/delete" hx-target="{{ target }}" hx-swap="outerHTML">Delete</a>
+  </span>
+</li>
+{% endif %}

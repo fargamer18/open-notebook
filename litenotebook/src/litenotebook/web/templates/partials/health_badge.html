@@ -1,0 +1,8 @@
+{% set llm = health.llm %}
+{% if health.status != "ok" %}
+  <span class="dot dot-err" aria-hidden="true"></span><span title="{{ health.database.get('error') or health.data.path }}">Storage error</span>
+{% elif llm.status == "reachable" %}
+  <span class="dot dot-{{ 'ok' if llm.model_available != false else 'warn' }}" aria-hidden="true"></span><a href="/settings" title="{{ llm.message }}">LLM online</a>
+{% else %}
+  <span class="dot dot-err" aria-hidden="true"></span><a href="/settings" title="{{ llm.message }}">LLM offline</a>
+{% endif %}

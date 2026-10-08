@@ -22,8 +22,13 @@ EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 EMBED_DIM = 384
 EMBED_MAX_TOKENS = 256  # all-MiniLM-L6-v2 max_seq_length; longer input is truncated
 
-_ENV_PREFIX = "LITENOTEBOOK_"
-_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+# Generation defaults (overridable via LITENOTEBOOK_* env vars or the settings page)
+DEFAULT_LLM_BASE_URL = "http://127.0.0.1:8080/v1"
+DEFAULT_LLM_MODEL = "Qwen/Qwen3-4B-GGUF:Q4_K_M"
+DEFAULT_TOP_K = 8
+
+ENV_PREFIX = "LITENOTEBOOK_"
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
 class ConfigError(ValueError):
@@ -42,17 +47,17 @@ class Settings:
 
     # Retrieval
     retrieval_candidates: int = 30  # per retriever (FTS5 and FAISS) before fusion
-    retrieval_top_k: int = 8
+    retrieval_top_k: int = DEFAULT_TOP_K
     rrf_k: int = 60
     dedup_jaccard_threshold: float = 0.8
 
     # Generation: OpenAI-compatible llama.cpp server
-    llm_base_url: str = "http://127.0.0.1:8080/v1"
-    llm_model: str = "Qwen/Qwen3-4B-GGUF:Q4_K_M"
+    llm_base_url: str = DEFAULT_LLM_BASE_URL
+    llm_model: str = DEFAULT_LLM_MODEL
     llm_timeout_s: float = 180.0
 
     def __post_init__(self) -> None:
-        if self.host not in _LOOPBACK_HOSTS:
+        if self.host not in LOOPBACK_HOSTS:
             raise ConfigError(
                 f"host must be a loopback address, got {self.host!r}; "
                 "LiteNotebook has no authentication"
@@ -92,7 +97,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     env = os.environ if env is None else env
 
     def get(name: str) -> str | None:
-        value = env.get(_ENV_PREFIX + name)
+        value = env.get(ENV_PREFIX + name)
         return value.strip() if value and value.strip() else None
 
     def get_int(name: str) -> int | None:
@@ -102,7 +107,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         try:
             return int(raw)
         except ValueError as e:
-            raise ConfigError(f"{_ENV_PREFIX}{name} must be an integer") from e
+            raise ConfigError(f"{ENV_PREFIX}{name} must be an integer") from e
 
     overrides: dict[str, object] = {}
     for key, name in (

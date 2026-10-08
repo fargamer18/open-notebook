@@ -19,6 +19,10 @@ class LLMError(RuntimeError):
     pass
 
 
+class LLMResponseError(LLMError):
+    """The server was reached but its response was an error or unusable."""
+
+
 @dataclass(frozen=True)
 class ChatResult:
     content: str
@@ -82,18 +86,28 @@ class LLMClient:
         except httpx.HTTPError as e:
             raise LLMError(f"LLM request failed: {e}") from e
         if response.status_code >= 400:
-            raise LLMError(
+            raise LLMResponseError(
                 f"LLM server returned HTTP {response.status_code}: "
                 f"{response.text[:300]}"
             )
         try:
             return response.json()
         except ValueError as e:
-            raise LLMError("LLM server returned invalid JSON") from e
+            raise LLMResponseError("LLM server returned invalid JSON") from e
 
     def list_models(self) -> list[str]:
         data = self._request("GET", "models")
-        return [m.get("id", "") for m in data.get("data", []) if isinstance(m, dict)]
+        items = data.get("data") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            raise LLMResponseError(
+                "The server's /models response is not OpenAI-compatible — "
+                "check that the endpoint URL ends in /v1"
+            )
+        return [
+            m["id"]
+            for m in items
+            if isinstance(m, dict) and isinstance(m.get("id"), str)
+        ]
 
     def chat(
         self,

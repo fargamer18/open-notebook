@@ -1,0 +1,6 @@
+{% include "partials/notebook_form.html" %}
+<p class="notice" role="status">Created “{{ created.name }}”.</p>
+<ul hx-swap-oob="afterbegin:#notebook-list">
+  {% include "partials/notebook_row.html" %}
+</ul>
+<p class="empty" id="notebook-empty" hidden hx-swap-oob="true">No notebooks yet. Create one above.</p>

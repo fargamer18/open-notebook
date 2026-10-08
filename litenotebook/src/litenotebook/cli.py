@@ -32,9 +32,15 @@ from litenotebook.rag.answer import answer_question
 from litenotebook.rag.citations import format_citation
 from litenotebook.rag.prompts import source_header
 from litenotebook.retrieval.hybrid import Retriever
+from litenotebook.services.settings import (
+    SettingsError,
+    SettingsService,
+    check_connection,
+)
 
 USER_ERRORS = (
     ConfigError,
+    SettingsError,
     NotebookError,
     IngestError,
     LLMError,
@@ -128,11 +134,17 @@ def cmd_ask(
     args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
 ) -> int:
     nb = get_notebook_by_name(conn, args.notebook)
+    effective = SettingsService(conn).effective()
     retriever = Retriever(conn, settings, MiniLMEmbedder(), FaissStore(conn, settings))
     with LLMClient(
-        settings.llm_base_url, settings.llm_model, timeout_s=settings.llm_timeout_s
+        effective.llm_base_url,
+        effective.llm_model,
+        api_key=effective.llm_api_key or None,
+        timeout_s=settings.llm_timeout_s,
     ) as llm:
-        answer = answer_question(args.question, nb.id, retriever, llm, top_k=args.k)
+        answer = answer_question(
+            args.question, nb.id, retriever, llm, top_k=args.k or effective.rag_top_k
+        )
 
     if args.show_context:
         print("Context:")
@@ -190,11 +202,31 @@ def cmd_index_rebuild(
 def cmd_llm_check(
     args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
 ) -> int:
-    with LLMClient(settings.llm_base_url, settings.llm_model, timeout_s=10) as llm:
-        models = llm.list_models()
-    print(
-        f"LLM server at {settings.llm_base_url} is up; "
-        f"models: {', '.join(models) or '-'}"
+    effective = SettingsService(conn).effective()
+    report = check_connection(effective)
+    print(report.message)
+    return 0 if report.ok else 1
+
+
+def cmd_serve(
+    args: argparse.Namespace, conn: sqlite3.Connection, settings: Settings
+) -> int:
+    import uvicorn
+
+    from litenotebook.web.app import create_app
+
+    conn.close()  # the web app opens its own per-request connections
+    settings = replace(
+        settings, host=args.host or settings.host, port=args.port or settings.port
+    )  # re-validated: loopback only
+    print(f"LiteNotebook on http://{settings.host}:{settings.port}  (Ctrl+C to stop)")
+    uvicorn.run(
+        create_app(settings),
+        host=settings.host,
+        port=settings.port,
+        log_level="info" if args.verbose else "warning",
+        proxy_headers=False,
+        server_header=False,
     )
     return 0
 
@@ -256,6 +288,11 @@ def build_parser() -> argparse.ArgumentParser:
     llm_sub.add_parser("check", help="check the LLM server").set_defaults(
         func=cmd_llm_check
     )
+
+    serve = sub.add_parser("serve", help="run the local web app")
+    serve.add_argument("--host", help="loopback address (default 127.0.0.1)")
+    serve.add_argument("--port", type=int, help="port (default 5056)")
+    serve.set_defaults(func=cmd_serve)
     return parser
 
 
