@@ -313,11 +313,13 @@ def process_source(
             )
 
         stage = "embedding"
-        progress("embedding", 0, len(chunks))
         load = getattr(embedder, "load", None)
         if callable(load):  # report model load time separately from embedding
+            if not getattr(embedder, "loaded", True):
+                progress("loading_model")  # a cold worker: no fake numbers
             load()
             t = lap("model_load", t)
+        progress("embedding", 0, len(chunks))
         blobs: list[bytes] = []
         for i in range(0, len(chunks), EMBED_BATCH):
             batch = chunks[i : i + EMBED_BATCH]
@@ -364,12 +366,15 @@ def process_source(
                     for c, blob in zip(chunks, blobs, strict=True)
                 ],
             )
+            # timings so far go in with "ready" (FAISS time is added below), so
+            # a Ready source is never shown without them
+            timings["total"] = round(time.perf_counter() - started, 4)
             cur = conn.execute(
                 f"UPDATE sources SET status = 'ready', stage = 'ready', "
                 f"page_count = ?, progress_done = NULL, progress_total = NULL, "
-                f"finished_at = {NOW_SQL}, updated_at = {NOW_SQL} "
+                f"timings = ?, finished_at = {NOW_SQL}, updated_at = {NOW_SQL} "
                 f"WHERE id = ? AND status = 'processing'",
-                (len(pages), source_id),
+                (len(pages), json.dumps(timings), source_id),
             )
             if cur.rowcount != 1:  # deleted or recovered underneath us
                 raise IngestError("The source was removed during ingestion")

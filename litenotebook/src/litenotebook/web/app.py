@@ -33,7 +33,7 @@ from litenotebook.services.chat import GenerationGuard
 from litenotebook.services.embedding import (
     EmbedderFactory,
     SharedEmbedder,
-    default_embedder_factory,
+    worker_embedder_factory,
 )
 from litenotebook.services.ingestion import IngestionWorker
 from litenotebook.services.settings import SettingsError
@@ -59,7 +59,7 @@ def create_app(
     *,
     env: Mapping[str, str] | None = None,
     llm_transport: httpx.BaseTransport | None = None,
-    embedder_factory: EmbedderFactory = default_embedder_factory,
+    embedder_factory: EmbedderFactory | None = None,
 ) -> FastAPI:
     """Build the app. ``env``, ``llm_transport`` and ``embedder_factory`` are
     injection points for tests. The ingestion worker runs only inside the
@@ -90,10 +90,11 @@ def create_app(
             yield
         finally:
             worker.stop()
+            embedder.close()  # stops and reaps the MiniLM child process
             keeper.close()
 
     # One lazily created MiniLM shared by ingestion and chat retrieval.
-    embedder = SharedEmbedder(embedder_factory)
+    embedder = SharedEmbedder(embedder_factory or worker_embedder_factory(app_settings))
     worker = IngestionWorker(app_settings, lambda: embedder)
 
     app = FastAPI(

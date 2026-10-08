@@ -34,8 +34,11 @@ def _context(
     conn: sqlite3.Connection, request: Request, **extra: Any
 ) -> dict[str, Any]:
     effective = settings_service(request, conn).effective()
+    embedder = getattr(request.app.state, "embedder", None)
     return {
         "settings": effective.public(),
+        "embedding": embedder.status() if embedder else {"status": "stopped"},
+        "idle_timeout": request.app.state.settings.embed_worker_idle_s,
         "top_k_range": TOP_K_RANGE,
         "errors": {},
         "form": {},

@@ -12,6 +12,14 @@
 </section>
 
 <section class="panel">
+  <h2>Embedding model</h2>
+  {% set labels = {"stopped": "Sleeping", "starting": "Loading…", "ready": "Ready", "busy": "Working", "stopping": "Stopping", "failed": "Failed — retried on next use", "in-process": "In process"} %}
+  <p class="status-line"><span class="dot dot-{{ 'ok' if embedding.status in ('ready', 'busy') else ('err' if embedding.status == 'failed' else '') }}" aria-hidden="true"></span>
+    <strong>{{ labels.get(embedding.status, embedding.status) }}</strong>
+    <span class="muted">all-MiniLM-L6-v2 runs in its own process on the CPU; it starts when needed and sleeps after {{ idle_timeout }} s without work, giving its memory back.</span></p>
+</section>
+
+<section class="panel">
   <h2>LLM server</h2>
   <p class="muted">Checks the <em>saved</em> endpoint with <span class="mono">GET /models</span>. No text is generated.</p>
   <div class="actions">

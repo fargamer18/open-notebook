@@ -155,6 +155,11 @@ class ChatGeneration:
         finally:
             conn.close()
 
+    def _load_embedder(self) -> None:
+        started = time.perf_counter()
+        self.embedder.load()
+        self.timings["model_load"] = round(time.perf_counter() - started, 3)
+
     def _retrieve(self) -> list[SearchResult]:
         from litenotebook.index.faiss_store import FaissStore
         from litenotebook.retrieval.hybrid import Retriever
@@ -249,6 +254,9 @@ class ChatGeneration:
                 ready = await anyio.to_thread.run_sync(self._has_ready_sources)
                 results: list[SearchResult] = []
                 if ready:
+                    if not self.embedder.loaded:  # cold MiniLM worker: say so
+                        yield sse("status", {"stage": "loading_model"})
+                        await anyio.to_thread.run_sync(self._load_embedder)
                     yield sse("status", {"stage": "retrieving"})
                     results = await anyio.to_thread.run_sync(self._retrieve)
                 memories = await anyio.to_thread.run_sync(self._memory)
@@ -408,9 +416,11 @@ class ChatGeneration:
 
 def _retrieval_error(error: Exception) -> str:
     from litenotebook.embed.embedder import EmbeddingModelUnavailableError
+    from litenotebook.embed.worker_client import EmbeddingWorkerError
 
-    if isinstance(error, EmbeddingModelUnavailableError):
-        return str(error)
+    if isinstance(error, EmbeddingModelUnavailableError | EmbeddingWorkerError):
+        log.warning("Retrieval failed: %s", error)
+        return f"Retrieval failed: {error}"
     log.exception("Retrieval failed", exc_info=error)
     return "Retrieval failed; details are in the server log. Retry."
 

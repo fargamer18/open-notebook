@@ -125,6 +125,8 @@
               if (data.sources) parts.push(data.sources + " passage" + (data.sources === 1 ? "" : "s"));
               if (data.memories) parts.push(data.memories + " memor" + (data.memories === 1 ? "y" : "ies"));
               statusEl.textContent = "Generating from " + (parts.join(" + ") || "the notebook") + "…";
+            } else if (data.stage === "loading_model") {
+              statusEl.textContent = "Loading embedding model… (first question after a pause)";
             } else {
               statusEl.textContent = "Retrieving evidence…";
             }

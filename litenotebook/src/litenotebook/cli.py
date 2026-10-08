@@ -18,7 +18,8 @@ from pathlib import Path
 
 from litenotebook.config import ConfigError, Settings, load_settings
 from litenotebook.db import open_db
-from litenotebook.embed.embedder import EmbeddingError, MiniLMEmbedder
+from litenotebook.embed.embedder import EmbeddingError
+from litenotebook.embed.worker_client import WorkerEmbedder
 from litenotebook.index.faiss_store import FaissStore, IndexMismatchError
 from litenotebook.ingest.chunker import ChunkingError
 from litenotebook.ingest.pipeline import IngestError, ingest_pdf
@@ -38,6 +39,9 @@ from litenotebook.services.settings import (
     SettingsService,
     check_connection,
 )
+
+# MiniLM, served by the isolated worker process (never imported into the CLI).
+MiniLMEmbedder = WorkerEmbedder
 
 USER_ERRORS = (
     ConfigError,
@@ -417,6 +421,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return int(args.func(args, conn, settings))
         finally:
             conn.close()
+            WorkerEmbedder.close_all()  # never leave a MiniLM worker behind
     except USER_ERRORS as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

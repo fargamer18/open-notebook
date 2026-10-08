@@ -1,30 +1,43 @@
-"""One lazily created MiniLM embedder shared by ingestion and chat retrieval.
+"""One lazily created embedder shared by ingestion and chat retrieval.
 
-The model is created on first use only (never while rendering pages) and
-then reused, so the ~15 s cold load and ~500 MB happen at most once per
-process. ``encode`` calls are serialized: the ingestion worker thread and a
-chat question may embed at the same time.
+In production this is a ``WorkerEmbedder``: MiniLM runs in an isolated child
+process that starts on the first embedding and exits after an idle period, so
+torch/sentence-transformers never enter the web process. Tests inject a fake
+via ``embedder_factory``. Rendering pages never creates or starts anything.
 """
 
 from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import numpy as np
     import numpy.typing as npt
 
+    from litenotebook.config import Settings
     from litenotebook.embed.embedder import TextEmbedder
 
 EmbedderFactory = Callable[[], "TextEmbedder"]
 
 
-def default_embedder_factory() -> TextEmbedder:
-    from litenotebook.embed.embedder import MiniLMEmbedder
+def worker_embedder_factory(settings: Settings | None = None) -> EmbedderFactory:
+    def factory() -> TextEmbedder:
+        from litenotebook.embed.worker_client import WorkerEmbedder
 
-    return MiniLMEmbedder()
+        if settings is None:
+            return WorkerEmbedder()
+        return WorkerEmbedder(
+            idle_seconds=settings.embed_worker_idle_s,
+            start_timeout=settings.embed_worker_start_timeout_s,
+        )
+
+    return factory
+
+
+def default_embedder_factory() -> TextEmbedder:
+    return worker_embedder_factory()()
 
 
 class SharedEmbedder:
@@ -50,6 +63,10 @@ class SharedEmbedder:
                 self.created += 1
             return self._inner
 
+    def _serialized(self, inner: TextEmbedder) -> bool:
+        # the worker client schedules requests itself (with priorities)
+        return not getattr(inner, "thread_safe", False)
+
     @property
     def loaded(self) -> bool:
         inner = self._inner
@@ -59,10 +76,32 @@ class SharedEmbedder:
         inner = self._get()
         load = getattr(inner, "load", None)
         if callable(load):
-            with self._use_lock:
+            if self._serialized(inner):
+                with self._use_lock:
+                    load()
+            else:
                 load()
 
     def encode(self, texts: list[str]) -> npt.NDArray[np.float32]:
         inner = self._get()
-        with self._use_lock:
-            return inner.encode(texts)
+        if self._serialized(inner):
+            with self._use_lock:
+                return inner.encode(texts)
+        return inner.encode(texts)
+
+    def status(self) -> dict[str, Any]:
+        """Worker state for /healthz and Settings. Never starts anything."""
+        inner = self._inner
+        if inner is None:
+            return {"status": "stopped"}
+        status = getattr(inner, "status", None)
+        if callable(status):
+            result: dict[str, Any] = status()
+            return result
+        return {"status": "in-process"}
+
+    def close(self) -> None:
+        inner = self._inner
+        close = getattr(inner, "close", None)
+        if callable(close):
+            close()

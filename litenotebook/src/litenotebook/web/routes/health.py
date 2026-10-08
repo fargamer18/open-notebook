@@ -66,6 +66,11 @@ def collect_health(request: Request) -> dict[str, Any]:
         if conn is not None:
             conn.close()
 
+    embedder = getattr(request.app.state, "embedder", None)
+    health["embedding_worker"] = (
+        embedder.status() if embedder is not None else {"status": "stopped"}
+    )  # never starts the worker
+
     core_ok = health["database"]["status"] == "ok" and health["data"]["status"] == "ok"
     health["status"] = "ok" if core_ok else "error"
     return health

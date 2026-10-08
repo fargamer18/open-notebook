@@ -191,7 +191,9 @@ def test_chat_flow_streams_cites_and_persists(client, app_settings, nb, llama):
     assert "script-src 'self'" in r.headers["content-security-policy"]
     names = [e for e, _ in events]
     assert names[0] == "start" and names[-1] == "done"
-    assert "delta" in names and names.count("status") == 2
+    stages = [d["stage"] for e, d in events if e == "status"]
+    assert "delta" in names and stages[-2:] == ["retrieving", "generating"]
+    assert stages[0] in ("loading_model", "retrieving")  # cold embedder first
     start = events[0][1]
     assert start["created_conversation"] and start["title"] == (
         "What is the capital of Zorbania?"

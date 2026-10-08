@@ -61,6 +61,11 @@ class Settings:
     # Uploads (web): PDFs larger than this are rejected while streaming.
     max_upload_mb: int = DEFAULT_MAX_UPLOAD_MB
 
+    # MiniLM runs in a child process that exits after this long without work
+    # (its memory goes back to the OS); the next embedding restarts it.
+    embed_worker_idle_s: int = 120
+    embed_worker_start_timeout_s: int = 180
+
     def __post_init__(self) -> None:
         if self.host not in LOOPBACK_HOSTS:
             raise ConfigError(
@@ -80,6 +85,12 @@ class Settings:
             raise ConfigError("llm_base_url must be an http(s) URL")
         if not 1 <= self.max_upload_mb <= 4096:
             raise ConfigError("max_upload_mb must be between 1 and 4096")
+        if not 1 <= self.embed_worker_idle_s <= 86400:
+            raise ConfigError("embed_worker_idle_s must be between 1 and 86400")
+        if not 10 <= self.embed_worker_start_timeout_s <= 3600:
+            raise ConfigError(
+                "embed_worker_start_timeout_s must be between 10 and 3600"
+            )
 
     @property
     def max_upload_bytes(self) -> int:
@@ -143,6 +154,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         ("chunk_overlap_tokens", "CHUNK_OVERLAP_TOKENS"),
         ("retrieval_top_k", "TOP_K"),
         ("max_upload_mb", "MAX_UPLOAD_MB"),
+        ("embed_worker_idle_s", "EMBED_WORKER_IDLE_SECONDS"),
+        ("embed_worker_start_timeout_s", "EMBED_WORKER_START_TIMEOUT"),
     ):
         if (number := get_int(name)) is not None:
             overrides[key] = number
