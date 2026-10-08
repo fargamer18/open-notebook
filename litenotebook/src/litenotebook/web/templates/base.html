@@ -6,24 +6,83 @@
   <meta name="color-scheme" content="dark">
   <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "^(409|413|415|422)$", "swap": true}, {"code": "[45]..", "swap": false, "error": true}, {"code": "...", "swap": false}]}'>
   <title>{% block title %}LiteNotebook{% endblock %} · LiteNotebook</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
   {% block scripts %}{% endblock %}
 </head>
-<body>
+<body data-notebook-id="{{ nb.id if nb is defined and nb else '' }}" data-source-id="{{ src.id if src is defined and src and src.id is defined else '' }}">
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>LiteNotebook</a>
     <nav class="nav" aria-label="Main">
       <a href="/" {% if nav == "notebooks" %}aria-current="page"{% endif %}>Notebooks</a>
+      <a href="/search" {% if nav == "search" %}aria-current="page"{% endif %}>Search</a>
       <a href="/settings" {% if nav == "settings" %}aria-current="page"{% endif %}>Settings</a>
     </nav>
-    <div class="health" id="health" hx-get="/health/badge" hx-trigger="load, every 60s"
-         aria-live="polite">
-      <span class="dot"></span><span class="muted">LLM status…</span>
+    <div class="topbar-end">
+      <div class="health" id="health" hx-get="/health/badge" hx-trigger="load, every 60s">
+        <span class="dot" aria-hidden="true"></span><span class="muted">Status…</span>
+      </div>
+      <button class="btn btn-ghost btn-sm palette-btn" type="button" data-palette-open aria-keyshortcuts="Control+K" title="Command palette (Ctrl+K)">
+        <span class="palette-btn-label">Commands</span> <kbd>Ctrl K</kbd>
+      </button>
+      <button class="btn btn-ghost btn-sm btn-icon" type="button" data-shortcuts-open aria-label="Keyboard shortcuts" aria-keyshortcuts="Shift+?" title="Keyboard shortcuts (?)">?</button>
     </div>
   </header>
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
+
+  <div class="toasts" id="toasts" aria-live="polite">
+    {% if flash %}<div class="toast toast-{{ flash.kind }}" data-toast><span class="toast-text">{{ flash.message }}</span></div>{% endif %}
+  </div>
+
+  <dialog class="dialog" id="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body">
+    <form class="dialog-form" id="confirm-dialog-form" method="post">
+      <h2 class="dialog-title" id="confirm-dialog-title">Delete?</h2>
+      <p class="dialog-item" id="confirm-dialog-item"></p>
+      <p class="muted" id="confirm-dialog-body"></p>
+      <input type="hidden" name="confirm" id="confirm-dialog-value" value="">
+      <p class="error" id="confirm-dialog-error" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button class="btn" type="button" data-dialog-close>Cancel</button>
+        <button class="btn btn-danger" type="submit" id="confirm-dialog-submit">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="dialog palette" id="palette" aria-labelledby="palette-title">
+    <h2 class="sr-only" id="palette-title">Command palette</h2>
+    <div class="palette-search">
+      <label class="sr-only" for="palette-q">Type a command or notebook name</label>
+      <input id="palette-q" type="text" role="combobox" aria-expanded="true" aria-controls="palette-list"
+             aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Type a command or notebook…">
+    </div>
+    <ul class="palette-list" id="palette-list" role="listbox" aria-label="Commands"></ul>
+    <p class="palette-foot muted"><kbd>↑</kbd> <kbd>↓</kbd> choose · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close</p>
+    <p class="sr-only" id="palette-count" role="status"></p>
+  </dialog>
+
+  <dialog class="dialog" id="shortcuts" aria-labelledby="shortcuts-title">
+    <div class="dialog-form">
+      <h2 class="dialog-title" id="shortcuts-title">Keyboard shortcuts</h2>
+      <dl class="keys">
+        <dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Command palette (works anywhere)</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Close a dialog, the palette or the selection tools</dd>
+        <dt><kbd>/</kbd></dt><dd>Focus the search or filter field on this page</dd>
+        <dt><kbd>n</kbd></dt><dd>New note (on the Notes page)</dd>
+        <dt><kbd>?</kbd></dt><dd>This help</dd>
+        <dt><kbd>Enter</kbd> / <kbd>Shift</kbd> <kbd>Enter</kbd></dt><dd>Chat: send / new line</dd>
+        <dt><kbd>Ctrl</kbd> <kbd>S</kbd></dt><dd>Notes: save now</dd>
+        <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Search: move between results</dd>
+        <dt><kbd>PgDn</kbd> <kbd>→</kbd> / <kbd>PgUp</kbd> <kbd>←</kbd></dt><dd>Reader: next / previous page</dd>
+        <dt><kbd>Ctrl</kbd> <kbd>+</kbd> / <kbd>Ctrl</kbd> <kbd>−</kbd></dt><dd>Reader: zoom in / out</dd>
+      </dl>
+      <p class="hint">Single-key shortcuts are ignored while you type in a field.</p>
+      <div class="dialog-actions"><button class="btn" type="button" data-dialog-close>Close</button></div>
+    </div>
+  </dialog>
 </body>
 </html>

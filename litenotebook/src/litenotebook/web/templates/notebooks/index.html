@@ -4,14 +4,26 @@
 {% block content %}
 <section class="page-head">
   <h1>Notebooks</h1>
-  <p class="muted">Each notebook keeps its own sources, search index and chats.</p>
+  <p class="muted">Each notebook keeps its own sources, search index, chats, notes and memory.</p>
 </section>
 
-<section class="panel" id="notebook-create">
+{% if not summaries %}
+<section class="panel empty-state start-guide" id="start-guide" aria-labelledby="start-title">
+  <h2 id="start-title">Get started</h2>
+  <ol class="steps">
+    <li><strong>Create a notebook</strong> below — one per subject works well.</li>
+    <li><strong>Upload a PDF</strong> under its Sources tab. Text is extracted and indexed on this computer.</li>
+    <li><strong>Ask questions or take notes.</strong> Answers cite the exact pages they used.</li>
+  </ol>
+</section>
+{% endif %}
+
+<section class="panel" id="notebook-create" aria-label="Create a notebook">
   {% include "partials/notebook_form.html" %}
 </section>
 
-<section class="panel flush">
+<section class="panel flush" aria-labelledby="nb-list-title">
+  <h2 class="sr-only" id="nb-list-title">Your notebooks</h2>
   <ul class="nb-list" id="notebook-list">
     {% for s in summaries %}
       {% if editing_id == s.notebook.id %}

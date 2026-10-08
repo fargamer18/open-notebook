@@ -37,6 +37,7 @@ from litenotebook.reader.render import (
     render_page,
 )
 from litenotebook.web.deps import app_settings, get_db, is_htmx, render
+from litenotebook.web.navigation import notify
 
 router = APIRouter(prefix="/notebooks/{notebook_id}/sources/{source_id}")
 panels = APIRouter(prefix="/notebooks/{notebook_id}/reader")
@@ -73,11 +74,17 @@ def reader_page(
         return render(
             request,
             "error.html",
-            {"title": "PDF unavailable", "message": str(e)},
+            {
+                "title": "PDF unavailable",
+                "message": str(e),
+                "status": 404,
+                "notebook_id": notebook_id,
+            },
             status_code=404,
         )
     saved_page, zoom = get_reading_state(conn, notebook_id, source_id)
     start, focus_kind, focus_id = saved_page, "", 0
+    back_url = None  # "Back to chat" when the reader was opened from a citation
     if page is not None:
         start = page
     if chunk is not None:
@@ -94,6 +101,11 @@ def reader_page(
         cit = get_citation(conn, notebook_id, citation)
         if cit.chunk_exists and cit.source_id == source_id:
             start, focus_kind, focus_id = cit.page_no, "citation", citation
+        row = conn.execute(
+            "SELECT conversation_id FROM messages WHERE id = ?", (cit.message_id,)
+        ).fetchone()
+        if row is not None:
+            back_url = f"/notebooks/{notebook_id}/chat/{row[0]}#msg-{cit.message_id}"
     if annotation is not None:
         a = get_annotation(conn, notebook_id, annotation)
         if a.source_id != source_id:
@@ -113,6 +125,7 @@ def reader_page(
             "focus_id": focus_id,
             "colors": COLORS,
             "nb_id": notebook_id,
+            "back_url": back_url,
         },
     )
 
@@ -298,7 +311,7 @@ def edit(
         {"a": a, "mode": "view", "nb_id": notebook_id, "colors": COLORS},
     )
     response.headers["HX-Trigger"] = "annotations-changed"
-    return response
+    return notify(response, "Annotation updated")
 
 
 @router.get("/annotations/{annotation_id}/delete", response_class=HTMLResponse)
@@ -339,7 +352,7 @@ def delete(
     delete_annotation(conn, notebook_id, annotation_id)
     response = Response(status_code=200, content="")
     response.headers["HX-Trigger"] = "annotations-changed"
-    return response
+    return notify(response, "Annotation deleted")
 
 
 @router.post("/reading-state", response_model=None)

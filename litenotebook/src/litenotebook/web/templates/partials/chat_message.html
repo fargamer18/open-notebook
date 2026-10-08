@@ -1,9 +1,13 @@
 <article class="msg msg-{{ m.role }} msg-{{ m.status }}" id="msg-{{ m.id }}" data-message-id="{{ m.id }}">
   <header class="msg-head">
     <span class="msg-role">{{ "You" if m.role == "user" else "Assistant" }}</span>
+    <time class="msg-time" datetime="{{ m.created_at }}">{{ m.created_at | ts }}</time>
     {% if m.status == "generating" %}<span class="pill pill-processing">Generating…</span>
     {% elif m.status == "failed" %}<span class="pill pill-failed">Failed</span>
     {% elif m.status == "interrupted" %}<span class="pill pill-failed">Interrupted</span>{% endif %}
+    {% if m.role == "assistant" and m.status == "complete" and m.content %}
+      <span class="msg-tools"><button class="fb" type="button" data-copy-target=".msg-body" data-copy-done="Answer copied">Copy</button></span>
+    {% endif %}
   </header>
   {% if m.content %}
   <div class="msg-body">{% if m.role == "user" or (not m.citations and not m.memory_refs) %}{{ m.content }}{% else %}{{ render_answer(m, nb_id) }}{% endif %}</div>
@@ -11,7 +15,7 @@
   {% if m.role == "assistant" %}
     {% if m.error %}<p class="error msg-error">{{ m.error }}</p>{% endif %}
     {% if m.retryable %}
-      <div class="msg-actions"><button class="btn btn-sm" type="button" data-retry-url="/notebooks/{{ nb_id }}/chat/messages/{{ m.id }}/retry">Retry</button></div>
+      <div class="msg-actions"><button class="btn btn-sm" type="button" data-retry-url="/notebooks/{{ nb_id }}/chat/messages/{{ m.id }}/retry">Retry this answer</button></div>
     {% endif %}
     {% if m.status == "complete" and m.citations %}
       <ol class="msg-sources">

@@ -8,6 +8,6 @@
       <span class="conv-meta">{{ c.message_count // 2 }} question{{ "" if c.message_count // 2 == 1 else "s" }} · {{ c.updated_at | ts }}</span>
     </a></li>
   {% else %}
-    <li class="muted conv-empty">No conversations yet.</li>
+    <li class="muted conv-empty">No conversations yet. Ask a question to start one.</li>
   {% endfor %}
 </ul>

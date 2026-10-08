@@ -24,6 +24,7 @@ from litenotebook.notebooks import (
     rename_notebook,
 )
 from litenotebook.web.deps import app_settings, get_db, is_htmx, redirect, render
+from litenotebook.web.navigation import nav_context, notify
 
 router = APIRouter()
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
@@ -36,6 +37,12 @@ WORKSPACE_TABS = {
     "search": ("Search", "Search sources, notes, chats and memory.", 7),
 }
 LIMITS = {"name": MAX_NAME_LENGTH, "description": MAX_DESCRIPTION_LENGTH}
+
+
+def notify_render(message: str, *args: Any, **kwargs: Any) -> HTMLResponse:
+    response = render(*args, **kwargs)
+    notify(response, message)
+    return response
 
 
 def _index(
@@ -101,7 +108,8 @@ def create(
         return _index(request, conn, form=form, error=str(e), status_code=422)
     if not is_htmx(request):
         return redirect("/")
-    return render(
+    return notify_render(
+        "Notebook created",
         request,
         "partials/notebook_created.html",
         {
@@ -154,9 +162,9 @@ def rename(
             edit_value=name,
             status_code=422,
         )
-    return (
-        _row(request, conn, notebook_id, "view") if is_htmx(request) else redirect("/")
-    )
+    if not is_htmx(request):
+        return redirect("/")
+    return notify(_row(request, conn, notebook_id, "view"), "Notebook renamed")
 
 
 @router.get("/notebooks/{notebook_id}/delete", response_class=HTMLResponse)
@@ -202,8 +210,11 @@ def delete(
             status_code=409,
         )
     if not is_htmx(request):
-        return redirect("/")
-    return render(request, "partials/notebook_deleted.html", {"result": result})
+        return redirect("/", flash="notebook-deleted")
+    return notify(
+        render(request, "partials/notebook_deleted.html", {"result": result}),
+        "Notebook deleted",
+    )
 
 
 @router.get("/notebooks/{notebook_id}", response_model=None)
@@ -224,5 +235,10 @@ def workspace(
     return render(
         request,
         "notebook/workspace.html",
-        {**context, "tabs": WORKSPACE_TABS, "tab": tab},
+        {
+            **context,
+            "tabs": WORKSPACE_TABS,
+            "tab": tab,
+            **nav_context(conn, notebook_id),
+        },
     )

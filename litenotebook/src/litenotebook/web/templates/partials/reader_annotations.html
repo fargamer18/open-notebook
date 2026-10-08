@@ -5,6 +5,6 @@
     {% for a in items %}{% with mode = "view" %}{% include "partials/reader_annotation.html" %}{% endwith %}{% endfor %}
   </ul>
   {% else %}
-    <p class="muted">Select text on the page to highlight or annotate it.</p>
+    <div class="empty-state"><p>No annotations yet.</p><p class="hint">Select text on the page to highlight it in one of four colours or add a comment. On pages without selectable text, use “Comment on page”.</p></div>
   {% endif %}
 </div>

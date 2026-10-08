@@ -1,15 +1,18 @@
+{% from "macros.html" import delete_trigger %}
 {% set nb = s.notebook %}
 <div class="notes" id="notes">
   <aside class="notes-side" aria-label="Notes">
     <form method="post" action="/notebooks/{{ nb.id }}/notes" class="new-note">
       <label class="sr-only" for="new-note-title">New note title</label>
-      <input id="new-note-title" name="title" maxlength="{{ max_title }}" placeholder="New note title" autocomplete="off">
+      <input id="new-note-title" name="title" maxlength="{{ max_title }}" placeholder="New note title" autocomplete="off"
+             data-n-focus {% if request.query_params.get("new") or create_error %}autofocus{% endif %}>
       <button class="btn btn-primary btn-sm" type="submit">New note</button>
     </form>
     {% if create_error %}<p class="error" role="alert">{{ create_error }}</p>{% endif %}
     <form method="get" action="/notebooks/{{ nb.id }}/notes" class="note-filter" role="search">
       <label class="sr-only" for="note-q">Filter notes</label>
-      <input id="note-q" name="q" value="{{ q }}" maxlength="500" placeholder="Filter notes…" autocomplete="off">
+      <input id="note-q" name="q" type="search" value="{{ q }}" maxlength="500" placeholder="Filter notes…  (press /)" autocomplete="off" data-slash-focus>
+      {% if q %}<a class="filter-clear" href="/notebooks/{{ nb.id }}/notes{% if note %}/{{ note.id }}{% endif %}">Clear</a>{% endif %}
     </form>
     <ul class="conv-list">
       {% for n in notes %}
@@ -19,12 +22,12 @@
           <span class="conv-meta">{{ n.updated_at | ts }}{% if n.link_count %} · {{ n.link_count }} link{{ "" if n.link_count == 1 else "s" }}{% endif %}</span>
         </a></li>
       {% else %}
-        <li class="muted conv-empty">{% if q %}No notes match “{{ q }}”.{% else %}No notes yet.{% endif %}</li>
+        <li class="muted conv-empty">{% if q %}No notes match “{{ q }}”.{% else %}No notes yet. Type a title above and press New note.{% endif %}</li>
       {% endfor %}
     </ul>
   </aside>
 
-  <section class="note-main">
+  <section class="note-main" aria-label="Note">
     {% if note %}
       {% set base = "/notebooks/" ~ nb.id ~ "/notes/" ~ note.id %}
       <form class="note-editor" id="note-editor" method="post" action="{{ base }}"
@@ -36,13 +39,22 @@
                  value="{{ draft_title if draft_title is defined and draft_title else note.title }}" autocomplete="off">
           <span class="save-state" id="save-state" role="status" data-state="saved">Saved</span>
         </div>
+        <div class="note-conflict" id="note-conflict" role="alert" hidden>
+          <p><strong>Not saved:</strong> this note was changed somewhere else (another tab or window). Your text is still here.</p>
+          <div class="actions">
+            <button class="btn btn-sm" type="button" data-copy-target="note-content" data-copy-done="Your note text was copied">Copy my text</button>
+            <a class="btn btn-sm btn-ghost" href="{{ base }}" data-discard-reload>Load the latest version (discards my unsaved text)</a>
+          </div>
+        </div>
         <label class="sr-only" for="note-content">Note</label>
         <textarea id="note-content" name="content" class="note-content" spellcheck="true"
-                  placeholder="Write your notes here (plain text)…">{{ draft_content if draft_content is defined and draft_content else note.content }}</textarea>
+                  placeholder="Write your notes here (plain text)…" {% if not note.content and not save_error %}autofocus{% endif %}>{{ draft_content if draft_content is defined and draft_content else note.content }}</textarea>
         <div class="actions note-actions">
           <button class="btn btn-sm" type="submit">Save now</button>
           <span class="muted">Saves automatically. Created {{ note.created_at | ts }} · updated <span id="note-updated">{{ note.updated_at | ts }}</span></span>
-          {% if not confirming %}<a class="btn btn-ghost btn-sm btn-danger-text" href="{{ base }}/delete">Delete…</a>{% endif %}
+          {% if not confirming %}{{ delete_trigger(base ~ "/delete", base ~ "/delete", note.id, "Delete this note permanently?", note.title,
+               "The note and its %d evidence link%s are removed. Linked sources, chats and memory are not affected." % (links | length, "" if links | length == 1 else "s"),
+               "Delete note") }}{% endif %}
         </div>
         {% if save_error %}<p class="error" role="alert">{{ save_error }}</p>{% endif %}
       </form>
@@ -69,13 +81,15 @@
           <label class="sr-only" for="attach-q">Find a passage</label>
           <input id="attach-q" name="q" maxlength="500" placeholder="Find a passage (keyword search)" autocomplete="off">
           <button class="btn btn-sm" type="submit">Find</button>
+          <span class="htmx-indicator muted">Searching…</span>
         </form>
         <div id="attach-results"></div>
       </details>
     {% else %}
-      <div class="panel placeholder">
-        <h2>Notes</h2>
-        <p class="muted">Create a note on the left, or use “Save to note” on a chat answer and “Add to note” on any evidence. Notes are plain text and are saved automatically.</p>
+      <div class="panel empty-state">
+        <h2>{% if notes %}Pick a note{% else %}No notes yet{% endif %}</h2>
+        <p>{% if notes %}Choose a note on the left, or create a new one.{% else %}Type a title on the left and press <strong>New note</strong> (shortcut <kbd>n</kbd>).{% endif %}</p>
+        <p class="hint">You can also use “Save to note…” on a chat answer and “Add to note…” on evidence, memory and PDF annotations. Notes are plain text and save automatically.</p>
       </div>
     {% endif %}
   </section>

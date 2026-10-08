@@ -12,9 +12,10 @@
 
 from __future__ import annotations
 
+from markupsafe import escape
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse
+from starlette.responses import HTMLResponse, PlainTextResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -32,6 +33,18 @@ SECURITY_HEADERS = {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
 }
+
+
+REJECT_PAGE = (
+    '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    "<title>Not allowed · LiteNotebook</title>"
+    '<link rel="stylesheet" href="/static/app.css"></head><body>'
+    '<main class="container" id="main"><section class="panel error-page">'
+    "<h1>Not allowed</h1><p>{}</p>"
+    "<p>LiteNotebook only accepts requests from its own pages on this computer.</p>"
+    '<p><a class="btn" href="/">Go to notebooks</a></p>'
+    "</section></main></body></html>"
+)
 
 
 def host_name(host_header: str) -> str:
@@ -94,7 +107,14 @@ class LocalOnlyMiddleware:
     async def _reject(
         text: str, status: int, scope: Scope, receive: Receive, send: Send
     ) -> None:
-        response = PlainTextResponse(text, status_code=status)
+        accept = Headers(scope=scope).get("accept", "")
+        response: Response
+        if "text/html" in accept:  # a browser navigation gets a readable page
+            response = HTMLResponse(
+                REJECT_PAGE.format(escape(text)), status_code=status
+            )
+        else:
+            response = PlainTextResponse(text, status_code=status)
         for name, value in SECURITY_HEADERS.items():
             response.headers[name] = value
         await response(scope, receive, send)

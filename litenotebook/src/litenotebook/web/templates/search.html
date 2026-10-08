@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% set nav = "search" %}
+{% block title %}{% if query %}{{ query }} · {% endif %}Search{% endblock %}
+{% block content %}
+{{ crumbs([("Notebooks", "/"), ("Search", "")]) }}
+<section class="panel search-panel" aria-labelledby="gsearch-title">
+  <div class="panel-head">
+    <h1 id="gsearch-title">Search all notebooks</h1>
+    <span class="muted">Fast keyword search · offline · never loads the embedding model</span>
+  </div>
+  <form class="search-form" method="get" action="/search" role="search">
+    <label class="sr-only" for="gsearch-q">Search all notebooks</label>
+    <input id="gsearch-q" name="q" type="search" value="{{ query }}" maxlength="{{ max_query }}"
+           placeholder="Search sources, notes, annotations, chats and memory…" autocomplete="off"
+           {% if not query %}autofocus{% endif %} data-slash-focus data-result-input>
+    <button class="btn btn-primary" type="submit">Search</button>
+  </form>
+  <p class="hint">For meaning-based (Hybrid) search, open a notebook's own Search tab.</p>
+</section>
+
+<div class="global-results" data-result-nav>
+{% if query %}
+  <p class="muted search-summary" role="status">
+    {% if groups %}Matches in {{ groups | length }} of {{ notebook_count }} notebook{{ "" if notebook_count == 1 else "s" }} for “{{ query }}” · {{ "%.0f" | format(elapsed_ms) }} ms
+    {% else %}No matches for “{{ query }}” in any notebook. Try fewer or different words.{% endif %}
+  </p>
+  {% for g in groups %}
+  <section class="panel flush" aria-labelledby="g-nb-{{ loop.index }}">
+    <div class="global-group-head">
+      <h2 id="g-nb-{{ loop.index }}">{{ g.notebook.name }}</h2>
+      <a class="fb" href="/notebooks/{{ g.notebook.id }}/search?q={{ query | urlencode }}">All results in {{ g.notebook.name }} →</a>
+    </div>
+    <ul class="hit-list">
+      {% for h in g.hits %}
+      <li class="hit">
+        <div class="hit-head">
+          <span class="tag tag-muted">{{ h.section | capitalize }}</span>
+          <a class="hit-title" href="{{ h.url }}" data-result>{{ h.title }}</a>
+          <span class="muted">{{ h.subtitle }}</span>
+        </div>
+        {% if h.snippet %}<p class="hit-snippet">{{ h.snippet }}</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+{% elif not notebook_count %}
+  <div class="panel empty-state"><h2>Nothing to search yet</h2><p><a href="/?new=1">Create a notebook</a> and upload a PDF first.</p></div>
+{% endif %}
+</div>
+{% endblock %}

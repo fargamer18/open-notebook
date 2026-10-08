@@ -1,7 +1,7 @@
 {% set labels = {"sources": "Sources", "notes": "Notes", "annotations": "Annotations", "chats": "Chats", "memory": "Memory"} %}
-<div id="search-results" class="search-results">
+<div id="search-results" class="search-results" data-result-nav>
   {% if query %}
-    <p class="muted search-summary">{{ results.total }} result{{ "" if results.total == 1 else "s" }} for “{{ query }}” · {{ "%.0f" | format(elapsed_ms) }} ms{% if results.engine == "hybrid" %} · hybrid source search{% if cold_start %} (embedding model was loaded for this search){% endif %}{% else %} · keyword search{% endif %}</p>
+    <p class="muted search-summary" role="status">{{ results.total }} result{{ "" if results.total == 1 else "s" }} for “{{ query }}” · {{ "%.0f" | format(elapsed_ms) }} ms{% if results.engine == "hybrid" %} · hybrid source search{% if cold_start %} (embedding model was loaded for this search){% endif %}{% else %} · keyword search{% endif %}</p>
     {% for section, hits in results.sections.items() %}
       <section class="panel flush search-section" aria-labelledby="sec-{{ section }}">
         <h3 class="search-section-title" id="sec-{{ section }}">{{ labels[section] }} <span class="muted">({{ hits | length }}{% if results.mode == "all" and hits | length >= 5 %}+ — <a href="/notebooks/{{ nb_id }}/search?q={{ query | urlencode }}&amp;mode={{ section }}&amp;engine={{ results.engine }}">show more</a>{% endif %})</span></h3>
@@ -11,7 +11,7 @@
           {% for h in hits %}
             <li class="hit">
               <div class="hit-head">
-                <a class="hit-title" href="{{ h.url }}">{{ h.title }}</a>
+                <a class="hit-title" href="{{ h.url }}" data-result>{{ h.title }}</a>
                 <span class="muted">{{ h.subtitle }}</span>
                 {% if h.section == "sources" %}<span class="tag tag-muted">{{ h.meta.match }}</span>
                   <a class="fb" href="/notebooks/{{ nb_id }}/sources/{{ h.meta.source_id }}/read?chunk={{ h.meta.chunk_id }}">Open in PDF</a>{% endif %}
@@ -21,11 +21,12 @@
             </li>
           {% endfor %}
         </ul>
-        {% else %}<p class="empty">No {{ labels[section] | lower }} match.</p>{% endif %}
+        {% else %}<p class="empty">No {{ labels[section] | lower }} match.{% if section == "sources" and results.engine != "hybrid" %} Try Hybrid for meaning-based matches.{% endif %}</p>{% endif %}
       </section>
     {% endfor %}
     <aside class="evidence search-evidence" id="search-evidence" aria-live="polite"><p class="muted">Preview a source result to see the passage here.</p></aside>
   {% else %}
-    <p class="empty">Type a query and press Search. Keyword search is instant and never loads the embedding model.</p>
+    <div class="empty-state"><p>Type a query and press <strong>Search</strong>. Fast keyword search is instant and never loads the embedding model.</p>
+      <p class="hint">Tip: press <kbd>/</kbd> to jump to the search field and <kbd>↓</kbd> to move through results.</p></div>
   {% endif %}
 </div>

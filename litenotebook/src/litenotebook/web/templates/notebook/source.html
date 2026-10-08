@@ -1,14 +1,12 @@
 {% extends "base.html" %}
+{% from "macros.html" import crumbs, delete_trigger %}
 {% set nav = "notebooks" %}
 {% set nb = s.notebook %}
 {% set base = "/notebooks/" ~ nb.id ~ "/sources/" ~ src.id %}
-{% block title %}{{ src.original_filename }}{% endblock %}
+{% block title %}{{ src.original_filename }} · {{ nb.name }}{% endblock %}
 {% block content %}
-<nav class="crumbs" aria-label="Breadcrumb">
-  <a href="/">Notebooks</a><span aria-hidden="true">/</span>
-  <a href="/notebooks/{{ nb.id }}?tab=sources">{{ nb.name }}</a><span aria-hidden="true">/</span>
-  <span>{{ src.original_filename }}</span>
-</nav>
+{{ crumbs([("Notebooks", "/"), (nb.name, "/notebooks/%d?tab=sources" % nb.id), ("Sources", "/notebooks/%d?tab=sources" % nb.id), (src.original_filename, "")]) }}
+{% with tab = "sources", reader_src = src if src.status == "ready" else none %}{% include "partials/nb_nav.html" %}{% endwith %}
 
 <section class="panel" id="source-detail"
   {% if src.active %}hx-get="{{ base }}" hx-trigger="every 2s" hx-select="#source-detail" hx-target="this" hx-swap="outerHTML"{% endif %}>
@@ -48,7 +46,9 @@
       <form method="post" action="{{ base }}/retry"><button class="btn" type="submit">Retry ingestion</button></form>
     {% endif %}
     {% if src.status != "processing" and not confirming %}
-      <a class="btn btn-ghost btn-danger-text" href="{{ base }}?confirm=delete">Delete…</a>
+      {{ delete_trigger(base ~ "?confirm=delete", base ~ "/delete", src.id, "Delete this source permanently?", src.original_filename,
+           "Its stored PDF, extracted text, %d chunks, search vectors, annotations and page renders are removed. Notes and chat answers keep their saved snapshots." % src.chunk_count,
+           "Delete source", css="btn btn-ghost btn-danger-text") }}
     {% endif %}
     <a class="btn btn-ghost" href="/notebooks/{{ nb.id }}?tab=sources">Back to sources</a>
   </div>

@@ -15,7 +15,19 @@
   let center = Number(root.dataset.center);
   let depth = Number(root.dataset.depth) || 1;
   let selected = null;
-  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  let scale = 1;  // view zoom; the layout itself never changes
+  function applyView() {
+    const w = W / scale, h = H / scale;
+    svg.setAttribute("viewBox", (CX - w / 2) + " " + (CY - h / 2) + " " + w + " " + h);
+  }
+  applyView();
+  const zoomBy = (f) => { scale = Math.min(3, Math.max(0.6, scale * f)); applyView(); };
+  const zin = document.getElementById("graph-zoom-in"), zout = document.getElementById("graph-zoom-out");
+  const zreset = document.getElementById("graph-zoom-reset");
+  if (zin) zin.addEventListener("click", () => zoomBy(1.25));
+  if (zout) zout.addEventListener("click", () => zoomBy(0.8));
+  if (zreset) zreset.addEventListener("click", () => { scale = 1; applyView(); });
+  const activate = (ev, fn) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); fn(); } };
 
   function el(tag, attrs, parent) {
     const node = document.createElementNS(NS, tag);
@@ -62,20 +74,23 @@
     data.edges.forEach((e) => {
       const a = pos[e.from], b = pos[e.to];
       if (!a || !b) return;
-      const g = el("g", { class: "g-edge rel-" + e.relation, tabindex: "0" }, edges);
+      const g = el("g", { class: "g-edge rel-" + e.relation, tabindex: "0", role: "button",
+                          "aria-label": "Link: " + e.relation.replace(/_/g, " ") }, edges);
       el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: "g-line" }, g);
       el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: "g-hit" }, g);
       const t = el("title", {}, g); t.textContent = e.relation;
       const open = () => inspect("/notebooks/" + nb + "/memory/edges/" + e.id);
       g.addEventListener("click", open);
-      g.addEventListener("keydown", (ev) => { if (ev.key === "Enter") open(); });
+      g.addEventListener("keydown", (ev) => activate(ev, open));
     });
     const nodes = el("g", { class: "g-nodes" }, svg);
     data.nodes.forEach((n) => {
       const p = pos[n.id];
       const g = el("g", { class: "g-node t-" + n.type + (n.id === center ? " is-center" : "") +
                           (n.id === selected ? " is-selected" : ""),
-                          transform: "translate(" + p[0] + "," + p[1] + ")", tabindex: "0" }, nodes);
+                          transform: "translate(" + p[0] + "," + p[1] + ")", tabindex: "0", role: "button",
+                          "aria-label": (n.id === center ? "Centre: " : "") + n.type.replace(/_/g, " ") + ": " + n.label,
+                          "aria-pressed": n.id === selected ? "true" : "false" }, nodes);
       el("circle", { r: n.id === center ? 13 : (n.depth === 1 ? 9 : 7) }, g);
       const label = el("text", { y: n.id === center ? 28 : 21, "text-anchor": "middle" }, g);
       label.textContent = n.label.length > 26 ? n.label.slice(0, 25) + "…" : n.label;
@@ -85,19 +100,34 @@
         if (selected === n.id && n.id !== center) { recenter(n.id); return; }
         selected = n.id;
         inspect("/notebooks/" + nb + "/memory/nodes/" + n.id);
-        svg.querySelectorAll(".g-node.is-selected").forEach((x) => x.classList.remove("is-selected"));
+        svg.querySelectorAll(".g-node.is-selected").forEach((x) => { x.classList.remove("is-selected"); x.setAttribute("aria-pressed", "false"); });
         g.classList.add("is-selected");
+        g.setAttribute("aria-pressed", "true");
+        selectedLabel = n.label;
+        describe();
       };
       g.addEventListener("click", choose);
-      g.addEventListener("keydown", (ev) => { if (ev.key === "Enter") choose(); });
+      g.addEventListener("keydown", (ev) => activate(ev, choose));
     });
-    statusEl.textContent = data.nodes.length + " nodes, " + data.edges.length + " links · depth " +
+    const c = data.nodes.find((n) => n.id === center);
+    centerLabel = c ? c.label : "";
+    const plural = (n, word) => n + " " + word + (n === 1 ? "" : "s");
+    summary = plural(data.nodes.length, "node") + ", " + plural(data.edges.length, "link") + " · depth " +
       data.depth + (data.truncated ? " · limited to " + data.limits.nodes + " nodes / " +
-      data.limits.edges + " links" : "") + ". Click a node to inspect, click again to centre on it.";
+      data.limits.edges + " links" : "");
+    if (!data.nodes.length) summary = "Nothing to show with these filters — tick more node types";
+    describe();
+  }
+
+  let centerLabel = "", selectedLabel = "", summary = "";
+  function describe() {
+    statusEl.textContent = (centerLabel ? "Centred on “" + centerLabel + "”. " : "") +
+      (selectedLabel && selectedLabel !== centerLabel ? "Selected “" + selectedLabel + "”. " : "") +
+      summary + ". Select a node to inspect it; select it again to centre on it.";
   }
 
   async function load() {
-    statusEl.textContent = "Loading…";
+    statusEl.textContent = "Loading graph…";
     const q = new URLSearchParams({ node: String(center), depth: String(depth), types: types().join(",") });
     try {
       const r = await fetch("/notebooks/" + nb + "/memory/graph.json?" + q.toString(), { credentials: "same-origin" });

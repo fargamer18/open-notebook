@@ -2,23 +2,24 @@
 <section class="panel search-panel" aria-labelledby="search-title">
   <div class="panel-head">
     <h2 id="search-title">Search</h2>
-    <span class="muted">Sources, notes, chats and memory · offline · no AI model answers here</span>
+    <span class="muted">Sources, notes, annotations, chats and memory · offline · no AI answers here</span>
   </div>
   <form class="search-form" method="get" action="/notebooks/{{ nb.id }}/search" role="search"
         hx-get="/notebooks/{{ nb.id }}/search" hx-target="#search-results" hx-swap="outerHTML" hx-push-url="true"
         hx-indicator="#search-busy">
     <label class="sr-only" for="search-q">Search this notebook</label>
-    <input id="search-q" name="q" value="{{ query }}" maxlength="{{ max_query }}" placeholder="Search this notebook…" autocomplete="off" autofocus>
+    <input id="search-q" name="q" type="search" value="{{ query }}" maxlength="{{ max_query }}" placeholder="Search this notebook…" autocomplete="off"
+           {% if not query %}autofocus{% endif %} data-slash-focus data-result-input>
     <input type="hidden" name="mode" value="{{ mode }}">
     <fieldset class="engine">
       <legend class="sr-only">Source search engine</legend>
-      <label class="check"><input type="radio" name="engine" value="lexical" {% if engine != "hybrid" %}checked{% endif %}> Fast keyword</label>
-      <label class="check"><input type="radio" name="engine" value="hybrid" {% if engine == "hybrid" %}checked{% endif %}> Hybrid (semantic)</label>
+      <label class="check" title="Exact words, instant, never loads the embedding model"><input type="radio" name="engine" value="lexical" {% if engine != "hybrid" %}checked{% endif %} aria-describedby="engine-fast-desc"> Fast keyword <span class="engine-desc" id="engine-fast-desc">exact words · instant</span></label>
+      <label class="check" title="Adds meaning-based matches for sources; may load the embedding model"><input type="radio" name="engine" value="hybrid" {% if engine == "hybrid" %}checked{% endif %} aria-describedby="engine-hybrid-desc"> Hybrid <span class="engine-desc" id="engine-hybrid-desc">+ meaning · sources only</span></label>
     </fieldset>
     <button class="btn btn-primary" type="submit">Search</button>
-    <span id="search-busy" class="htmx-indicator muted">Searching…{% if not embedder_ready %} hybrid search may first load the embedding model (~15 s){% endif %}</span>
+    <span id="search-busy" class="htmx-indicator muted" role="status">Searching…{% if not embedder_ready %} (Hybrid may first load the embedding model, ~15 s){% endif %}</span>
   </form>
-  <p class="hint">{% if embedder_ready %}Embedding model is ready.{% else %}Embedding model is sleeping: keyword search never wakes it; Hybrid will load it (~15 s) the first time.{% endif %}</p>
+  <p class="hint">{% if embedder_ready %}Embedding model is ready.{% else %}Embedding model is sleeping: Fast keyword search never wakes it; Hybrid will load it (~15 s) the first time.{% endif %} Search runs only when you press Search.</p>
   <nav class="mem-filters" aria-label="Search sections">
     {% for m, label in [("all", "All"), ("sources", "Sources"), ("notes", "Notes"), ("annotations", "Annotations"), ("chats", "Chats"), ("memory", "Memory")] %}
       <a href="/notebooks/{{ nb.id }}/search?q={{ query | urlencode }}&amp;mode={{ m }}&amp;engine={{ engine }}" {% if m == mode %}aria-current="page"{% endif %}>{{ label }}</a>

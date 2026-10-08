@@ -1,0 +1,16 @@
+{# Notebook-level navigation, shared by the workspace, source and reader pages.
+   Expects nb, tab; optional last_read (most recent PDF in the reader) and
+   reader_src (the PDF open on this page). #}
+{% set nb_base = "/notebooks/" ~ nb.id %}
+<nav class="tabs" aria-label="Notebook">
+  <a href="{{ nb_base }}?tab=sources" {% if tab == "sources" %}aria-current="page"{% endif %}>Sources</a>
+  <a href="{{ nb_base }}/chat" {% if tab == "chat" %}aria-current="page"{% endif %}>Chat</a>
+  <a href="{{ nb_base }}/notes" {% if tab == "notes" %}aria-current="page"{% endif %}>Notes</a>
+  <a href="{{ nb_base }}/memory" {% if tab == "memory" %}aria-current="page"{% endif %}>Memory</a>
+  <a href="{{ nb_base }}/search" {% if tab == "search" %}aria-current="page"{% endif %}>Search</a>
+  {% set reading = reader_src if reader_src is defined and reader_src else (last_read if last_read is defined else none) %}
+  {% if reading %}
+  <a class="tab-reader" href="{{ nb_base }}/sources/{{ reading.id }}/read" {% if tab == "reader" %}aria-current="page"{% endif %}
+     title="{{ reading.filename if reading.filename is defined else reading.original_filename }}">Reader<span class="tab-file"> · {{ reading.filename if reading.filename is defined else reading.original_filename }}</span></a>
+  {% endif %}
+</nav>

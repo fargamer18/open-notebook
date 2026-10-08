@@ -1,3 +1,4 @@
+{% from "macros.html" import delete_trigger %}
 {% set base = "/notebooks/" ~ src.notebook_id ~ "/sources/" ~ src.id %}
 {% set target = "#src-" ~ src.id %}
 <li class="src-row status-{{ src.status }}{% if mode == 'confirm' %} is-confirming{% endif %}" id="src-{{ src.id }}"
@@ -42,13 +43,14 @@
   <span class="src-actions">
     {% if src.status == "failed" %}
       <form method="post" action="{{ base }}/retry" hx-post="{{ base }}/retry" hx-target="{{ target }}" hx-swap="outerHTML">
-        <button class="btn btn-sm" type="submit">Retry</button>
+        <button class="btn btn-sm" type="submit" aria-label="Retry {{ src.original_filename }}">Retry</button>
       </form>
     {% endif %}
-    {% if src.status == "ready" %}<a class="btn btn-sm" href="{{ base }}/read">Read</a>{% endif %}
+    {% if src.status == "ready" %}<a class="btn btn-sm" href="{{ base }}/read" aria-label="Read {{ src.original_filename }}">Read</a>{% endif %}
     {% if src.status != "processing" %}
-      <a class="btn btn-ghost btn-sm btn-danger-text" href="{{ base }}/delete"
-         hx-get="{{ base }}/delete" hx-target="{{ target }}" hx-swap="outerHTML">Delete</a>
+      {{ delete_trigger(base ~ "/delete", base ~ "/delete", src.id, "Delete this source permanently?", src.original_filename,
+           "Its stored PDF, extracted text, %d chunks, search vectors, annotations and page renders are removed. Notes and chat answers keep their saved snapshots." % src.chunk_count,
+           "Delete source", target=target) }}
     {% endif %}
   </span>
   {% if error %}<p class="error src-row-error" role="alert">{{ error }}</p>{% endif %}

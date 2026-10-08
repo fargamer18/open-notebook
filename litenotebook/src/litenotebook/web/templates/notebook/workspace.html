@@ -1,14 +1,24 @@
 {% extends "base.html" %}
+{% from "macros.html" import crumbs %}
 {% set nav = "notebooks" %}
 {% set nb = s.notebook %}
-{% block title %}{{ nb.name }}{% endblock %}
+{% set label = tabs[tab][0] %}
+{% block title %}{% if tab == "chat" and conversation %}{{ conversation.title }} · {% elif tab == "notes" and note %}{{ note.title }} · {% endif %}{{ label }} · {{ nb.name }}{% endblock %}
 {% block scripts %}{% if tab == "chat" %}<script src="/static/chat.js" defer></script>{% elif tab == "notes" and note %}<script src="/static/notes.js" defer></script>{% elif tab == "memory" and memory_view == "graph" %}<script src="/static/graph.js" defer></script>{% endif %}{% endblock %}
 {% block content %}
-<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Notebooks</a><span aria-hidden="true">/</span><span>{{ nb.name }}</span></nav>
+{% set nb_url = "/notebooks/" ~ nb.id %}
+{% set trail = [("Notebooks", "/"), (nb.name, nb_url ~ "?tab=sources")] %}
+{% if tab == "chat" and conversation %}{% set trail = trail + [("Chat", nb_url ~ "/chat"), (conversation.title, "")] %}
+{% elif tab == "notes" and note %}{% set trail = trail + [("Notes", nb_url ~ "/notes"), (note.title, "")] %}
+{% elif tab == "memory" and memory_view == "graph" %}{% set trail = trail + [("Memory", nb_url ~ "/memory"), ("Graph", "")] %}
+{% else %}{% set trail = trail + [(label, "")] %}{% endif %}
+{{ crumbs(trail) }}
 
 <header class="ws-head">
-  <h1>{{ nb.name }}</h1>
-  {% if nb.description %}<p class="muted">{{ nb.description }}</p>{% endif %}
+  <div class="ws-title">
+    <h1>{{ nb.name }}</h1>
+    {% if nb.description %}<p class="muted ws-desc">{{ nb.description }}</p>{% endif %}
+  </div>
   <dl class="meta-row">
     <div><dt>Sources</dt><dd id="ws-sources">{{ s.sources }}</dd></div>
     <div><dt>Chunks</dt><dd id="ws-chunks">{{ s.chunks }}</dd></div>
@@ -17,13 +27,8 @@
   </dl>
 </header>
 
-<nav class="tabs" aria-label="Workspace">
-  {% for key, (label, _desc, _phase) in tabs.items() %}
-    <a href="{{ '/notebooks/%d/%s' % (nb.id, key) if key in ('chat', 'memory', 'notes', 'search') else '/notebooks/%d?tab=%s' % (nb.id, key) }}" {% if key == tab %}aria-current="page"{% endif %}>{{ label }}</a>
-  {% endfor %}
-</nav>
+{% include "partials/nb_nav.html" %}
 
-{% set label, desc, phase = tabs[tab] %}
 {% if tab == "sources" %}
   {% include "notebook/sources_panel.html" %}
 {% elif tab == "chat" %}
@@ -36,11 +41,5 @@
   {% include "notebook/notes_panel.html" %}
 {% elif tab == "search" %}
   {% include "notebook/search_panel.html" %}
-{% else %}
-<section class="panel placeholder" aria-labelledby="tab-title">
-  <h2 id="tab-title">{{ label }}</h2>
-  <p class="muted">{{ desc }}</p>
-  <p class="phase">Not built yet — arrives in Phase {{ phase }}.</p>
-</section>
 {% endif %}
 {% endblock %}

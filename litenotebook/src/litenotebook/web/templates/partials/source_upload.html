@@ -9,7 +9,7 @@
   </div>
   <label class="check"><input type="checkbox" name="ocr" value="1"> OCR pages with no text layer</label>
   <button class="btn btn-primary" type="submit">Upload PDF</button>
-  <span id="upload-busy" class="htmx-indicator muted">Uploading…</span>
+  <span id="upload-busy" class="htmx-indicator muted" role="status">Uploading…</span>
 </form>
 <p class="hint">Pages that already have text are never OCR'd. A PDF can be added once per notebook; other notebooks keep their own copy.</p>
 {% if upload_error %}<p class="error" role="alert">{{ upload_error }}</p>{% endif %}

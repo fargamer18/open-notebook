@@ -30,6 +30,7 @@ from litenotebook.sources import (
     reset_for_retry,
 )
 from litenotebook.web.deps import app_settings, get_db, is_htmx, redirect, render
+from litenotebook.web.navigation import last_read, notify
 
 router = APIRouter(prefix="/notebooks/{notebook_id}/sources")
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
@@ -74,6 +75,7 @@ def _workspace(
         {
             **panel_context(request, conn, notebook_id, **extra),
             "tabs": WORKSPACE_TABS,
+            "last_read": last_read(conn, notebook_id),
             "tab": "sources",
         },
         status_code=status_code,
@@ -288,12 +290,13 @@ def delete(
             request, conn, notebook_id, source_id, str(e), 409, mode="confirm"
         )
     if not is_htmx(request):
-        return redirect(sources_url(notebook_id))
-    return render(
+        return redirect(sources_url(notebook_id), flash="source-deleted")
+    response = render(
         request,
         "partials/source_deleted.html",
         {"src": deleted, "s": get_summary(conn, notebook_id), "oob_counts": True},
     )
+    return notify(response, "Source deleted")
 
 
 def _action_error(

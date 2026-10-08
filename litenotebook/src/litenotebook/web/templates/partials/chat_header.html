@@ -1,3 +1,4 @@
+{% from "macros.html" import delete_trigger %}
 {% set base = "/notebooks/" ~ nb_id ~ "/chat/" ~ conversation.id %}
 {% if mode == "edit" %}
 <div class="chat-head is-editing">
@@ -31,7 +32,9 @@
   <h2 class="chat-title" id="chat-title">{{ conversation.title }}</h2>
   <span class="chat-actions">
     <a class="btn btn-ghost btn-sm" href="{{ base }}/rename" hx-get="{{ base }}/rename" hx-target="#chat-header" hx-swap="innerHTML">Rename</a>
-    <a class="btn btn-ghost btn-sm btn-danger-text" href="{{ base }}/delete" hx-get="{{ base }}/delete" hx-target="#chat-header" hx-swap="innerHTML">Delete</a>
+    {{ delete_trigger(base ~ "/delete", base ~ "/delete", conversation.id, "Delete this conversation permanently?", conversation.title,
+         "Its %d messages, answers and citations are removed. Sources are not affected; notes keep their saved snapshots." % conversation.message_count,
+         "Delete conversation", target="#chat-header", swap="innerHTML") }}
   </span>
 </div>
 {% endif %}

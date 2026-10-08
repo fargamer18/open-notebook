@@ -25,7 +25,7 @@
           {% endif %}
           <form method="post" action="{{ base }}/links/{{ l.id }}/delete" hx-post="{{ base }}/links/{{ l.id }}/delete"
                 hx-target="#note-links" hx-swap="innerHTML" class="link-remove">
-            <button class="fb" type="submit" title="Remove this link">Remove</button>
+            <button class="fb" type="submit" title="Remove this link" aria-label="Remove link: {{ l.label }}">Remove</button>
           </form>
         </div>
         {% if not l.exists %}<p class="notice-warn">Original item has been deleted — showing the saved snapshot.</p>{% endif %}
@@ -41,7 +41,7 @@
     {% endfor %}
   </ul>
   {% else %}
-    <p class="muted">No linked evidence yet.</p>
+    <p class="muted">No linked evidence yet. Attach a passage below, or use “Add to note…” on chat evidence, memory or PDF annotations.</p>
   {% endif %}
   {% if concepts %}
     <h3>Concepts in memory</h3>

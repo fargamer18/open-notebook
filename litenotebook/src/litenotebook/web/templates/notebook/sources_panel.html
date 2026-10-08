@@ -15,5 +15,8 @@
       {% with mode = "view", oob_counts = false %}{% include "partials/source_row.html" %}{% endwith %}
     {% endfor %}
   </ul>
-  <p class="empty" id="source-empty" {% if sources %}hidden{% endif %}>No sources yet. Upload a PDF above; it is processed in the background.</p>
+  <div class="empty-state" id="source-empty" {% if sources %}hidden{% endif %}>
+    <p>No sources yet. Upload a PDF above; it is processed in the background.</p>
+    <p class="hint">When it shows <strong>Ready</strong>, ask about it in <a href="/notebooks/{{ nb.id }}/chat">Chat</a>, read it in the built-in reader, or collect evidence in <a href="/notebooks/{{ nb.id }}/notes">Notes</a>.</p>
+  </div>
 </section>

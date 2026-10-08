@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<section class="page-head">
-  <h1>{{ title }}</h1>
+<section class="panel error-page" aria-labelledby="error-title">
+  {% if status %}<p class="status-code">Error {{ status }}</p>{% endif %}
+  <h1 id="error-title">{{ title }}</h1>
   <p class="muted">{{ message }}</p>
-  <p><a href="/">Back to notebooks</a></p>
+  <div class="actions">
+    {% if notebook_id %}<a class="btn btn-primary" href="/notebooks/{{ notebook_id }}">Back to the notebook</a>{% endif %}
+    <a class="btn{% if not notebook_id %} btn-primary{% endif %}" href="/">Go to notebooks</a>
+    <a class="btn btn-ghost" href="/" data-history-back>Go back</a>
+  </div>
 </section>
 {% endblock %}

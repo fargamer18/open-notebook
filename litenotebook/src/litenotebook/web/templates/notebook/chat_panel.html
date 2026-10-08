@@ -1,14 +1,20 @@
 {% set nb = s.notebook %}
-<div class="chat{% if in_reader %} in-reader{% endif %}" id="chat" {% if in_reader %}data-in-reader="1"{% endif %}
+<div class="chat{% if in_reader %} in-reader{% endif %}" id="chat" {% if in_reader %}data-in-reader="1"{% else %}data-collapse-root{% endif %}
      data-notebook-id="{{ nb.id }}"
      data-send-url="/notebooks/{{ nb.id }}/chat/send"
      data-chat-url="/notebooks/{{ nb.id }}/chat">
   <aside class="chat-side" aria-label="Conversations">
-    <a class="btn btn-primary btn-block" href="/notebooks/{{ nb.id }}/chat/new"
-       {% if in_reader %}hx-get="/notebooks/{{ nb.id }}/reader/panel/chat?c=0" hx-target="#reader-panel"{% endif %}>New chat</a>
-    <div id="conversations" hx-get="/notebooks/{{ nb.id }}/chat/sidebar{% if conversation %}?current={{ conversation.id }}{% endif %}"
-         hx-trigger="conversations-changed from:body">
-      {% with current_id = conversation.id if conversation else none %}{% include "partials/chat_conversations.html" %}{% endwith %}
+    <div class="chat-side-head">
+      <a class="btn btn-primary btn-block" href="/notebooks/{{ nb.id }}/chat/new"
+         {% if in_reader %}hx-get="/notebooks/{{ nb.id }}/reader/panel/chat?c=0" hx-target="#reader-panel"{% endif %}>New chat</a>
+      {% if not in_reader %}<button class="btn btn-ghost btn-sm btn-icon" type="button" data-collapse-key="chat-sidebar"
+              aria-controls="conv-panel" aria-expanded="true" aria-label="Show or hide the conversation list" title="Show or hide conversations">☰</button>{% endif %}
+    </div>
+    <div id="conv-panel">
+      <div id="conversations" hx-get="/notebooks/{{ nb.id }}/chat/sidebar{% if conversation %}?current={{ conversation.id }}{% endif %}"
+           hx-trigger="conversations-changed from:body">
+        {% with current_id = conversation.id if conversation else none %}{% include "partials/chat_conversations.html" %}{% endwith %}
+      </div>
     </div>
   </aside>
 
@@ -21,7 +27,9 @@
       {% endif %}
     </div>
 
-    <div class="chat-log" id="chat-log" aria-live="polite">
+    {# Not a live region: streamed tokens would flood screen readers. The
+       composer status (role=status) announces "Generating…" / "Answer ready". #}
+    <div class="chat-log" id="chat-log" aria-label="Messages" tabindex="-1">
       {% for m in messages %}
         {% with nb_id = nb.id %}{% include "partials/chat_message.html" %}{% endwith %}
       {% else %}
@@ -32,20 +40,23 @@
           {% else %}
             <p>No ready sources in this notebook yet.</p>
             <p class="muted"><a href="/notebooks/{{ nb.id }}?tab=sources">Upload a PDF under Sources</a>; chat answers only from Ready sources.</p>
+            <p class="muted">Earlier conversations will appear on the left.</p>
           {% endif %}
         </div>
       {% endfor %}
     </div>
+    <button class="btn btn-sm to-latest" type="button" id="to-latest" hidden>↓ Latest</button>
 
     <form class="composer" id="composer" method="post" action="/notebooks/{{ nb.id }}/chat/send" autocomplete="off">
       <input type="hidden" name="conversation_id" value="{{ conversation.id if conversation else '' }}">
       <label class="sr-only" for="question">Question</label>
       <textarea id="question" name="question" rows="2" maxlength="{{ max_question }}" required
-                placeholder="Ask about this notebook's sources…  (Enter to send, Shift+Enter for a new line)"></textarea>
+                placeholder="Ask about this notebook's sources…" aria-describedby="composer-hint"></textarea>
       <div class="composer-actions">
         <button class="btn btn-primary" type="submit" id="send">Send</button>
         <button class="btn" type="button" id="stop" hidden>Stop generating</button>
         <span class="muted composer-status" id="composer-status" role="status"></span>
+        <span class="composer-hint" id="composer-hint"><kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span>
       </div>
       <p class="error" id="composer-error" role="alert" hidden></p>
       <noscript><p class="error">Chat needs JavaScript (a small local script) to stream answers.</p></noscript>

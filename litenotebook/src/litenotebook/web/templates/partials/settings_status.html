@@ -2,7 +2,7 @@
 <div class="status status-{{ state }}">
   <p class="status-line">
     <span class="dot dot-{{ state }}" aria-hidden="true"></span>
-    <strong>{% if report.ok %}Connected{% elif report.reachable %}Check the model{% else %}Unreachable{% endif %}</strong>
+    <strong>{% if report.ok %}Connected{% elif report.reachable %}Connected — check the model{% else %}Unavailable{% endif %}</strong>
     <span class="muted mono">{{ "%.0f" | format(report.elapsed_ms) }} ms</span>
   </p>
   <p>{{ report.message }}</p>

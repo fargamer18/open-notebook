@@ -3,7 +3,8 @@
   <div class="field">
     <label for="nb-name">Name</label>
     <input id="nb-name" name="name" required maxlength="{{ limits.name }}"
-           value="{{ form.name or '' }}" placeholder="e.g. Linear algebra" autocomplete="off">
+           value="{{ form.name or '' }}" placeholder="e.g. Linear algebra" autocomplete="off"
+           {% if error or (request and request.query_params.get("new")) or summaries is defined and not summaries %}autofocus{% endif %}>
   </div>
   <div class="field grow">
     <label for="nb-description">Description <span class="muted">(optional)</span></label>
@@ -11,5 +12,6 @@
            value="{{ form.description or '' }}" autocomplete="off">
   </div>
   <button class="btn btn-primary" type="submit">Create notebook</button>
+  <span class="htmx-indicator muted">Creating…</span>
 </form>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}

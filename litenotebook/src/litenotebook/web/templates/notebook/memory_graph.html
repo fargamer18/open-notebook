@@ -21,21 +21,27 @@
       <label class="check"><input type="radio" name="depth" value="2" {% if depth == 2 %}checked{% endif %}> Depth 2</label>
     </fieldset>
     <fieldset class="graph-opts" id="graph-types">
-      <legend class="sr-only">Show</legend>
+      <legend class="sr-only">Node types shown (legend)</legend>
+      <span class="muted" aria-hidden="true">Show:</span>
       {% for t, label in [("concept", "Concepts"), ("note", "Notes"), ("question", "Questions"), ("answer", "Answers"), ("correction", "Corrections"), ("source_evidence", "Evidence"), ("conversation", "Conversations")] %}
         <label class="check"><input type="checkbox" value="{{ t }}" checked> <span class="gdot gdot-{{ t }}" aria-hidden="true"></span>{{ label }}</label>
       {% endfor %}
     </fieldset>
-    <p class="muted graph-status" id="graph-status" role="status">Loading…</p>
+    <div class="graph-zoom" role="group" aria-label="Graph zoom">
+      <button class="btn btn-sm btn-icon" type="button" id="graph-zoom-out" aria-label="Zoom out">−</button>
+      <button class="btn btn-sm btn-icon" type="button" id="graph-zoom-in" aria-label="Zoom in">+</button>
+      <button class="btn btn-sm" type="button" id="graph-zoom-reset">Reset view</button>
+    </div>
+    <p class="muted graph-status" id="graph-status" role="status">Loading graph…</p>
   </div>
   {% else %}
-    <p class="empty">No memory yet. Ask questions in Chat or write notes; their concepts appear here.</p>
+    <div class="empty-state"><p>No memory yet. Ask questions in <a href="/notebooks/{{ nb.id }}/chat">Chat</a> or write <a href="/notebooks/{{ nb.id }}/notes">Notes</a>; their concepts appear here as a graph.</p></div>
   {% endif %}
 </section>
 {% if center %}
 <div class="graph-layout">
   <section class="panel graph-canvas" aria-label="Graph"><svg id="graph-svg" role="img" aria-label="Local memory graph"></svg></section>
-  <aside class="evidence" id="graph-inspector" aria-live="polite"><p class="muted">Click a node or a link to inspect it. Click a node twice to centre the graph on it.</p></aside>
+  <aside class="evidence" id="graph-inspector" aria-live="polite" aria-label="Inspector"><p class="muted">Click a node or a link (or focus it with <kbd>Tab</kbd> and press <kbd>Enter</kbd>) to inspect it. Activate a selected node again to centre the graph on it.</p></aside>
 </div>
 <noscript><p class="error">The graph view needs JavaScript (a small local script). The <a href="/notebooks/{{ nb.id }}/memory">list view</a> works without it.</p></noscript>
 {% endif %}

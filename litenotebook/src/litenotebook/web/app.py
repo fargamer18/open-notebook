@@ -14,8 +14,14 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from litenotebook import __version__
 from litenotebook.chat import (
@@ -51,6 +57,7 @@ from litenotebook.web.routes import (
     reader,
     search,
     settings,
+    shell,
     sources,
 )
 from litenotebook.web.security import LocalOnlyMiddleware
@@ -129,36 +136,16 @@ def create_app(
     app.include_router(reader.panels)
     app.include_router(settings.router)
     app.include_router(health.router)
+    app.include_router(shell.router)
 
-    @app.exception_handler(NotebookNotFoundError)
-    async def not_found(request: Request, exc: NotebookNotFoundError) -> HTMLResponse:
-        return render(
-            request,
-            "error.html",
-            {"title": "Not found", "message": str(exc)},
-            status_code=404,
-        )
-
-    @app.exception_handler(SourceNotFoundError)
-    async def source_not_found(
-        request: Request, exc: SourceNotFoundError
-    ) -> HTMLResponse:
-        return render(
-            request,
-            "error.html",
-            {"title": "Not found", "message": str(exc)},
-            status_code=404,
-        )
-
-    async def chat_not_found(request: Request, exc: Exception) -> HTMLResponse:
-        return render(
-            request,
-            "error.html",
-            {"title": "Not found", "message": str(exc)},
-            status_code=404,
-        )
+    async def missing_item(request: Request, exc: Exception) -> HTMLResponse:
+        # A missing notebook gets no "back to notebook" link.
+        in_notebook = not isinstance(exc, NotebookNotFoundError)
+        return error_page(request, 404, str(exc), in_notebook=in_notebook)
 
     for missing in (
+        NotebookNotFoundError,
+        SourceNotFoundError,
         ConversationNotFoundError,
         MessageNotFoundError,
         CitationNotFoundError,
@@ -167,7 +154,29 @@ def create_app(
         NoteNotFoundError,
         AnnotationNotFoundError,
     ):
-        app.add_exception_handler(missing, chat_not_found)
+        app.add_exception_handler(missing, missing_item)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
+        if not wants_page(request):  # API/HTMX callers keep FastAPI's JSON
+            return await http_exception_handler(request, exc)
+        return error_page(request, exc.status_code)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(
+        request: Request, exc: RequestValidationError
+    ) -> Response:
+        if not wants_page(request):
+            return await request_validation_exception_handler(request, exc)
+        return error_page(request, 422)
+
+    @app.exception_handler(Exception)
+    async def unexpected(request: Request, exc: Exception) -> Response:
+        # Details go to the local server log only, never to the page.
+        log.exception("Unhandled error on %s %s", request.method, request.url.path)
+        if not wants_page(request):
+            return JSONResponse({"error": "Unexpected error"}, status_code=500)
+        return error_page(request, 500)
 
     @app.exception_handler(SettingsError)
     async def bad_settings(request: Request, exc: SettingsError) -> HTMLResponse:
@@ -179,3 +188,41 @@ def create_app(
         )
 
     return app
+
+
+ERROR_PAGES = {
+    403: ("Not allowed", "This request is not allowed."),
+    404: ("Not found", "That page or item does not exist (it may have been deleted)."),
+    405: ("Not allowed", "That action is not available here."),
+    422: ("Invalid request", "The address or form contained an invalid value."),
+    500: (
+        "Something went wrong",
+        "An unexpected error occurred. Details are in the local server log.",
+    ),
+}
+
+
+def wants_page(request: Request) -> bool:
+    """A browser navigation (not HTMX, not fetch/JSON)."""
+    return request.headers.get(
+        "hx-request"
+    ) != "true" and "text/html" in request.headers.get("accept", "")
+
+
+def error_page(
+    request: Request, status: int, message: str = "", *, in_notebook: bool = True
+) -> HTMLResponse:
+    title, default = ERROR_PAGES.get(status, ("Error", "The request failed."))
+    raw = request.path_params.get("notebook_id") if in_notebook else None
+    notebook_id = int(raw) if isinstance(raw, str) and raw.isdigit() else None
+    return render(
+        request,
+        "error.html",
+        {
+            "title": title,
+            "message": message or default,
+            "status": status,
+            "notebook_id": notebook_id,
+        },
+        status_code=status,
+    )

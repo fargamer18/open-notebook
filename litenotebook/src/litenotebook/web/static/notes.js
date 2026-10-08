@@ -12,8 +12,11 @@
   const revision = form.elements.revision;
   const state = form.querySelector("#save-state") || document.getElementById("save-state");
   const updated = document.getElementById("note-updated");
+  const conflictBox = document.getElementById("note-conflict");
   const DEBOUNCE_MS = 800;
   let timer = null, saving = false, dirty = false, failed = false, conflict = false, retryMs = 2000;
+  let explicit = false, leaving = false;
+  const toast = (kind, text) => { if (window.LN) window.LN.notify(kind, text); };
 
   function show(kind, text) {
     state.dataset.state = kind;
@@ -27,6 +30,7 @@
   }
 
   async function save() {
+    if (!saving && !conflict && !dirty && explicit) { explicit = false; show("saved", "Saved"); toast("success", "Note saved"); return; }
     if (saving || conflict || !dirty) return;
     saving = true;
     dirty = false;
@@ -45,14 +49,17 @@
         failed = false;
         retryMs = 2000;
         show(dirty ? "dirty" : "saved", dirty ? "Unsaved changes" : "Saved");
+        if (explicit) { explicit = false; toast("success", "Note saved"); }
       } else if (r.status === 409) {
         conflict = true;
         dirty = true;
-        show("error", "Not saved: this note changed elsewhere. Copy your text, then reload.");
+        show("error", "Not saved — changed elsewhere");
+        if (conflictBox) conflictBox.hidden = false;
       } else {
         dirty = true;
         failed = r.status >= 500 || r.status === 0;
         show("error", "Not saved: " + (data.error || ("HTTP " + r.status)));
+        if (explicit) { explicit = false; toast("error", "Note not saved: " + (data.error || ("HTTP " + r.status))); }
         if (failed) { schedule(retryMs); retryMs = Math.min(retryMs * 2, 30000); }
       }
     } catch (e) {
@@ -79,12 +86,23 @@
     if ((event.ctrlKey || event.metaKey) && event.key === "s") {
       event.preventDefault();
       clearTimeout(timer);
+      explicit = true;
       save();
     }
   });
-  form.addEventListener("submit", () => { dirty = false; });  // plain-form fallback
+  // With JavaScript, "Save now" saves in place (the plain POST is the fallback).
+  form.addEventListener("submit", (event) => {
+    if (!url) { dirty = false; return; }
+    event.preventDefault();
+    clearTimeout(timer);
+    explicit = true;
+    save();
+  });
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-discard-reload]")) leaving = true;  // user chose to discard
+  });
   window.addEventListener("beforeunload", (event) => {
-    if ((dirty || saving) && form.isConnected) {
+    if ((dirty || saving) && form.isConnected && !leaving) {
       event.preventDefault();
       event.returnValue = "";
     }

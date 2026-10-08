@@ -8,6 +8,10 @@
   "use strict";
   const R = document.getElementById("reader");
   if (!R) return;
+  const LN = window.LN || {
+    store: { get: (k, d) => d, set: () => {} },
+    notify: () => {}, dialogOpen: () => !!document.querySelector("dialog[open]"),
+  };
   const nb = R.dataset.notebookId, sid = R.dataset.sourceId;
   const pages = Number(R.dataset.pages);
   const base = "/notebooks/" + nb + "/sources/" + sid;
@@ -15,10 +19,13 @@
   const viewport = $("r-viewport"), box = $("r-pagebox"), img = $("r-img");
   const hl = $("r-hl"), textLayer = $("r-text"), status = $("r-status");
   const pageInput = $("r-page"), zoomLabel = $("r-zoom"), tools = $("r-sel");
+  const fitBtn = $("r-fit"), backBtn = $("r-back");
   const SCALES = [1, 1.5, 2, 2.5, 3];
+  const SIDE_MIN = 280, SIDE_MAX = 760;
   let page = Math.min(Math.max(1, Number(R.dataset.page) || 1), pages);
   let zoom = Number(R.dataset.zoom) || 1;           // 1 = fit width
   let focus = { kind: R.dataset.focusKind, id: Number(R.dataset.focusId) || 0 };
+  let cited = null;   // {page, focus}: where "Back to cited passage" returns
   let ptsWidth = null, words = [], saveTimer = null, selection = null, loadToken = 0;
 
   function say(text, kind) { status.textContent = text || ""; status.dataset.kind = kind || ""; }
@@ -46,6 +53,18 @@
   }
 
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  function reveal(el) {  // centre an overlay inside the page view only
+    const r = el.getBoundingClientRect(), v = viewport.getBoundingClientRect();
+    viewport.scrollTop += (r.top - v.top) - v.height / 2 + r.height / 2;
+  }
+
+  // The header can wrap onto two rows; size the reader to what is left.
+  function fitHeight() {
+    const head = document.querySelector(".reader-head");
+    if (head) document.documentElement.style.setProperty("--reader-head", head.offsetHeight + 6 + "px");
+  }
+  fitHeight();
 
   async function loadText(p, token) {
     clear(textLayer);
@@ -86,6 +105,13 @@
     return made;
   }
 
+  function emphasiseListItem() {
+    document.querySelectorAll(".ann.is-focused").forEach((n) => n.classList.remove("is-focused"));
+    if (focus.kind !== "annotation") return;
+    const item = $("ann-" + focus.id);
+    if (item) { item.classList.add("is-focused"); item.scrollIntoView({ block: "nearest" }); }
+  }
+
   async function loadAnnotations(p, token) {
     const r = await fetch(base + "/annotations.json?page=" + p, { credentials: "same-origin" });
     const data = await r.json();
@@ -95,9 +121,15 @@
       const made = drawRects(a.rects, "hl-user hl-" + a.color, { id: a.id, title: a.comment || a.text });
       if (focus.kind === "annotation" && focus.id === a.id && made.length) {
         made.forEach((d) => d.classList.add("is-focused"));
-        made[0].scrollIntoView({ block: "center" });
+        reveal(made[0]);
+        say("Annotation on page " + p, "ok");
       }
     });
+    emphasiseListItem();
+  }
+
+  function updateBack() {
+    backBtn.hidden = !cited || cited.page === page;
   }
 
   async function applyFocus(p, token) {
@@ -111,12 +143,14 @@
       if (token !== loadToken) return;
       if (!r.ok) { say(t.error || "Passage unavailable", "warn"); return; }
       if (!t.live) { say(t.reason || "Original source has been deleted", "warn"); return; }
-      if (t.page !== p) { goTo(t.page); return; }
+      if (t.page !== p) { goTo(t.page, focus); return; }
+      cited = { page: t.page, focus: { kind: focus.kind, id: focus.id } };
+      updateBack();
       hl.querySelectorAll(".hl-cite").forEach((n) => n.remove());
       if (t.rects && t.rects.length) {
         const made = drawRects(t.rects, "hl-cite", { title: "Cited passage" });
-        made[0].scrollIntoView({ block: "center" });
-        say("Cited passage highlighted on page " + p, "ok");
+        reveal(made[0]);
+        say((focus.kind === "citation" ? "Cited passage" : "Passage") + " highlighted on page " + p, "ok");
       } else {
         say((t.reason || "Highlight unavailable for this passage") + " — it is on page " + p + ".", "warn");
       }
@@ -129,7 +163,8 @@
 
   function layout() {
     box.style.width = cssWidth() + "px";
-    zoomLabel.textContent = Math.round(zoom * 100) + "%";
+    zoomLabel.textContent = Math.round(zoom * 100) + "%" + (zoom === 1 ? " · fit" : "");
+    fitBtn.setAttribute("aria-pressed", zoom === 1 ? "true" : "false");
   }
 
   function show(p) {
@@ -139,8 +174,9 @@
     layout();
     clear(hl);
     hideTools();
-    say("Loading page…", "busy");
-    img.alt = "Page " + page;
+    updateBack();
+    say("Rendering page " + page + "…", "busy");
+    img.alt = "Page " + page + " of " + pages;
     img.onload = async () => {
       if (token !== loadToken) return;
       if (!ptsWidth) ptsWidth = img.naturalWidth / 1.5;
@@ -150,7 +186,7 @@
       await applyFocus(page, token);
       preload(page);
     };
-    img.onerror = () => { if (token === loadToken) say("Render failed — page unavailable", "error"); };
+    img.onerror = () => { if (token === loadToken) say("Render failed — page " + page + " is unavailable. Try another page or reload.", "error"); };
     img.src = pageUrl(page);
     scheduleSave();
   }
@@ -218,17 +254,18 @@
     if (!r.ok) { const e = $("r-sel-error"); e.textContent = data.error || "Not saved"; e.hidden = false; tools.hidden = false; return null; }
     if (window.htmx) window.htmx.trigger(document.body, "annotations-changed");
     loadAnnotations(page, loadToken);
+    LN.notify("success", kind === "comment" ? "Annotation created" : "Highlight created (" + (color || "yellow") + ")");
     return data;
   }
 
   tools.querySelectorAll("[data-color]").forEach((b) => b.addEventListener("click", async () => {
-    if (await save("highlight", b.dataset.color)) { window.getSelection().removeAllRanges(); hideTools(); }
+    if (await save("highlight", b.dataset.color)) { window.getSelection().removeAllRanges(); hideTools(); viewport.focus(); }
   }));
   $("r-annotate").addEventListener("click", () => { $("r-comment-box").hidden = false; $("r-comment").focus(); });
   $("r-comment-save").addEventListener("click", async () => {
     const text = $("r-comment").value.trim();
-    if (!text) return;
-    if (await save("comment", "yellow", text)) { $("r-comment").value = ""; hideTools(); }
+    if (!text) { $("r-comment").focus(); return; }
+    if (await save("comment", "yellow", text)) { $("r-comment").value = ""; hideTools(); viewport.focus(); }
   });
   $("r-to-note").addEventListener("click", async () => {
     const a = await save("highlight", "yellow");
@@ -251,16 +288,21 @@
   $("r-prev").addEventListener("click", () => goTo(page - 1));
   $("r-next").addEventListener("click", () => goTo(page + 1));
   pageInput.addEventListener("change", () => goTo(Number(pageInput.value) || page));
+  pageInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); goTo(Number(pageInput.value) || page); } });
   $("r-zoom-in").addEventListener("click", () => setZoom(zoom + 0.15));
   $("r-zoom-out").addEventListener("click", () => setZoom(zoom - 0.15));
-  $("r-fit").addEventListener("click", () => setZoom(1));
+  fitBtn.addEventListener("click", () => setZoom(1));
+  backBtn.addEventListener("click", () => { if (cited) goTo(cited.page, cited.focus); });
   document.addEventListener("keydown", (e) => {
-    if (typing(document.activeElement)) return;
-    if (e.key === "PageDown" || e.key === "ArrowRight") { e.preventDefault(); goTo(page + 1); }
-    else if (e.key === "PageUp" || e.key === "ArrowLeft") { e.preventDefault(); goTo(page - 1); }
+    if (e.key === "Escape" && !tools.hidden) { hideTools(); viewport.focus(); return; }
+    if (LN.dialogOpen() || typing(document.activeElement)) return;
+    const t = e.target;
+    if (t && t.closest && t.closest("[role=tablist], [role=separator]")) return;  // own arrow keys
+    if (e.altKey || e.metaKey) return;
+    if (!e.ctrlKey && (e.key === "PageDown" || e.key === "ArrowRight")) { e.preventDefault(); goTo(page + 1); }
+    else if (!e.ctrlKey && (e.key === "PageUp" || e.key === "ArrowLeft")) { e.preventDefault(); goTo(page - 1); }
     else if (e.ctrlKey && (e.key === "+" || e.key === "=")) { e.preventDefault(); setZoom(zoom + 0.15); }
     else if (e.ctrlKey && e.key === "-") { e.preventDefault(); setZoom(zoom - 0.15); }
-    else if (e.key === "Escape") hideTools();
   });
 
   // in-place navigation from annotation list / evidence "Open in PDF"
@@ -272,33 +314,75 @@
       : a.dataset.readerCitation ? { kind: "citation", id: Number(a.dataset.readerCitation) }
       : a.dataset.readerChunk ? { kind: "chunk", id: Number(a.dataset.readerChunk) } : null;
     goTo(Number(a.dataset.readerPage), f);
+    viewport.focus();
   });
   document.body.addEventListener("annotations-changed", () => loadAnnotations(page, loadToken));
 
-  // side-panel tabs + resize
-  document.querySelectorAll(".reader-tabs .tab-btn").forEach((b) => b.addEventListener("click", () => {
-    document.querySelectorAll(".reader-tabs .tab-btn").forEach((x) => x.classList.toggle("is-on", x === b));
-  }));
+  // --- side panel: tabs (remembered per browser) --------------------------------
+
+  const tabs = Array.from(document.querySelectorAll(".reader-tabs [role=tab]"));
+  const panel = $("reader-panel");
+  function selectTab(tab, load) {
+    tabs.forEach((x) => {
+      const on = x === tab;
+      x.setAttribute("aria-selected", on ? "true" : "false");
+      x.tabIndex = on ? 0 : -1;
+      x.classList.toggle("is-on", on);
+    });
+    panel.setAttribute("aria-labelledby", tab.id);
+    LN.store.set("reader:tab", tab.dataset.panel);
+    if (load && window.htmx) window.htmx.ajax("GET", tab.getAttribute("hx-get"), { target: "#reader-panel", swap: "innerHTML" });
+  }
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => selectTab(tab, false));  // htmx loads it
+    tab.addEventListener("keydown", (e) => {
+      let next = null;
+      if (e.key === "ArrowRight") next = tabs[(i + 1) % tabs.length];
+      else if (e.key === "ArrowLeft") next = tabs[(i - 1 + tabs.length) % tabs.length];
+      else if (e.key === "Home") next = tabs[0];
+      else if (e.key === "End") next = tabs[tabs.length - 1];
+      if (next) { e.preventDefault(); next.focus(); selectTab(next, true); }
+    });
+  });
+  const startTab = tabs.find((t) => t.dataset.panel === LN.store.get("reader:tab", "annotations")) || tabs[0];
+  setTimeout(() => selectTab(startTab, true), 0);  // after htmx has initialised
+  document.addEventListener("htmx:afterSwap", (e) => { if (e.target === panel) emphasiseListItem(); });
+
+  // --- side panel: resizable split (width remembered per browser) ---------------
+
   const handle = $("r-resize");
-  const savedWidth = (() => { try { return Number(localStorage.getItem("ln-reader-side")) || 0; } catch (e) { return 0; } })();
-  if (savedWidth) R.style.setProperty("--side", savedWidth + "px");
+  function setSide(w, persist) {
+    w = Math.round(Math.min(SIDE_MAX, Math.max(SIDE_MIN, w)));
+    R.style.setProperty("--side", w + "px");
+    handle.setAttribute("aria-valuenow", String(w));
+    if (persist) LN.store.set("reader:side", w);
+  }
+  const savedWidth = Number(LN.store.get("reader:side", 0)) ||
+    (() => { try { return Number(localStorage.getItem("ln-reader-side")) || 0; } catch (e) { return 0; } })();
+  if (savedWidth) setSide(savedWidth, false);
   handle.addEventListener("pointerdown", (e) => {
     handle.setPointerCapture(e.pointerId);
-    const move = (ev) => {
-      const w = Math.min(760, Math.max(280, R.getBoundingClientRect().right - ev.clientX));
-      R.style.setProperty("--side", w + "px");
-    };
+    const move = (ev) => setSide(R.getBoundingClientRect().right - ev.clientX, false);
     const up = () => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", up);
-      try { localStorage.setItem("ln-reader-side", parseInt(getComputedStyle(R).getPropertyValue("--side"), 10)); } catch (err) { /* ignore */ }
+      setSide(parseInt(getComputedStyle(R).getPropertyValue("--side"), 10), true);
       show(page);
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", up);
   });
+  handle.addEventListener("keydown", (e) => {
+    const now = parseInt(getComputedStyle(R).getPropertyValue("--side"), 10) || 400;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      setSide(now + (e.key === "ArrowLeft" ? 32 : -32), true);
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => show(page), 250);
+    }
+  });
   let resizeTimer = null;
-  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => show(page), 200); });
+  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { fitHeight(); show(page); }, 200); });
 
   show(page);
 })();

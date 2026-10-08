@@ -440,7 +440,7 @@ def test_connection_test_failure(app_settings):
     )
     assert r.status_code == 200
     assert (
-        "status-err" in r.text and "Unreachable" in r.text and "llama-server" in r.text
+        "status-err" in r.text and "Unavailable" in r.text and "llama-server" in r.text
     )
 
 
@@ -475,7 +475,8 @@ def test_health_llm_online(client):
     }
     assert h["data"]["status"] == "ok"
     assert h["llm"]["status"] == "reachable" and h["llm"]["model_available"] is True
-    assert "LLM online" in client.get("/health/badge").text
+    badge = client.get("/health/badge").text  # Phase 9 wording
+    assert "LLM" in badge and "Connected" in badge and "dot-ok" in badge
 
 
 def test_health_llm_offline_app_still_works(app_settings):
@@ -483,7 +484,8 @@ def test_health_llm_offline_app_still_works(app_settings):
     r = client.get("/healthz")
     assert r.status_code == 200 and r.json()["status"] == "ok"
     assert r.json()["llm"]["status"] == "unreachable"
-    assert "LLM offline" in client.get("/health/badge").text
+    badge = client.get("/health/badge").text
+    assert "LLM" in badge and "Unavailable" in badge and "dot-err" in badge
     assert create(client, "Works offline").status_code == 303
     assert save(client).status_code == 200
     assert client.get("/settings").status_code == 200

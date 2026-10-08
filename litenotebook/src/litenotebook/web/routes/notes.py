@@ -40,6 +40,7 @@ from litenotebook.unified_search import (
     search_sources_lexical,
 )
 from litenotebook.web.deps import get_db, is_htmx, redirect, render
+from litenotebook.web.navigation import last_read
 
 router = APIRouter(prefix="/notebooks/{notebook_id}/notes")
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
@@ -75,6 +76,7 @@ def _page(
         {
             "s": summary,
             "tabs": WORKSPACE_TABS,
+            "last_read": last_read(conn, notebook_id),
             "tab": "notes",
             "notes": notes,
             "note": note,
@@ -111,7 +113,7 @@ def new_note(
         return _page(
             request, conn, notebook_id, None, create_error=str(e), status_code=422
         )
-    return redirect(note_url(notebook_id, note.id))
+    return redirect(note_url(notebook_id, note.id), flash="note-created")
 
 
 @router.get("/add-form", response_class=HTMLResponse)
@@ -347,7 +349,7 @@ def delete(
             status_code=422,
         )
     delete_note(conn, notebook_id, note_id)
-    return redirect(note_url(notebook_id))
+    return redirect(note_url(notebook_id), flash="note-deleted")
 
 
 @router.get("/{note_id}/attach", response_class=HTMLResponse)

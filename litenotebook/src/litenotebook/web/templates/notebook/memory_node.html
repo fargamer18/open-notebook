@@ -1,12 +1,10 @@
 {% extends "base.html" %}
+{% from "macros.html" import crumbs %}
 {% set nav = "notebooks" %}
 {% set nb = s.notebook %}
 {% block title %}Memory node{% endblock %}
 {% block content %}
-<nav class="crumbs" aria-label="Breadcrumb">
-  <a href="/">Notebooks</a><span aria-hidden="true">/</span>
-  <a href="/notebooks/{{ nb.id }}/memory">{{ nb.name }} · Memory</a><span aria-hidden="true">/</span>
-  <span>{{ node.label }}</span>
-</nav>
+{{ crumbs([("Notebooks", "/"), (nb.name, "/notebooks/%d?tab=sources" % nb.id), ("Memory", "/notebooks/%d/memory" % nb.id), (node.label, "")]) }}
+<h1 class="sr-only">Memory node</h1>
 <section class="panel evidence-page">{% include "partials/memory_node.html" %}</section>
 {% endblock %}

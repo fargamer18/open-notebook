@@ -19,10 +19,22 @@
   const statusEl = document.getElementById("composer-status");
   const errorEl = document.getElementById("composer-error");
   const chatUrl = chat.dataset.chatUrl;
+  const latestBtn = document.getElementById("to-latest");
   let active = null; // {controller, messageId, el}
 
   const nearBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  const scrollIfFollowing = (follow) => { if (follow) log.scrollTop = log.scrollHeight; };
+  const scrollIfFollowing = (follow) => { if (follow) log.scrollTop = log.scrollHeight; updateLatest(); };
+  function updateLatest() { if (latestBtn) latestBtn.hidden = nearBottom(); }
+  log.addEventListener("scroll", updateLatest, { passive: true });
+  if (latestBtn) latestBtn.addEventListener("click", () => { log.scrollTop = log.scrollHeight; updateLatest(); textarea.focus(); });
+
+  // Grows with its content up to a limit, then scrolls.
+  function grow() {
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight + 2, 224) + "px";
+  }
+  textarea.addEventListener("input", grow);
+  textarea.addEventListener("input", () => { if (!errorEl.hidden && textarea.value.trim() && !active) showError(""); });
 
   function showError(text) {
     errorEl.textContent = text || "";
@@ -34,6 +46,7 @@
     textarea.readOnly = busy;
     stopBtn.hidden = !busy;
     stopBtn.disabled = false;
+    log.setAttribute("aria-busy", busy ? "true" : "false");
     statusEl.textContent = label || "";
   }
 
@@ -146,12 +159,16 @@
       if (err.name !== "AbortError") showError("Connection lost: " + err.message);
     } finally {
       const messageId = active && active.messageId;
+      const follow = nearBottom();  // never yank a reader back down
+      const focusWasHere = !document.activeElement || document.activeElement === document.body ||
+        form.contains(document.activeElement);
       active = null;
       setBusy(false, "");
       if (messageId) await replaceWithServerMessage(assistantEl, messageId);
       if (!finished && !messageId && assistantEl.dataset.transient) assistantEl.remove();
-      scrollIfFollowing(true);
-      textarea.focus();
+      scrollIfFollowing(follow);
+      if (finished && errorEl.hidden) statusEl.textContent = "Answer ready.";
+      if (focusWasHere) textarea.focus();
     }
   }
 
@@ -175,7 +192,7 @@
   function send() {
     if (active) return;
     const question = textarea.value.trim();
-    if (!question) { textarea.value = ""; return; }
+    if (!question) { textarea.value = ""; showError("Type a question first."); textarea.focus(); return; }
     const empty = document.getElementById("chat-empty");
     if (empty) empty.remove();
     const userEl = messageElement("user", question);
@@ -189,6 +206,7 @@
     body.set("question", question);
     body.set("conversation_id", form.elements.conversation_id.value);
     textarea.value = "";
+    grow();
     stream(chat.dataset.sendUrl, body, assistantEl, userEl).then(() => {
       if (userEl.isConnected && userEl.dataset.transient) textarea.value = question;
     });
@@ -233,6 +251,7 @@
   });
 
   scrollIfFollowing(true);
+  grow();
   }
 
   function scan(root) {

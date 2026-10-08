@@ -19,6 +19,7 @@ from litenotebook.db import connect
 from litenotebook.notebooks import get_summary
 from litenotebook.unified_search import ENGINES, MAX_QUERY_CHARS, MODES, unified_search
 from litenotebook.web.deps import app_settings, get_db, is_htmx, render
+from litenotebook.web.navigation import last_read
 
 router = APIRouter(prefix="/notebooks/{notebook_id}/search")
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
@@ -57,6 +58,7 @@ async def search_page(
             context = {
                 "s": summary,
                 "tabs": WORKSPACE_TABS,
+                "last_read": last_read(conn, notebook_id),
                 "tab": "search",
                 "results": results,
                 "query": results.query,

@@ -25,6 +25,7 @@ from litenotebook.web.deps import (
     render,
     settings_service,
 )
+from litenotebook.web.navigation import notify
 
 router = APIRouter()
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
@@ -88,9 +89,10 @@ def save_settings(
         return render(request, template, context, status_code=422)
     if not is_htmx(request):
         return redirect("/settings?saved=1")
-    return render(
+    response = render(
         request, "partials/settings_form.html", _context(conn, request, saved=True)
     )
+    return notify(response, "Settings saved")
 
 
 def _status(request: Request, conn: sqlite3.Connection, action: str) -> HTMLResponse:

@@ -54,6 +54,7 @@ from litenotebook.web.deps import (
     render,
     settings_service,
 )
+from litenotebook.web.navigation import last_read, notify, set_flash
 from litenotebook.web.streaming import EventStream
 
 router = APIRouter(prefix="/notebooks/{notebook_id}/chat")
@@ -103,6 +104,7 @@ def _page(
         {
             "s": get_summary(conn, notebook_id),
             "tabs": WORKSPACE_TABS,
+            "last_read": last_read(conn, notebook_id),
             "tab": "chat",
             "conversations": list_conversations(conn, notebook_id),
             "conversation": conversation,
@@ -496,6 +498,7 @@ def rename(
         return redirect(chat_url(notebook_id, conversation_id))
     response = _header(request, conn, notebook_id, conversation_id, "view")
     response.headers["HX-Trigger"] = "conversations-changed"
+    notify(response, "Conversation renamed")
     return response
 
 
@@ -546,5 +549,6 @@ def delete(
             status_code=status,
         )
     if is_htmx(request):
-        return Response(status_code=204, headers={"HX-Redirect": chat_url(notebook_id)})
-    return redirect(chat_url(notebook_id))
+        done = Response(status_code=204, headers={"HX-Redirect": chat_url(notebook_id)})
+        return set_flash(done, "conversation-deleted")
+    return redirect(chat_url(notebook_id), flash="conversation-deleted")

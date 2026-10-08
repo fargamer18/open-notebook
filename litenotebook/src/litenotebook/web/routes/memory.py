@@ -23,6 +23,7 @@ from litenotebook.memory.search import (
 )
 from litenotebook.notebooks import get_summary
 from litenotebook.web.deps import get_db, is_htmx, render
+from litenotebook.web.navigation import last_read
 
 router = APIRouter(prefix="/notebooks/{notebook_id}/memory")
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
@@ -65,6 +66,7 @@ def memory_page(
     context: dict[str, Any] = {
         "s": summary,
         "tabs": WORKSPACE_TABS,
+        "last_read": last_read(conn, notebook_id),
         "tab": "memory",
         "stats": stats(conn, notebook_id),
         "items": items,
@@ -102,6 +104,7 @@ def graph_page(
         {
             "s": summary,
             "tabs": WORKSPACE_TABS,
+            "last_read": last_read(conn, notebook_id),
             "tab": "memory",
             "memory_view": "graph",
             "center": center,

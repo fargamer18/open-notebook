@@ -1,8 +1,18 @@
+{# Polled every 60 s. Reads status only: never starts the embedding worker,
+   and checks the LLM with GET /models (no generation). #}
 {% set llm = health.llm %}
+{% set emb = health.embedding_worker.status if health.embedding_worker else "stopped" %}
+{% set emb_label = {"stopped": "Sleeping", "starting": "Loading", "ready": "Ready", "busy": "Busy", "stopping": "Sleeping", "failed": "Error", "in-process": "Ready"}.get(emb, emb) %}
 {% if health.status != "ok" %}
-  <span class="dot dot-err" aria-hidden="true"></span><span title="{{ health.database.get('error') or health.data.path }}">Storage error</span>
-{% elif llm.status == "reachable" %}
-  <span class="dot dot-{{ 'ok' if llm.model_available != false else 'warn' }}" aria-hidden="true"></span><a href="/settings" title="{{ llm.message }}">LLM online</a>
+  <span class="dot dot-err" aria-hidden="true"></span><a href="/settings">Storage error</a>
 {% else %}
-  <span class="dot dot-err" aria-hidden="true"></span><a href="/settings" title="{{ llm.message }}">LLM offline</a>
+  <a href="/settings" class="health-item" title="{{ llm.message }}">
+    <span class="dot dot-{{ ('ok' if llm.model_available != false else 'warn') if llm.status == 'reachable' else 'err' }}" aria-hidden="true"></span>
+    <span>LLM <span class="health-detail">{{ "Connected" if llm.status == "reachable" else "Unavailable" }}</span></span>
+  </a>
+  <span class="health-sep" aria-hidden="true">·</span>
+  <a href="/settings" class="health-item" title="Embedding model (all-MiniLM-L6-v2): {{ emb_label }}">
+    <span class="dot dot-{{ 'ok' if emb in ('ready', 'busy', 'in-process') else ('warn' if emb == 'starting' else ('err' if emb == 'failed' else '')) }}" aria-hidden="true"></span>
+    <span>Embeddings <span class="health-detail">{{ emb_label }}</span></span>
+  </a>
 {% endif %}

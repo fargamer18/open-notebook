@@ -90,10 +90,24 @@ def render(
     *,
     status_code: int = 200,
 ) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(
-        request, template, context or {}, status_code=status_code
+    from litenotebook.web.navigation import FLASH_COOKIE, read_flash
+
+    context = dict(context or {})
+    flash = None if is_htmx(request) else read_flash(dict(request.cookies))
+    if flash:  # shown once, on the next full page
+        context.setdefault("flash", flash)
+    response = TEMPLATES.TemplateResponse(
+        request, template, context, status_code=status_code
     )
+    if flash:
+        response.delete_cookie(FLASH_COOKIE, path="/")
+    return response
 
 
-def redirect(url: str) -> RedirectResponse:
-    return RedirectResponse(url, status_code=303)
+def redirect(url: str, flash: str | None = None) -> RedirectResponse:
+    response = RedirectResponse(url, status_code=303)
+    if flash:
+        from litenotebook.web.navigation import set_flash
+
+        set_flash(response, flash)
+    return response

@@ -2,5 +2,5 @@
 <ul hx-swap-oob="afterbegin:#source-list">
   {% with oob_counts = false %}{% include "partials/source_row.html" %}{% endwith %}
 </ul>
-<p class="empty" id="source-empty" hidden hx-swap-oob="true">No sources yet. Upload a PDF above; it is processed in the background.</p>
+<div class="empty-state" id="source-empty" hidden hx-swap-oob="true"></div>
 <dd id="ws-sources" hx-swap-oob="true">{{ s.sources }}</dd>

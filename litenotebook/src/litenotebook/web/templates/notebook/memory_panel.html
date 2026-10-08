@@ -20,8 +20,9 @@
   <form class="mem-search" method="get" action="/notebooks/{{ nb.id }}/memory" role="search"
         hx-get="/notebooks/{{ nb.id }}/memory" hx-target="#memory-results" hx-swap="outerHTML" hx-push-url="true">
     <label class="sr-only" for="mem-q">Search memory</label>
-    <input id="mem-q" name="q" value="{{ query }}" maxlength="300" placeholder="Search earlier conversations, e.g. telescope aperture" autocomplete="off">
+    <input id="mem-q" name="q" type="search" value="{{ query }}" maxlength="300" placeholder="Search earlier conversations, e.g. telescope aperture" autocomplete="off" data-slash-focus>
     <button class="btn" type="submit">Search</button>
+    <span class="htmx-indicator muted" role="status">Searching…</span>
   </form>
   <nav class="mem-filters" aria-label="Filter memory">
     {% for f, label in [("all", "All"), ("useful", "Useful"), ("corrections", "Corrections"), ("dead_ends", "Dead ends"), ("notes", "Notes")] %}

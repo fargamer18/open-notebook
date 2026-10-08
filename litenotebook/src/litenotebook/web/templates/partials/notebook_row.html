@@ -1,3 +1,4 @@
+{% from "macros.html" import delete_trigger %}
 {% set nb = s.notebook %}
 {% set target = "#nb-" ~ nb.id %}
 {% if mode == "edit" %}
@@ -39,12 +40,15 @@
     <a class="nb-name" href="/notebooks/{{ nb.id }}">{{ nb.name }}</a>
     {% if nb.description %}<span class="nb-desc">{{ nb.description }}</span>{% endif %}
   </div>
-  <span class="nb-meta">{{ s.sources }} sources · {{ s.chunks }} chunks</span>
+  <span class="nb-meta">{{ s.sources }} source{{ "" if s.sources == 1 else "s" }} · {{ s.chunks }} chunk{{ "" if s.chunks == 1 else "s" }}</span>
   <span class="nb-actions">
     <a class="btn btn-ghost btn-sm" href="/notebooks/{{ nb.id }}/rename"
-       hx-get="/notebooks/{{ nb.id }}/rename" hx-target="{{ target }}" hx-swap="outerHTML">Rename</a>
-    <a class="btn btn-ghost btn-sm btn-danger-text" href="/notebooks/{{ nb.id }}/delete"
-       hx-get="/notebooks/{{ nb.id }}/delete" hx-target="{{ target }}" hx-swap="outerHTML">Delete</a>
+       hx-get="/notebooks/{{ nb.id }}/rename" hx-target="{{ target }}" hx-swap="outerHTML"
+       aria-label="Rename {{ nb.name }}">Rename</a>
+    {{ delete_trigger("/notebooks/%d/delete" % nb.id, "/notebooks/%d/delete" % nb.id, nb.id,
+         "Delete this notebook permanently?", nb.name,
+         "Its %d source%s, %d chunks, embeddings, search index, chats, notes and memory are removed. This cannot be undone." % (s.sources, "" if s.sources == 1 else "s", s.chunks),
+         "Delete notebook", target=target, text="Delete…") }}
   </span>
 </li>
 {% endif %}

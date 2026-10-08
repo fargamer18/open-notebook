@@ -1,43 +1,51 @@
 {% extends "base.html" %}
+{% from "macros.html" import crumbs %}
 {% set nav = "notebooks" %}
 {% set nb = s.notebook %}
-{% block title %}{{ src.original_filename }}{% endblock %}
+{% block title %}{{ src.original_filename }} · Reader · {{ nb.name }}{% endblock %}
 {% block scripts %}<script src="/static/reader.js" defer></script><script src="/static/chat.js" defer></script><script src="/static/notes.js" defer></script>{% endblock %}
 {% block content %}
-<nav class="crumbs" aria-label="Breadcrumb">
-  <a href="/">Notebooks</a><span aria-hidden="true">/</span>
-  <a href="/notebooks/{{ nb.id }}?tab=sources">{{ nb.name }}</a><span aria-hidden="true">/</span>
-  <span>{{ src.original_filename }}</span>
-</nav>
+<h1 class="sr-only">Reader: {{ src.original_filename }}</h1>
+<div class="reader-head">
+  {{ crumbs([("Notebooks", "/"), (nb.name, "/notebooks/%d?tab=sources" % nb.id), ("Sources", "/notebooks/%d?tab=sources" % nb.id), (src.original_filename, "/notebooks/%d/sources/%d" % (nb.id, src.id)), ("Reader", "")]) }}
+  {% if back_url %}<a class="btn btn-sm btn-ghost" href="{{ back_url }}">← Back to chat</a>{% endif %}
+  {% with tab = "reader", reader_src = src %}{% include "partials/nb_nav.html" %}{% endwith %}
+</div>
 <div class="reader-layout" id="reader"
      data-notebook-id="{{ nb.id }}" data-source-id="{{ src.id }}" data-pages="{{ page_count }}"
      data-page="{{ start_page }}" data-zoom="{{ zoom }}"
      data-focus-kind="{{ focus_kind }}" data-focus-id="{{ focus_id }}">
-  <section class="reader-main" aria-label="PDF reader">
+  <section class="reader-main" aria-label="PDF page">
     <div class="reader-toolbar" role="toolbar" aria-label="Reader controls">
-      <button class="btn btn-sm" type="button" id="r-prev" title="Previous page (PageUp / ←)">‹</button>
-      <label class="sr-only" for="r-page">Page</label>
-      <input id="r-page" class="r-page" type="number" min="1" max="{{ page_count }}" value="{{ start_page }}">
-      <span class="muted">/ {{ page_count }}</span>
-      <button class="btn btn-sm" type="button" id="r-next" title="Next page (PageDown / →)">›</button>
+      <div class="r-group" role="group" aria-label="Page">
+        <button class="btn btn-sm btn-icon" type="button" id="r-prev" aria-label="Previous page" aria-keyshortcuts="PageUp ArrowLeft" title="Previous page (PageUp / ←)">‹</button>
+        <label class="sr-only" for="r-page">Page number</label>
+        <input id="r-page" class="r-page" type="number" min="1" max="{{ page_count }}" value="{{ start_page }}" inputmode="numeric">
+        <span class="r-of">of {{ page_count }}</span>
+        <button class="btn btn-sm btn-icon" type="button" id="r-next" aria-label="Next page" aria-keyshortcuts="PageDown ArrowRight" title="Next page (PageDown / →)">›</button>
+      </div>
       <span class="r-sep" aria-hidden="true"></span>
-      <button class="btn btn-sm" type="button" id="r-zoom-out" title="Zoom out (Ctrl -)">−</button>
-      <span class="mono r-zoom" id="r-zoom">100%</span>
-      <button class="btn btn-sm" type="button" id="r-zoom-in" title="Zoom in (Ctrl +)">+</button>
-      <button class="btn btn-sm btn-ghost" type="button" id="r-fit">Fit width</button>
+      <div class="r-group" role="group" aria-label="Zoom">
+        <button class="btn btn-sm btn-icon" type="button" id="r-zoom-out" aria-label="Zoom out" aria-keyshortcuts="Control+-" title="Zoom out (Ctrl −)">−</button>
+        <output class="mono r-zoom" id="r-zoom" aria-label="Zoom level">100%</output>
+        <button class="btn btn-sm btn-icon" type="button" id="r-zoom-in" aria-label="Zoom in" aria-keyshortcuts="Control+=" title="Zoom in (Ctrl +)">+</button>
+        <button class="btn btn-sm btn-ghost" type="button" id="r-fit" aria-pressed="true" title="Fit the page to the panel width">Fit width</button>
+      </div>
+      <span class="r-sep" aria-hidden="true"></span>
       <button class="btn btn-sm btn-ghost" type="button" id="r-page-comment" title="Add a comment to this page">Comment on page</button>
-      <span class="r-status muted" id="r-status" role="status">Loading page…</span>
+      <button class="btn btn-sm r-back" type="button" id="r-back" hidden>Back to cited passage</button>
+      <span class="r-status muted" id="r-status" role="status">Rendering page…</span>
     </div>
-    <div class="reader-viewport" id="r-viewport" tabindex="0">
+    <div class="reader-viewport" id="r-viewport" tabindex="0" aria-label="Page view. PageUp and PageDown turn pages.">
       <div class="reader-page" id="r-pagebox">
         <img id="r-img" alt="Page {{ start_page }} of {{ src.original_filename }}">
         <div class="hl-layer" id="r-hl" aria-hidden="true"></div>
         <div class="text-layer" id="r-text"></div>
       </div>
     </div>
-    <div class="sel-tools" id="r-sel" hidden>
+    <div class="sel-tools" id="r-sel" role="group" aria-label="Selection tools" hidden>
       <span class="muted">Highlight</span>
-      {% for c in colors %}<button class="swatch sw-{{ c }}" type="button" data-color="{{ c }}" title="{{ c | capitalize }}"><span class="sr-only">{{ c }}</span></button>{% endfor %}
+      {% for c in colors %}<button class="swatch sw-{{ c }}" type="button" data-color="{{ c }}" aria-label="Highlight {{ c }}" title="Highlight {{ c }}"></button>{% endfor %}
       <button class="btn btn-sm" type="button" id="r-annotate">Annotate…</button>
       <button class="btn btn-sm" type="button" id="r-to-note">Add to note…</button>
       <div class="sel-comment" id="r-comment-box" hidden>
@@ -46,18 +54,22 @@
         <button class="btn btn-sm btn-primary" type="button" id="r-comment-save">Save annotation</button>
       </div>
       <div id="r-sel-note"></div>
-      <p class="error" id="r-sel-error" hidden></p>
+      <p class="error" id="r-sel-error" role="alert" hidden></p>
     </div>
   </section>
-  <div class="reader-resize" id="r-resize" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+  <div class="reader-resize" id="r-resize" role="separator" aria-orientation="vertical" aria-label="Resize side panel" tabindex="0"
+       aria-valuemin="280" aria-valuemax="760" aria-valuenow="400" title="Drag, or focus and use ← →, to resize"></div>
   <aside class="reader-side" aria-label="Side panel">
-    <nav class="reader-tabs" aria-label="Side panel">
-      <button class="tab-btn is-on" type="button" hx-get="/notebooks/{{ nb.id }}/sources/{{ src.id }}/annotations" hx-target="#reader-panel">Annotations</button>
-      <button class="tab-btn" type="button" hx-get="/notebooks/{{ nb.id }}/reader/panel/notes" hx-target="#reader-panel">Notes</button>
-      <button class="tab-btn" type="button" hx-get="/notebooks/{{ nb.id }}/reader/panel/chat" hx-target="#reader-panel">Chat</button>
-    </nav>
-    <div id="reader-panel" hx-get="/notebooks/{{ nb.id }}/sources/{{ src.id }}/annotations" hx-trigger="load">
-      <p class="muted">Loading…</p>
+    <div class="reader-tabs" role="tablist" aria-label="Side panel">
+      <button class="tab-btn" type="button" role="tab" id="rtab-annotations" aria-controls="reader-panel" aria-selected="true" data-panel="annotations"
+              hx-get="/notebooks/{{ nb.id }}/sources/{{ src.id }}/annotations" hx-target="#reader-panel">Annotations</button>
+      <button class="tab-btn" type="button" role="tab" id="rtab-notes" aria-controls="reader-panel" aria-selected="false" tabindex="-1" data-panel="notes"
+              hx-get="/notebooks/{{ nb.id }}/reader/panel/notes" hx-target="#reader-panel">Notes</button>
+      <button class="tab-btn" type="button" role="tab" id="rtab-chat" aria-controls="reader-panel" aria-selected="false" tabindex="-1" data-panel="chat"
+              hx-get="/notebooks/{{ nb.id }}/reader/panel/chat" hx-target="#reader-panel">Chat</button>
+    </div>
+    <div id="reader-panel" role="tabpanel" aria-labelledby="rtab-annotations">
+      <p class="muted">Loading annotations…</p>
     </div>
   </aside>
 </div>

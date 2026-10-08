@@ -11,16 +11,16 @@
   {% include "partials/settings_form.html" %}
 </section>
 
-<section class="panel">
-  <h2>Embedding model</h2>
-  {% set labels = {"stopped": "Sleeping", "starting": "Loading…", "ready": "Ready", "busy": "Working", "stopping": "Stopping", "failed": "Failed — retried on next use", "in-process": "In process"} %}
+<section class="panel" aria-labelledby="emb-title">
+  <h2 id="emb-title">Embedding model</h2>
+  {% set labels = {"stopped": "Sleeping", "starting": "Loading", "ready": "Ready", "busy": "Busy", "stopping": "Sleeping", "failed": "Error", "in-process": "Ready"} %}
   <p class="status-line"><span class="dot dot-{{ 'ok' if embedding.status in ('ready', 'busy') else ('err' if embedding.status == 'failed' else '') }}" aria-hidden="true"></span>
-    <strong>{{ labels.get(embedding.status, embedding.status) }}</strong>
+    <strong>{{ labels.get(embedding.status, embedding.status) }}</strong>{% if embedding.status == "failed" %} <span class="muted">(it is retried on the next search or question)</span>{% endif %}
     <span class="muted">all-MiniLM-L6-v2 runs in its own process on the CPU; it starts when needed and sleeps after {{ idle_timeout }} s without work, giving its memory back.</span></p>
 </section>
 
-<section class="panel">
-  <h2>LLM server</h2>
+<section class="panel" aria-labelledby="llm-title">
+  <h2 id="llm-title">LLM server</h2>
   <p class="muted">Checks the <em>saved</em> endpoint with <span class="mono">GET /models</span>. No text is generated.</p>
   <div class="actions">
     <form method="post" action="/settings/test" hx-post="/settings/test" hx-target="#llm-status"
@@ -31,7 +31,7 @@
           hx-indicator="#llm-busy">
       <button class="btn" type="submit">Refresh models</button>
     </form>
-    <span id="llm-busy" class="htmx-indicator muted">Checking…</span>
+    <span id="llm-busy" class="htmx-indicator muted" role="status">Checking…</span>
   </div>
   <div id="llm-status" aria-live="polite">
     {% if report %}{% include "partials/settings_status.html" %}{% endif %}

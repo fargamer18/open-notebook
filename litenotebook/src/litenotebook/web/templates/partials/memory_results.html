@@ -8,6 +8,6 @@
       {% for item in items %}{% include "partials/memory_item.html" %}{% endfor %}
     </ul>
   {% else %}
-    <p class="empty">{% if query %}No remembered conversation matches.{% elif filter != "all" %}Nothing in this filter yet.{% else %}No memory yet. Ask questions in Chat; each finished answer is remembered here.{% endif %}</p>
+    <p class="empty">{% if query %}No remembered conversation matches.{% elif filter != "all" %}Nothing in this filter yet.{% else %}No memory yet. Ask questions in <a href="/notebooks/{{ nb_id }}/chat">Chat</a> or write <a href="/notebooks/{{ nb_id }}/notes">Notes</a>; finished answers and note concepts are remembered here.{% endif %}</p>
   {% endif %}
 </div>
