@@ -24,7 +24,8 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'none'; script-src 'self'; style-src 'self'; "
-        "img-src 'self' data:; connect-src 'self'; form-action 'self'; "
+        "img-src 'self' data:; media-src 'self'; connect-src 'self'; "
+        "form-action 'self'; "
         "base-uri 'none'; frame-ancestors 'none'"
     ),
     "X-Content-Type-Options": "nosniff",

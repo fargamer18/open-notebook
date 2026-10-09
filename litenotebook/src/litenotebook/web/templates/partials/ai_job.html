@@ -35,6 +35,10 @@
     <p class="muted">Measured once on this computer; real speed varies with document length.</p>
     {% endif %}
     {% if job.result and job.result.test %}<p class="muted">MiniLM loaded in its worker process in {{ job.result.test.seconds }} s.</p>{% endif %}
+    {% if job.result and job.result.speech and job.result.speech.test %}{% set st = job.result.speech.test %}
+      <p>Spoke {{ st.duration_s | duration }} of audio in {{ st.seconds | duration }}{% if st.realtime_factor %} ({{ st.realtime_factor }}× real time){% endif %}.</p>
+      <audio controls preload="metadata" src="{{ job.result.speech.sample }}" aria-label="Voice test recording"></audio>
+    {% endif %}
     {% set next_url = job.result.next if job.result and job.result.next else back %}
     <p><a class="btn btn-primary" href="{{ next_url }}" data-job-continue>Continue</a></p>
   {% else %}

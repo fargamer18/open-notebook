@@ -371,3 +371,159 @@ def runtimes_for(
         for e in (entries if entries is not None else load_runtimes())
         if e.os == os_kind and e.arch == normalize_arch(arch)
     ]
+
+
+# --- speech (Phase 14) -------------------------------------------------------------
+
+SPEECH_FORMATS = ("tar.bz2", "tar.gz", "zip")
+
+
+@dataclass(frozen=True)
+class SpeechEngineEntry:
+    id: str
+    project: str
+    version: str
+    os: str
+    arch: str
+    executable: str  # relative to the extracted archive
+    library_dir: str  # shared libraries the executable needs
+    assets: tuple[Asset, ...]
+    license: str
+    license_url: str
+    license_note: str
+    release_url: str
+    source_url: str
+    release_date: str
+    layout_verified: bool
+    tested: bool
+
+    @property
+    def download_size(self) -> int:
+        return sum(a.size for a in self.assets)
+
+
+@dataclass(frozen=True)
+class VoiceEntry:
+    id: str
+    display_name: str
+    engine: str
+    model_type: str
+    language: str
+    locale: str
+    quality: str
+    sample_rate: int
+    description: str
+    license: str
+    license_url: str
+    model_card_url: str
+    asset: Asset
+
+
+@dataclass(frozen=True)
+class SpeechCatalog:
+    engines: tuple[SpeechEngineEntry, ...]
+    voices: tuple[VoiceEntry, ...]
+    default_voices: dict[str, str]
+    note: str
+
+    def engine_for(self, os_kind: str, arch: str) -> SpeechEngineEntry | None:
+        return next(
+            (
+                e
+                for e in self.engines
+                if e.os == os_kind and e.arch == normalize_arch(arch)
+            ),
+            None,
+        )
+
+    def voice(self, voice_id: str) -> VoiceEntry:
+        for v in self.voices:
+            if v.id == voice_id:
+                return v
+        raise CatalogError(f"Unknown voice {voice_id!r}")
+
+
+def _speech_asset(a: Any, where: str) -> Asset:
+    if not isinstance(a, dict) or a.get("format") not in SPEECH_FORMATS:
+        raise CatalogError(f"{where}: invalid asset")
+    size = _need(a, "size", int, where)
+    if size <= 0:
+        raise CatalogError(f"{where}: invalid size")
+    return Asset(
+        _url(a.get("url"), where), size, _sha(a.get("sha256"), where), a["format"]
+    )
+
+
+_SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,79}$")
+
+
+def load_speech(raw: str | None = None) -> SpeechCatalog:
+    data = _read("speech", raw)
+    engines: list[SpeechEngineEntry] = []
+    for i, e in enumerate(data.get("engines") or []):
+        where = f"speech engine #{i}"
+        if not isinstance(e, dict):
+            raise CatalogError(f"{where}: not an object")
+        eid = _need(e, "id", str, where)
+        if not _SAFE_ID.match(eid):
+            raise CatalogError(f"{where}: unsafe id")
+        for key in ("executable", "library_dir"):
+            if archive_name_problem(_need(e, key, str, eid)):
+                raise CatalogError(f"{eid}: unsafe {key}")
+        engines.append(
+            SpeechEngineEntry(
+                id=eid,
+                project=_need(e, "project", str, eid),
+                version=_need(e, "version", str, eid),
+                os=_need(e, "os", str, eid),
+                arch=normalize_arch(_need(e, "arch", str, eid)),
+                executable=e["executable"],
+                library_dir=e["library_dir"],
+                assets=tuple(
+                    _speech_asset(a, eid) for a in _need(e, "assets", list, eid)
+                ),
+                license=_need(e, "license", str, eid),
+                license_url=_need(e, "license_url", str, eid),
+                license_note=str(e.get("license_note") or ""),
+                release_url=_need(e, "release_url", str, eid),
+                source_url=_need(e, "source_url", str, eid),
+                release_date=_need(e, "release_date", str, eid),
+                layout_verified=bool(e.get("layout_verified")),
+                tested=bool(e.get("tested")),
+            )
+        )
+    voices: list[VoiceEntry] = []
+    for i, v in enumerate(data.get("voices") or []):
+        where = f"voice #{i}"
+        if not isinstance(v, dict):
+            raise CatalogError(f"{where}: not an object")
+        vid = _need(v, "id", str, where)
+        if not _SAFE_ID.match(vid):
+            raise CatalogError(f"{where}: unsafe id")
+        voices.append(
+            VoiceEntry(
+                id=vid,
+                display_name=_need(v, "display_name", str, vid),
+                engine=_need(v, "engine", str, vid),
+                model_type=_need(v, "model_type", str, vid),
+                language=_need(v, "language", str, vid),
+                locale=_need(v, "locale", str, vid),
+                quality=_need(v, "quality", str, vid),
+                sample_rate=_need(v, "sample_rate", int, vid),
+                description=str(v.get("description") or ""),
+                license=_need(v, "license", str, vid),
+                license_url=_need(v, "license_url", str, vid),
+                model_card_url=_need(v, "model_card_url", str, vid),
+                asset=_speech_asset(v.get("asset"), vid),
+            )
+        )
+    ids = [e.id for e in engines] + [v.id for v in voices]
+    if len({i.casefold() for i in ids}) != len(ids):  # ids are folder names
+        raise CatalogError("speech catalog has duplicate ids")
+    defaults = data.get("default_voices") or {}
+    known = {v.id for v in voices}
+    if not isinstance(defaults, dict) or any(d not in known for d in defaults.values()):
+        raise CatalogError("speech catalog default voices are unknown")
+    return SpeechCatalog(
+        tuple(engines), tuple(voices), dict(defaults), str(data.get("note") or "")
+    )

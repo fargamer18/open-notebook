@@ -1,0 +1,11 @@
+<section class="panel" aria-labelledby="audio-history">
+  <div class="panel-head">
+    <h2 id="audio-history">Audio Overviews</h2>
+    <a class="btn btn-primary btn-sm" href="{{ sbase }}/audio/new">Create audio overview</a>
+  </div>
+  {% if overviews %}
+  <ul class="quiz-list">
+    {% for ov in overviews %}{% include "notebook/study/audio_row.html" %}{% endfor %}
+  </ul>
+  {% else %}<p class="muted">No audio overviews yet.</p>{% endif %}
+</section>

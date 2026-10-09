@@ -65,6 +65,10 @@ EMPTY_ANSWER = "The model returned an empty answer. Retry."
 BUSY_MESSAGE = (
     "Another answer is being generated. Wait for it to finish or stop it first."
 )
+AUDIO_BUSY_MESSAGE = (
+    "Local AI is busy writing an audio overview. Wait for it to finish, or cancel "
+    "it in Study."
+)
 QUIZ_BUSY_MESSAGE = (
     "Local AI is busy generating a quiz. Wait for it to finish, or cancel it in Study."
 )

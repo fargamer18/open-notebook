@@ -105,7 +105,7 @@ def test_export_layout_manifest_and_checksums(conn, settings, tmp_path, rich):
     assert set(entries) == expected
     manifest = json.loads(entries["manifest.json"])
     assert manifest["format"] == "litenotebook-archive"
-    assert manifest["export_format_version"] == FORMAT_VERSION == 2  # Phase 13
+    assert manifest["export_format_version"] == FORMAT_VERSION == 3  # Phase 14
     assert (
         manifest["kind"] == "notebook" and manifest["schema_version"] == CURRENT_SCHEMA
     )

@@ -442,6 +442,7 @@ def settings_ai_action(
     copy_file: Annotated[str, Form(alias="copy")] = "",
     confirm: Annotated[str, Form()] = "",
     autostart: Annotated[str, Form()] = "",
+    voice_id: Annotated[str, Form()] = "",
 ) -> Response:
     back = "/settings/ai"
     service = _ai(request)
@@ -495,6 +496,8 @@ def settings_ai_action(
             profile.autostart = bool(autostart)
             store.save_profile(profile)
             return _done(request, "Saved")
+        if action in SPEECH_ACTIONS:
+            return _speech_action(request, conn, action, voice_id, confirm, back)
         if action == "open-models-folder":
             folder = service.overview(conn)["models_dir"]
             folder.mkdir(parents=True, exist_ok=True)
@@ -506,6 +509,110 @@ def settings_ai_action(
     except SetupError as e:
         return _error(request, str(e), back)
     return _error(request, "Unknown action.", back)
+
+
+SPEECH_ACTIONS = (
+    "install-speech",
+    "add-voice",
+    "remove-voice",
+    "test-voice",
+    "remove-speech",
+)
+
+
+def _speech_action(
+    request: Request,
+    conn: sqlite3.Connection,
+    action: str,
+    voice_id: str,
+    confirm: str,
+    back: str,
+) -> Response:
+    """Speech is optional and installed only from here (or the Audio page's
+    "Set up speech" link, which leads here)."""
+    from litenotebook.ai import speech
+
+    settings = app_settings(request)
+    service = _ai(request)
+    back = "/settings/ai#speech"
+    if action == "install-speech":
+        entry = speech.engine_entry()
+        if entry is None:
+            return _error(request, "No speech engine build for this computer.", back)
+
+        def install(c: sqlite3.Connection, job: Job) -> Any:
+            engine = service.install_speech_engine(
+                progress=job.update, cancel=job.cancel
+            )
+            return {"speech": {"engine": engine.id}}
+
+        label = f"Installing the speech engine ({human(entry.download_size)})"
+        return _after_job(request, _run_job(request, "speech", label, install), back)
+    if action == "add-voice":
+        try:
+            entry_v = speech.catalog().voice(voice_id)
+        except cat.CatalogError:
+            return _error(request, "Unknown voice.", back)
+
+        def add(c: sqlite3.Connection, job: Job) -> Any:
+            installed = service.install_voice(
+                voice_id, progress=job.update, cancel=job.cancel
+            )
+            return {"speech": {"voice": installed.id}}
+
+        label = f"Adding the voice {entry_v.display_name} ({human(entry_v.asset.size)})"
+        return _after_job(request, _run_job(request, "speech", label, add), back)
+    if action == "remove-voice":
+        if not voice_id or confirm != voice_id:
+            return _error(request, "Removal not confirmed.", back)
+        removed = speech.remove_voice(settings, voice_id)
+        return _done(
+            request, "Voice removed" if removed else "That voice is not installed"
+        )
+    if action == "remove-speech":
+        if confirm != "speech":
+            return _error(request, "Removal not confirmed.", back)
+        speech.remove_engine(settings)
+        return _done(request, "Speech engine removed (voices kept)")
+    # test-voice
+    provider = request.app.state.speech_provider(settings)
+    if provider is None or speech.voice(settings, voice_id) is None:
+        return _error(request, "Install the speech engine and this voice first.", back)
+
+    def test(c: sqlite3.Connection, job: Job) -> Any:
+        job.update("Speaking the test sentence")
+        try:
+            result = speech.test_voice(settings, provider, voice_id)
+        except speech.SpeechError as e:
+            raise SetupError(str(e)) from e
+        return {
+            "speech": {
+                "test": result,
+                "sample": f"/settings/ai/speech/sample/{voice_id}",
+            }
+        }
+
+    return _after_job(
+        request, _run_job(request, "speech", "Testing the voice", test), back
+    )
+
+
+@router.get("/settings/ai/speech/sample/{voice_id}", response_model=None)
+def speech_sample(request: Request, voice_id: str) -> Response:
+    """The last "Test voice" recording (ids from the catalog only)."""
+    from fastapi.responses import FileResponse
+
+    from litenotebook.ai import speech
+
+    known = {v.id for v in speech.catalog().voices}
+    if voice_id not in known:
+        return JSONResponse({"error": "Unknown voice"}, status_code=404)
+    path = speech.speech_root(app_settings(request)) / "tests" / f"{voice_id}.wav"
+    if not path.is_file():
+        return JSONResponse({"error": "No sample yet"}, status_code=404)
+    return FileResponse(
+        path, media_type="audio/wav", headers={"Cache-Control": "no-store"}
+    )
 
 
 def _done(request: Request, message: str) -> Response:

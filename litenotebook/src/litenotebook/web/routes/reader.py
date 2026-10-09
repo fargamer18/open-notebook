@@ -66,6 +66,7 @@ def reader_page(
     citation: int | None = None,
     annotation: int | None = None,
     attempt: int | None = None,
+    audio: int | None = None,
 ) -> HTMLResponse:
     settings = app_settings(request)
     summary = get_summary(conn, notebook_id)
@@ -122,6 +123,14 @@ def reader_page(
         if row is not None:
             back_url = f"/notebooks/{notebook_id}/study/attempts/{row[0]}/review"
             back_label = "Back to quiz"
+    if audio is not None:  # opened from an audio overview transcript
+        row = conn.execute(
+            "SELECT id FROM audio_overviews WHERE id = ? AND notebook_id = ?",
+            (audio, notebook_id),
+        ).fetchone()
+        if row is not None:
+            back_url = f"/notebooks/{notebook_id}/study/audio/{row[0]}"
+            back_label = "Back to audio overview"
     start = min(max(1, start), reader.page_count)
     return render(
         request,

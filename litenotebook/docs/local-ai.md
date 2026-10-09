@@ -71,3 +71,24 @@ starts on a page view.
 
 Linux: verified on real hardware (see the Phase 12 report). Windows:
 implemented and simulated only — see `windows-test-plan.md`.
+
+
+## Speech (Phase 14, optional)
+
+The third component speaks Audio Overview transcripts with a local voice.
+It runs Piper voices on the sherpa-onnx engine and is an optional, explicit
+user download: it is installed only from Settings → Local AI → Speech (or
+via the "Set up speech" link on an Audio Overview), and nothing is
+downloaded during normal use.
+
+Licensing at a glance (not legal advice):
+
+- sherpa-onnx itself is Apache-2.0.
+- The current Piper-compatible speech path also uses espeak-ng and its data
+  (GPL-3.0), which carry additional GPL-related licensing considerations. The
+  complete speech stack is therefore not "Apache-only".
+- LiteNotebook does not bundle the speech engine, espeak-ng data or voices in
+  its application or installer; the user downloads them from their
+  publishers.
+
+See `docs/audio-overviews.md` for the engine choice, voices and licensing.

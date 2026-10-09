@@ -194,8 +194,70 @@ class LocalAI:
             "embeddings": {**emb.status(), **store.embeddings()},
             "hardware": store.hardware(),
             "models_dir": models_dir(self.settings, store),
-            "components": components(profile, active, store),
+            "components": components(profile, active, store, self.speech_status()),
+            "speech": self.speech_status(),
         }
+
+    # --- speech (optional, Phase 14) -------------------------------------------------
+
+    def speech_status(self) -> dict[str, Any]:
+        from litenotebook.ai import speech
+
+        return speech.status(self.settings)
+
+    def install_speech_engine(
+        self,
+        *,
+        progress: Callable[[str, Progress | None], None] | None = None,
+        cancel: threading.Event | None = None,
+    ) -> Any:
+        from litenotebook.ai import speech
+
+        entry = speech.engine_entry()
+        if entry is None:
+            raise SetupError(
+                "There is no speech engine build for this computer in the catalog"
+            )
+        downloader = self.downloader_factory()
+        try:
+            return speech.install_engine(
+                self.settings,
+                entry,
+                downloader=downloader,
+                progress=progress,
+                cancel=cancel,
+            )
+        except speech.SpeechError as e:
+            raise SetupError(str(e)) from e
+        finally:
+            downloader.close()
+
+    def install_voice(
+        self,
+        voice_id: str,
+        *,
+        progress: Callable[[str, Progress | None], None] | None = None,
+        cancel: threading.Event | None = None,
+    ) -> Any:
+        from litenotebook.ai import speech
+
+        try:
+            entry = speech.catalog().voice(voice_id)
+        except cat.CatalogError as e:
+            raise SetupError("Unknown voice") from e
+        downloader = self.downloader_factory()
+        try:
+            return speech.install_voice(
+                self.settings,
+                entry,
+                downloader=downloader,
+                progress=progress,
+                cancel=cancel,
+            )
+        except speech.SpeechError as e:
+            raise SetupError(str(e)) from e
+        finally:
+            downloader.close()
 
     # --- generation runtime choices --------------------------------------------------
 
@@ -690,10 +752,12 @@ def _version_tuple(text: str) -> tuple[int, ...]:
 
 
 def components(
-    profile: GenerationProfile, active: ModelRecord | None, store: AIStore
+    profile: GenerationProfile,
+    active: ModelRecord | None,
+    store: AIStore,
+    speech: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """The AI components shown in Settings. Future optional components (e.g.
-    "speech" for audio overviews) are added here, with their own catalog."""
+    """The AI components shown in Settings, each with its own catalog."""
     embeddings = store.embeddings()
     generation_ready = (
         profile.type == "external_openai"
@@ -708,14 +772,23 @@ def components(
             "state": "off"
             if profile.type == "none"
             else ("ready" if generation_ready else "incomplete"),
-            "used_by": ["Chat"],
+            "used_by": ["Chat", "Quizzes", "Audio Overview scripts"],
         },
         {
             "id": "embeddings",
             "label": "Embeddings",
             "optional": True,
             "state": "skipped" if embeddings.get("state") == "skipped" else "check",
-            "used_by": ["Hybrid search", "Chat retrieval"],
+            "used_by": ["Hybrid search", "Chat retrieval", "Quiz and audio focus"],
+        },
+        {
+            "id": "speech",
+            "label": "Speech",
+            "optional": True,
+            "state": "ready"
+            if speech and speech.get("ready")
+            else ("incomplete" if speech and speech.get("installed") else "off"),
+            "used_by": ["Audio Overviews (audio only; transcripts work without it)"],
         },
     ]
 

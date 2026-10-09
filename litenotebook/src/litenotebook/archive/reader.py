@@ -36,6 +36,7 @@ from typing import IO, Any
 import numpy as np
 
 from litenotebook.archive.format import (
+    AUDIO_SINCE,
     BLOB,
     CHECKSUMS,
     ENTRY_PATTERNS,
@@ -82,6 +83,10 @@ PARENTS: dict[str, list[tuple[str, str]]] = {
         ("attempt_id", "quiz_attempts"),
         ("question_id", "quiz_questions"),
     ],
+    "audio_sections": [("overview_id", "audio_overviews")],
+    "audio_turns": [("section_id", "audio_sections")],
+    "audio_evidence": [("overview_id", "audio_overviews")],
+    "audio_assets": [("overview_id", "audio_overviews")],
 }
 
 
@@ -92,6 +97,7 @@ class NotebookInfo:
     meta: dict[str, Any]
     counts: dict[str, int] = field(default_factory=dict)
     sources: dict[int, dict[str, Any]] = field(default_factory=dict)  # id → row
+    audio: dict[int, dict[str, Any]] = field(default_factory=dict)  # asset id → row
     invalid_embeddings: dict[int, int] = field(default_factory=dict)  # source → n
     embeddings_compatible: bool = True
 
@@ -419,7 +425,7 @@ class ArchiveReader:
             raise ArchiveError("The archive manifest has no valid notebook list")
         dirs: dict[int, set[str]] = {}
         for name in self.infos:
-            for pattern in ("notebook", "table", "source"):
+            for pattern in ("notebook", "table", "source", "audio"):
                 m = ENTRY_PATTERNS[pattern].match(name)
                 if m:
                     dirs.setdefault(int(m.group("nb")), set()).add(name)
@@ -496,6 +502,12 @@ class ArchiveReader:
                             f"Source “{row['original_filename']}” has status "
                             f"{row['status']!r}; only finished sources can be imported"
                         )
+                if table == "audio_assets":
+                    if row["status"] != "ready":
+                        raise ArchiveError(
+                            f"{prefix}: only finished audio can be imported"
+                        )
+                    info.audio[row["id"]] = row
                 if table == "chunks" and row["embedding"] is not None:
                     problem = embedding_problem(row["embedding"], meta["embed_dim"])
                     if problem and info.embeddings_compatible:
@@ -506,7 +518,40 @@ class ArchiveReader:
             ids[table] = seen
             info.counts[table] = n
         self._validate_sources(info)
+        self._validate_audio(info)
         return info
+
+    def _validate_audio(self, info: NotebookInfo) -> None:
+        files = {
+            int(m.group("aid"))
+            for name in self.infos
+            if (m := ENTRY_PATTERNS["audio"].match(name))
+            and m.group("nb") == str(info.original_id)
+        }
+        if files and self.version < AUDIO_SINCE:
+            raise ArchiveError(f"{info.prefix}: audio files in an older archive format")
+        if files != set(info.audio):
+            raise ArchiveError(
+                f"{info.prefix}: audio files do not match the audio rows"
+            )
+        total = 0
+        for aid, row in info.audio.items():
+            name = f"{info.prefix}/audio/{aid}.wav"
+            entry = self.infos[name]
+            if (
+                entry.file_size != row["size_bytes"]
+                or self.checksums[name] != row["sha256"]
+            ):
+                raise ArchiveError(
+                    "An audio file does not match its recorded size or SHA-256 "
+                    "(corrupt archive)"
+                )
+            with self.open_entry(name) as f:
+                head = f.read(12)
+            if head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+                raise ArchiveError("An audio file in the archive is not a WAV file")
+            total += entry.file_size
+        info.counts["audio_bytes"] = total
 
     def _validate_sources(self, info: NotebookInfo) -> None:
         pdfs = {

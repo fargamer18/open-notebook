@@ -48,6 +48,7 @@ from litenotebook.chat import (
 from litenotebook.db import connect
 from litenotebook.notebooks import get_notebook, get_summary
 from litenotebook.services.chat import (
+    AUDIO_BUSY_MESSAGE,
     BUSY_MESSAGE,
     QUIZ_BUSY_MESSAGE,
     ChatGeneration,
@@ -317,7 +318,8 @@ def _begin(
     """Take the global generation lease, then persist the exchange."""
     g = guard(request)
     if not g.try_acquire():
-        return _error(QUIZ_BUSY_MESSAGE if g.kind == "quiz" else BUSY_MESSAGE, 409)
+        busy = {"quiz": QUIZ_BUSY_MESSAGE, "audio": AUDIO_BUSY_MESSAGE}
+        return _error(busy.get(g.kind or "", BUSY_MESSAGE), 409)
     conn = connect(app_settings(request).db_path)
     try:
         reconcile_generating(conn, set())  # nothing else can be generating now

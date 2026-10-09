@@ -20,8 +20,9 @@ from fastapi.responses import HTMLResponse, Response
 
 from litenotebook.ai.store import AIStore
 from litenotebook.notebooks import get_notebook, get_summary
-from litenotebook.services.chat import QUIZ_BUSY_MESSAGE
+from litenotebook.services.chat import AUDIO_BUSY_MESSAGE, QUIZ_BUSY_MESSAGE
 from litenotebook.study import store
+from litenotebook.study.audio_store import list_overviews
 from litenotebook.study.model import (
     COUNTS,
     DIFFICULTIES,
@@ -53,9 +54,12 @@ CRUMBS = {
     "take": "Questions",
     "result": "Result",
     "review": "Review",
+    "audio_list": "Audio Overviews",
+    "audio_new": "New audio overview",
 }
-STUDY_TOOLS = (  # Study sections; audio overviews will join this list later
+STUDY_TOOLS = (  # Study sections (one card each on the Study home)
     ("quizzes", "Quizzes", "Create source-grounded quizzes from this notebook."),
+    ("audio", "Audio Overviews", "Grounded podcast-style overviews of your sources."),
 )
 
 
@@ -75,7 +79,12 @@ def _page(
     from litenotebook.web.routes.notebooks import WORKSPACE_TABS
 
     quiz = extra.get("quiz")
-    crumb = quiz.title if view == "quiz" and quiz is not None else CRUMBS.get(view, "")
+    overview = extra.get("overview")
+    crumb = CRUMBS.get(view, "")
+    if view == "quiz" and quiz is not None:
+        crumb = quiz.title
+    elif view == "audio_view" and overview is not None:
+        crumb = overview.title
     return render(
         request,
         "notebook/workspace.html",
@@ -123,6 +132,7 @@ def study_home(request: Request, conn: Db, notebook_id: int) -> HTMLResponse:
         "home",
         tools=STUDY_TOOLS,
         quizzes=quizzes,
+        overviews=list_overviews(conn, notebook_id, limit=6),
         review=store.concept_progress(conn, notebook_id, needs_review=True, limit=12),
         progress=store.concept_progress(conn, notebook_id, limit=12),
         total_quizzes=conn.execute(
@@ -285,7 +295,9 @@ def create_quiz(
         )
     guard = request.app.state.generation_guard
     if not guard.try_acquire():
-        busy = QUIZ_BUSY_MESSAGE if guard.kind == "quiz" else CHAT_BUSY
+        busy = {"quiz": QUIZ_BUSY_MESSAGE, "audio": AUDIO_BUSY_MESSAGE}.get(
+            guard.kind or "", CHAT_BUSY
+        )
         return _new_page(request, conn, notebook_id, form, error=busy, status_code=409)
     try:
         quiz_id = _launch(

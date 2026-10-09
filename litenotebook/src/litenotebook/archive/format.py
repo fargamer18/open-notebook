@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from litenotebook.config import Settings
 
 FORMAT_NAME = "litenotebook-archive"
-FORMAT_VERSION = 2  # independent of the database schema version
+FORMAT_VERSION = 3  # independent of the database schema version
 # Version history: 1 = Phase 10 (sources, chats, notes, annotations, memory);
-# 2 = Phase 13 adds the Study tables below. Version 1 archives are still
-# imported: tables introduced later are simply absent (no quizzes).
+# 2 = Phase 13 adds the quiz tables; 3 = Phase 14 adds Audio Overview tables
+# and their audio files (notebooks/<id>/audio/<asset id>.wav). Older archives
+# are still imported: tables introduced later are simply absent.
 KINDS = ("notebook", "backup")
 MANIFEST = "manifest.json"
 CHECKSUMS = "checksums.json"
@@ -132,6 +133,27 @@ TABLES: dict[str, tuple[Column, ...]] = {
         "id:int concept_key:text label:text times_seen:int correct_count:int "
         "incorrect_count:int streak:int last_result:text? last_seen:text?"
     ),
+    "audio_overviews": _cols(
+        "id:int title:text format:text target_minutes:int focus:text material:text "
+        "status:text stage:text message:text? error:text? model:text? "
+        "word_count:int words_per_minute:int meta:text? created_at:text "
+        "updated_at:text completed_at:text?"
+    ),
+    "audio_sections": _cols("id:int overview_id:int position:int title:text"),
+    "audio_turns": _cols(
+        "id:int section_id:int position:int speaker:text text:text refs:text"
+    ),
+    "audio_evidence": _cols(
+        "id:int overview_id:int label:text kind:text source_id:int? chunk_id:int? "
+        "page_no:int? chunk_ord:int? note_id:int? message_id:int? "
+        "conversation_id:int? title:text excerpt:text"
+    ),
+    "audio_assets": _cols(
+        "id:int overview_id:int status:text engine:text voices:text "
+        "sample_rate:int? duration_s:real? size_bytes:int? sha256:text? "
+        "chapters:text turn_times:text error:text? meta:text? created_at:text "
+        "completed_at:text?"
+    ),
 }
 # The first archive format version that contains each table (default 1).
 TABLE_SINCE = {
@@ -142,7 +164,13 @@ TABLE_SINCE = {
     "quiz_attempts": 2,
     "quiz_attempt_items": 2,
     "study_concept_stats": 2,
+    "audio_overviews": 3,
+    "audio_sections": 3,
+    "audio_turns": 3,
+    "audio_evidence": 3,
+    "audio_assets": 3,
 }
+AUDIO_SINCE = 3  # archive version from which audio files may be present
 
 
 def tables_for(version: int) -> list[str]:
@@ -158,6 +186,7 @@ ENTRY_PATTERNS = {
     "notebook": re.compile(rf"^{_NB}/notebook\.json$"),
     "table": re.compile(rf"^{_NB}/tables/(?P<table>[a-z_]+)\.jsonl$"),
     "source": re.compile(rf"^{_NB}/sources/(?P<sid>[1-9]\d{{0,11}})\.pdf$"),
+    "audio": re.compile(rf"^{_NB}/audio/(?P<aid>[1-9]\d{{0,11}})\.wav$"),
 }
 
 

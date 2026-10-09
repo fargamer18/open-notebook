@@ -1,0 +1,53 @@
+<section class="panel quiz-new" aria-labelledby="audio-new-title">
+  <h2 id="audio-new-title">Create an audio overview</h2>
+  <p class="muted">The script is written only from the material you select, and every factual line keeps its citation. General knowledge is not added. Audio is optional and spoken by a local voice after the transcript is ready.</p>
+  {% if error %}
+  <div class="notice-panel notice-error panel" role="alert" id="audio-form-error">
+    <p><strong>{{ error }}</strong></p>
+    {% if setup_url %}<p><a class="btn btn-primary btn-sm" href="{{ setup_url }}">Set up local AI</a></p>{% endif %}
+  </div>
+  {% endif %}
+  <form method="post" action="{{ sbase }}/audio" class="quiz-form">
+    <fieldset>
+      <legend>Sources</legend>
+      {% for src in sources %}
+        <label class="check"><input type="checkbox" name="sources" value="{{ src.id }}" {% if src.id in form.sources %}checked{% endif %}> {{ src.original_filename }}{% if src.page_count %} <span class="muted">· {{ src.page_count }} page{{ "" if src.page_count == 1 else "s" }}</span>{% endif %}</label>
+      {% else %}
+        <p class="muted">No ready sources. <a href="/notebooks/{{ nb.id }}?tab=sources">Upload a PDF</a> first.</p>
+      {% endfor %}
+    </fieldset>
+    <fieldset>
+      <legend>Optional material</legend>
+      <label class="check"><input type="checkbox" name="notes" value="1" {% if form.notes %}checked{% endif %} {% if not notes_count %}disabled{% endif %}> My notes <span class="muted">({{ notes_count }})</span></label>
+      <label class="check"><input type="checkbox" name="chat" value="1" {% if form.chat %}checked{% endif %} {% if not chat_count %}disabled{% endif %}> Chat history <span class="muted">({{ chat_count }} answer{{ "" if chat_count == 1 else "s" }})</span></label>
+      <p class="hint">Off by default: only the selected sources are used.</p>
+    </fieldset>
+    <div class="field">
+      <label for="audio-focus">Focus <span class="muted">(optional)</span></label>
+      <input id="audio-focus" name="focus" maxlength="{{ max_focus }}" value="{{ form.focus }}" placeholder="e.g. explain eigenvectors intuitively" autocomplete="off">
+    </div>
+    <fieldset>
+      <legend>Format</legend>
+      {% for f in formats %}
+        <label class="choice"><input type="radio" name="format" value="{{ f }}" {% if form.format == f %}checked{% endif %}>
+          <span><strong>{{ format_labels[f] }}</strong> <span class="fit-reasons">{{ format_help[f] }}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    <fieldset>
+      <legend>Length</legend>
+      <div class="choice-row">
+      {% for m in durations %}<label class="check"><input type="radio" name="minutes" value="{{ m }}" {% if form.minutes == m %}checked{% endif %}> ~{{ m }} min</label>{% endfor %}
+      </div>
+      <p class="hint">A target, estimated at {{ wpm }} words per minute. Only generated audio has an exact duration. A script can come out shorter when passages cannot be grounded safely.</p>
+    </fieldset>
+    <div class="field">
+      <label for="audio-title">Title <span class="muted">(optional)</span></label>
+      <input id="audio-title" name="title" maxlength="{{ max_title }}" value="{{ form.title }}" placeholder="Made from the focus or the source names" autocomplete="off">
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Generate transcript</button>
+      <a class="btn btn-ghost" href="{{ sbase }}/audio">Cancel</a>
+    </div>
+    <p class="hint">Writing uses Local AI (an outline, then the script) and can take a few minutes on a CPU. Chat and quizzes wait until it is done.</p>
+  </form>
+</section>

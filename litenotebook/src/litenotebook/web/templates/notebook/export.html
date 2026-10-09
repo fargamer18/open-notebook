@@ -16,7 +16,9 @@
     <dt>Notes</dt><dd>{{ summary.notes }}</dd>
     <dt>Chats</dt><dd>{{ summary.conversations }} <span class="muted">({{ summary.messages }} messages, citations and memory references)</span></dd>
     <dt>Annotations</dt><dd>{{ summary.annotations }}</dd>
-    <dt>Estimated size</dt><dd>about {{ (summary.source_bytes + summary.chunks * 2600) | filesize }}</dd>
+    <dt>Quizzes</dt><dd>{{ summary.quizzes }} <span class="muted">({{ summary.quiz_attempts }} attempts)</span></dd>
+    <dt>Audio Overviews</dt><dd>{{ summary.audio_overviews }} <span class="muted">(transcripts, evidence and finished audio{% if summary.audio_bytes %}: {{ summary.audio_bytes | filesize }} of WAV files{% endif %})</span></dd>
+    <dt>Estimated size</dt><dd>about {{ (summary.source_bytes + summary.audio_bytes + summary.chunks * 2600) | filesize }}</dd>
   </dl>
   <p class="hint">Not included: search indexes (rebuilt on import), rendered page images, temporary files, settings and API keys.</p>
   {% if summary.busy %}

@@ -1,0 +1,128 @@
+{
+ "catalog_version": 1,
+ "kind": "speech",
+ "updated": "2026-10-09",
+ "note": "Engine: pinned sherpa-onnx release v1.13.8 (CPU). Voices: int8 Piper voices converted by the sherpa-onnx project; only voices whose model card names public-domain training data and that were trained from scratch are listed. Checksums are GitHub's published SHA-256 asset digests.",
+ "default_voices": {
+  "A": "piper-en_US-kristin-medium",
+  "B": "piper-en_US-norman-medium",
+  "narrator": "piper-en_US-kristin-medium"
+ },
+ "engines": [
+  {
+   "project": "sherpa-onnx",
+   "version": "1.13.8",
+   "release_date": "2026-09-10",
+   "release_url": "https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8",
+   "source_url": "https://github.com/k2-fsa/sherpa-onnx",
+   "license": "Apache-2.0",
+   "license_url": "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE",
+   "license_note": "The engine is Apache-2.0. Its text-to-speech front end uses espeak-ng (GPL-3.0) for phonemes, and the voice archives ship espeak-ng-data (GPL-3.0). LiteNotebook does not bundle either: both are downloaded from their publishers when you choose to install speech, and run as a separate program.",
+   "id": "sherpa-onnx-1.13.8-linux-x86_64",
+   "os": "linux",
+   "arch": "x86_64",
+   "executable": "sherpa-onnx-v1.13.8-linux-x64-shared/bin/sherpa-onnx-offline-tts",
+   "library_dir": "sherpa-onnx-v1.13.8-linux-x64-shared/lib",
+   "layout_verified": true,
+   "tested": true,
+   "assets": [
+    {
+     "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2",
+     "size": 28156791,
+     "sha256": "c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4",
+     "format": "tar.bz2"
+    }
+   ]
+  },
+  {
+   "project": "sherpa-onnx",
+   "version": "1.13.8",
+   "release_date": "2026-09-10",
+   "release_url": "https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8",
+   "source_url": "https://github.com/k2-fsa/sherpa-onnx",
+   "license": "Apache-2.0",
+   "license_url": "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE",
+   "license_note": "The engine is Apache-2.0. Its text-to-speech front end uses espeak-ng (GPL-3.0) for phonemes, and the voice archives ship espeak-ng-data (GPL-3.0). LiteNotebook does not bundle either: both are downloaded from their publishers when you choose to install speech, and run as a separate program.",
+   "id": "sherpa-onnx-1.13.8-windows-x86_64",
+   "os": "windows",
+   "arch": "x86_64",
+   "executable": "sherpa-onnx-v1.13.8-win-x64-shared-MT-Release/bin/sherpa-onnx-offline-tts.exe",
+   "library_dir": "sherpa-onnx-v1.13.8-win-x64-shared-MT-Release/lib",
+   "layout_verified": false,
+   "tested": false,
+   "assets": [
+    {
+     "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-shared-MT-Release.tar.bz2",
+     "size": 24805859,
+     "sha256": "6dffdc715a4465b989446a6105265d2cb345e7101591a17d35534b6758f6e8df",
+     "format": "tar.bz2"
+    }
+   ]
+  }
+ ],
+ "voices": [
+  {
+   "id": "piper-en_US-kristin-medium",
+   "display_name": "Kristin (US English)",
+   "engine": "sherpa-onnx",
+   "model_type": "vits-piper",
+   "language": "en",
+   "locale": "en_US",
+   "quality": "medium",
+   "sample_rate": 22050,
+   "speakers": 1,
+   "description": "US English female voice, single speaker (model card).",
+   "license": "Training data: public domain (per the voice's model card); voice repository: MIT",
+   "license_url": "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/kristin/medium/MODEL_CARD",
+   "model_card_url": "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/kristin/medium/MODEL_CARD",
+   "asset": {
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-kristin-medium-int8.tar.bz2",
+    "size": 20882061,
+    "sha256": "16289d7ee8e6b2311a0a0af6531a55f498f82499644a1bb6fddb991fe6fa950c",
+    "format": "tar.bz2"
+   }
+  },
+  {
+   "id": "piper-en_US-norman-medium",
+   "display_name": "Norman (US English)",
+   "engine": "sherpa-onnx",
+   "model_type": "vits-piper",
+   "language": "en",
+   "locale": "en_US",
+   "quality": "medium",
+   "sample_rate": 22050,
+   "speakers": 1,
+   "description": "US English male voice, single speaker (model card).",
+   "license": "Training data: public domain (per the voice's model card); voice repository: MIT",
+   "license_url": "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/norman/medium/MODEL_CARD",
+   "model_card_url": "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/norman/medium/MODEL_CARD",
+   "asset": {
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-norman-medium-int8.tar.bz2",
+    "size": 20987233,
+    "sha256": "cb481a514bc213ccf3899391c0f27fdcc4e4b814ec30496f28089a027b5aa01b",
+    "format": "tar.bz2"
+   }
+  },
+  {
+   "id": "piper-en_US-ljspeech-medium",
+   "display_name": "LJ Speech (US English)",
+   "engine": "sherpa-onnx",
+   "model_type": "vits-piper",
+   "language": "en",
+   "locale": "en_US",
+   "quality": "medium",
+   "sample_rate": 22050,
+   "speakers": 1,
+   "description": "US English female voice, single speaker, trained on the LJ Speech dataset (model card).",
+   "license": "Training data: public domain (per the voice's model card); voice repository: MIT",
+   "license_url": "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD",
+   "model_card_url": "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD",
+   "asset": {
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-ljspeech-medium-int8.tar.bz2",
+    "size": 21090429,
+    "sha256": "24dc3bd77dd48c291e52c297878d3437c9492f245d823d7f6a06c4bbb67f4b6b",
+    "format": "tar.bz2"
+   }
+  }
+ ]
+}

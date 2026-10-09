@@ -84,6 +84,16 @@ _WHERE = {
     "quiz_attempt_items": "WHERE attempt_id IN (SELECT a.id FROM quiz_attempts a "
     "JOIN quizzes q ON q.id = a.quiz_id WHERE q.notebook_id = :nb)",
     "study_concept_stats": "WHERE notebook_id = :nb",
+    "audio_overviews": "WHERE notebook_id = :nb",
+    "audio_sections": "WHERE overview_id IN "
+    "(SELECT id FROM audio_overviews WHERE notebook_id = :nb)",
+    "audio_turns": "WHERE section_id IN (SELECT s.id FROM audio_sections s "
+    "JOIN audio_overviews o ON o.id = s.overview_id WHERE o.notebook_id = :nb)",
+    "audio_evidence": "WHERE overview_id IN "
+    "(SELECT id FROM audio_overviews WHERE notebook_id = :nb)",
+    # finished audio only: a synthesis in progress or a failed one has no file
+    "audio_assets": "WHERE status = 'ready' AND overview_id IN "
+    "(SELECT id FROM audio_overviews WHERE notebook_id = :nb)",
 }
 
 
@@ -219,6 +229,7 @@ def _write_notebook(
             )
         source_bytes += size
     counts["source_bytes"] = source_bytes
+    counts["audio_bytes"] = _write_audio(w, conn, settings, nb_id, prefix)
     return {
         "id": nb_id,
         "name": nb["name"],
@@ -226,6 +237,48 @@ def _write_notebook(
         "dir": prefix,
         "counts": counts,
     }
+
+
+def _write_audio(
+    w: _HashingWriter,
+    conn: sqlite3.Connection,
+    settings: Settings,
+    nb_id: int,
+    prefix: str,
+) -> int:
+    """Finished audio files, stored uncompressed and checked against their
+    recorded checksum (a changed or missing file stops the export)."""
+    from litenotebook.study.audio_store import asset_path
+
+    total = 0
+    for aid, oid, sha, title in conn.execute(
+        "SELECT a.id, a.overview_id, a.sha256, o.title FROM audio_assets a "
+        "JOIN audio_overviews o ON o.id = a.overview_id WHERE o.notebook_id = ? "
+        "AND a.status = 'ready' ORDER BY a.id",
+        (nb_id,),
+    ).fetchall():
+        path = asset_path(settings, nb_id, oid, aid)
+        if path.is_symlink() or not path.is_file():
+            raise ArchiveError(
+                f"The audio file for “{title}” is missing; generate the audio again "
+                "or delete that overview, then export again"
+            )
+        name = f"{prefix}/audio/{aid}.wav"
+        size = path.stat().st_size
+        with (
+            open(path, "rb") as src,
+            w.entry(name, compress=False, large=size >= 1 << 30) as (out, digest),
+        ):
+            while chunk := src.read(COPY_BUFFER_BYTES):
+                digest.update(chunk)
+                out.write(chunk)
+        if w.checksums[name] != sha:
+            raise ArchiveError(
+                f"The audio file for “{title}” does not match its recorded checksum; "
+                "not exporting a corrupt copy"
+            )
+        total += size
+    return total
 
 
 def _write_archive(
@@ -362,6 +415,13 @@ def summary(conn: sqlite3.Connection, notebook_id: int) -> dict[str, int]:
         "messages": one(f"SELECT count(*) FROM messages {_WHERE['messages']}"),
         "annotations": one(f"SELECT count(*) FROM annotations {_WHERE['annotations']}"),
         "quizzes": one(f"SELECT count(*) FROM quizzes {_WHERE['quizzes']}"),
+        "audio_overviews": one(
+            f"SELECT count(*) FROM audio_overviews {_WHERE['audio_overviews']}"
+        ),
+        "audio_bytes": one(
+            "SELECT coalesce(sum(size_bytes), 0) FROM audio_assets "
+            f"{_WHERE['audio_assets']}"
+        ),
         "quiz_attempts": one(
             f"SELECT count(*) FROM quiz_attempts {_WHERE['quiz_attempts']}"
         ),

@@ -34,8 +34,10 @@ def db(settings, nb):
     c.close()
 
 
-def test_schema_is_version_9_with_study_tables(db):
-    assert schema_version(db) == 9
+def test_schema_has_study_tables(db):
+    from litenotebook.db import available_migrations
+
+    assert schema_version(db) == len(available_migrations()) >= 9
     tables = {
         r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")
     }

@@ -136,6 +136,22 @@ def notebook_counts(conn: sqlite3.Connection, notebook_id: int) -> dict[str, int
         "study_concepts": one(
             "SELECT count(*) FROM study_concept_stats WHERE notebook_id = ?"
         ),
+        "audio_overviews": one(
+            "SELECT count(*) FROM audio_overviews WHERE notebook_id = ?"
+        ),
+        "audio_turns": one(
+            "SELECT count(*) FROM audio_turns t JOIN audio_sections s "
+            "ON s.id = t.section_id JOIN audio_overviews o ON o.id = s.overview_id "
+            "WHERE o.notebook_id = ?"
+        ),
+        "audio_evidence": one(
+            "SELECT count(*) FROM audio_evidence e JOIN audio_overviews o "
+            "ON o.id = e.overview_id WHERE o.notebook_id = ?"
+        ),
+        "audio_files": one(
+            "SELECT count(*) FROM audio_assets a JOIN audio_overviews o "
+            "ON o.id = a.overview_id WHERE o.notebook_id = ? AND a.status = 'ready'"
+        ),
     }
 
 
@@ -160,6 +176,15 @@ def notebook_report(
 
     if not stats_consistent(conn, notebook_id):
         problems.append("Study: concept progress does not match the quiz answers")
+    from litenotebook.study.audio_store import asset_path
+
+    for aid, oid in conn.execute(
+        "SELECT a.id, a.overview_id FROM audio_assets a JOIN audio_overviews o "
+        "ON o.id = a.overview_id WHERE o.notebook_id = ? AND a.status = 'ready'",
+        (notebook_id,),
+    ).fetchall():
+        if not asset_path(settings, notebook_id, oid, aid).is_file():
+            problems.append(f"Audio file missing for overview {oid}")
     for sid, filename in conn.execute(
         "SELECT id, original_filename FROM sources WHERE notebook_id = ?",
         (notebook_id,),

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from collections.abc import AsyncIterator, Mapping
+import threading
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from litenotebook import __version__
 from litenotebook.ai.jobs import JobManager
 from litenotebook.ai.runtime_manager import RuntimeManager
 from litenotebook.ai.service import LocalAI
+from litenotebook.ai.speech import SpeechProvider, provider_for
 from litenotebook.chat import (
     CitationNotFoundError,
     ConversationNotFoundError,
@@ -52,11 +54,14 @@ from litenotebook.services.ingestion import IngestionWorker
 from litenotebook.services.settings import SettingsError
 from litenotebook.services.uploads import clean_stale_uploads
 from litenotebook.sources import SourceNotFoundError, recover_interrupted
+from litenotebook.study.audio_store import AssetNotFoundError, OverviewNotFoundError
+from litenotebook.study.audio_store import recover as recover_audio
 from litenotebook.study.store import AttemptNotFoundError, QuizNotFoundError
 from litenotebook.study.store import recover_generating as recover_quizzes
 from litenotebook.web.deps import render
 from litenotebook.web.routes import (
     ai,
+    audio,
     backup,
     chat,
     health,
@@ -83,6 +88,7 @@ def create_app(
     llm_transport: httpx.BaseTransport | None = None,
     embedder_factory: EmbedderFactory | None = None,
     local_ai: LocalAI | None = None,
+    speech_provider: Callable[[Settings], SpeechProvider | None] | None = None,
 ) -> FastAPI:
     """Build the app. ``env``, ``llm_transport`` and ``embedder_factory`` are
     injection points for tests. The ingestion worker runs only inside the
@@ -114,6 +120,13 @@ def create_app(
             log.warning("Interrupted answers marked: %d", interrupted_answers)
         if interrupted_quizzes := recover_quizzes(keeper):
             log.warning("Interrupted quiz generations marked: %d", interrupted_quizzes)
+        scripts, speech_runs = recover_audio(keeper, app_settings)
+        if scripts or speech_runs:
+            log.warning(
+                "Interrupted audio overviews: %d script(s), %d synthesis run(s)",
+                scripts,
+                speech_runs,
+            )
         # Deterministic, idempotent: derive graph memory for any exchange that
         # has none yet (e.g. conversations from before Phase 5). No LLM calls.
         if remembered := backfill(keeper):
@@ -123,8 +136,13 @@ def create_app(
             yield
         finally:
             worker.stop()
-            for job in list(app.state.quiz_jobs.values()):
-                job.cancel.set()  # quiz threads stop at their next check
+            for registry in (
+                app.state.quiz_jobs,
+                app.state.audio_jobs,
+                app.state.speech_jobs,
+            ):
+                for job in list(registry.values()):
+                    job.cancel.set()  # threads stop at their next check
             local_ai_service.runtime.stop()  # only the llama-server this app started
             embedder.close()  # stops and reaps the MiniLM child process
             keeper.close()
@@ -154,6 +172,10 @@ def create_app(
     app.state.local_ai = local_ai_service
     app.state.ai_jobs = JobManager()
     app.state.quiz_jobs = {}  # quiz id → running QuizJob (for Cancel)
+    app.state.audio_jobs = {}  # overview id → running script generation
+    app.state.speech_jobs = {}  # overview id → running synthesis
+    app.state.speech_lock = threading.Lock()  # one speech job at a time
+    app.state.speech_provider = speech_provider or provider_for
 
     app.add_middleware(LocalOnlyMiddleware)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -171,6 +193,7 @@ def create_app(
     app.include_router(backup.router)
     app.include_router(ai.router)
     app.include_router(study.router)
+    app.include_router(audio.router)
 
     async def missing_item(request: Request, exc: Exception) -> HTMLResponse:
         # A missing notebook gets no "back to notebook" link.
@@ -189,6 +212,8 @@ def create_app(
         AnnotationNotFoundError,
         QuizNotFoundError,
         AttemptNotFoundError,
+        OverviewNotFoundError,
+        AssetNotFoundError,
     ):
         app.add_exception_handler(missing, missing_item)
 

@@ -3,14 +3,15 @@
 {% set nav = "notebooks" %}
 {% set nb = s.notebook %}
 {% set label = tabs[tab][0] %}
-{% block title %}{% if tab == "chat" and conversation %}{{ conversation.title }} · {% elif tab == "notes" and note %}{{ note.title }} · {% elif tab == "study" and quiz is defined and quiz %}{{ quiz.title }} · {% endif %}{{ label }} · {{ nb.name }}{% endblock %}
-{% block scripts %}{% if tab == "chat" %}<script src="/static/chat.js" defer></script>{% elif tab == "notes" and note %}<script src="/static/notes.js" defer></script>{% elif tab == "memory" and memory_view == "graph" %}<script src="/static/graph.js" defer></script>{% elif tab == "study" %}<script src="/static/study.js" defer></script>{% endif %}{% endblock %}
+{% block title %}{% if tab == "chat" and conversation %}{{ conversation.title }} · {% elif tab == "notes" and note %}{{ note.title }} · {% elif tab == "study" and quiz is defined and quiz %}{{ quiz.title }} · {% elif tab == "study" and overview is defined and overview %}{{ overview.title }} · {% endif %}{{ label }} · {{ nb.name }}{% endblock %}
+{% block scripts %}{% if tab == "chat" %}<script src="/static/chat.js" defer></script>{% elif tab == "notes" and note %}<script src="/static/notes.js" defer></script>{% elif tab == "memory" and memory_view == "graph" %}<script src="/static/graph.js" defer></script>{% elif tab == "study" %}<script src="/static/study.js" defer></script>{% if study_view == "audio_view" %}<script src="/static/audio.js" defer></script>{% endif %}{% endif %}{% endblock %}
 {% block content %}
 {% set nb_url = "/notebooks/" ~ nb.id %}
 {% set trail = [("Notebooks", "/"), (nb.name, nb_url ~ "?tab=sources")] %}
 {% if tab == "chat" and conversation %}{% set trail = trail + [("Chat", nb_url ~ "/chat"), (conversation.title, "")] %}
 {% elif tab == "notes" and note %}{% set trail = trail + [("Notes", nb_url ~ "/notes"), (note.title, "")] %}
 {% elif tab == "memory" and memory_view == "graph" %}{% set trail = trail + [("Memory", nb_url ~ "/memory"), ("Graph", "")] %}
+{% elif tab == "study" and study_view in ("audio_new", "audio_view") %}{% set trail = trail + [("Study", nb_url ~ "/study"), ("Audio Overviews", nb_url ~ "/study/audio"), (study_crumb, "")] %}
 {% elif tab == "study" and study_view != "home" %}{% set trail = trail + [("Study", nb_url ~ "/study")] + ([(quiz.title, nb_url ~ "/study/quizzes/" ~ quiz.id)] if quiz is defined and quiz and study_view != "quiz" else []) + [(study_crumb, "")] %}
 {% else %}{% set trail = trail + [(label, "")] %}{% endif %}
 {{ crumbs(trail) }}

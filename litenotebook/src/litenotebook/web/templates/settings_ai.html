@@ -152,6 +152,52 @@
   {% endif %}
 </section>
 
+<section class="panel" aria-labelledby="speech-title" id="speech">
+  <h2 id="speech-title">Speech <span class="muted">(optional)</span></h2>
+  <p class="muted">Speaks Audio Overview transcripts with a local voice. Transcripts work without it; nothing is downloaded until you choose to install.</p>
+  {% set sp = speech %}
+  <p class="status-line"><span class="dot dot-{{ 'ok' if sp.ready else ('warn' if sp.installed else '') }}" aria-hidden="true"></span>
+    <strong>{{ "Ready" if sp.ready else ("Engine installed, no voice yet" if sp.installed else "Not installed") }}</strong>
+    {% if sp.engine %}<span class="muted">· sherpa-onnx {{ sp.engine.version }} · {{ sp.engine.license }}</span>{% endif %}</p>
+  {% if sp.engine_entry %}{% set e = sp.engine_entry %}
+    <p class="muted">Engine: <a href="{{ e.release_url }}" rel="noreferrer" target="_blank">sherpa-onnx {{ e.version }}</a> (CPU) · {{ e.assets | sum(attribute="size") | filesize }} download · <a href="{{ e.license_url }}" rel="noreferrer" target="_blank">{{ e.license }}</a>. {{ e.license_note }}</p>
+    <div class="actions">
+      <form method="post" action="/settings/ai/install-speech"><button class="btn {{ '' if sp.installed else 'btn-primary' }}" type="submit">{{ "Repair speech engine" if sp.installed else "Install speech engine" }}</button></form>
+      {% if sp.installed %}<form method="post" action="/settings/ai/remove-speech"><input type="hidden" name="confirm" value="speech"><button class="btn btn-ghost btn-sm" type="submit">Remove engine (keeps voices)</button></form>{% endif %}
+    </div>
+  {% else %}
+    <p class="notice-warn">No speech engine build for this computer ({{ platform }}) in the catalog.</p>
+  {% endif %}
+  <h3>Voices</h3>
+  {% if sp.voices %}
+  <ul class="model-list">
+    {% for v in sp.voices %}
+    <li><strong>{{ v.display_name }}</strong> <span class="muted">· {{ v.sample_rate }} Hz · {{ v.license }}</span>
+      <span class="actions">
+        {% if sp.installed %}<form method="post" action="/settings/ai/test-voice"><input type="hidden" name="voice_id" value="{{ v.id }}"><button class="btn btn-sm" type="submit">Test voice</button></form>{% endif %}
+        <form method="post" action="/settings/ai/remove-voice"><input type="hidden" name="voice_id" value="{{ v.id }}"><input type="hidden" name="confirm" value="{{ v.id }}"><button class="btn btn-ghost btn-sm btn-danger-text" type="submit" aria-label="Remove voice {{ v.display_name }}">Remove</button></form>
+      </span></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No voices installed.</p>{% endif %}
+  {% if sp.available_voices %}
+  <details class="ai-more" {% if sp.installed and not sp.voices %}open{% endif %}>
+    <summary>Add a voice</summary>
+    <form method="post" action="/settings/ai/add-voice" class="choice-form">
+      <fieldset><legend>Voice</legend>
+      {% for v in sp.available_voices %}
+        <label class="choice"><input type="radio" name="voice_id" value="{{ v.id }}" {% if loop.first %}checked{% endif %} required>
+          <span><strong>{{ v.display_name }}</strong> <span class="muted">· {{ v.asset.size | filesize }} · {{ v.sample_rate }} Hz</span>
+            <span class="fit-reasons">{{ v.description }} {{ v.license }} — <a href="{{ v.model_card_url }}" rel="noreferrer" target="_blank">model card</a></span></span></label>
+      {% endfor %}
+      </fieldset>
+      <button class="btn" type="submit">Download and add voice</button>
+    </form>
+    <p class="hint">Two-person overviews need two different voices.</p>
+  </details>
+  {% endif %}
+</section>
+
 <section class="panel" aria-labelledby="hw-title">
   <h2 id="hw-title">Hardware</h2>
   {% if hardware %}{% include "partials/ai_hardware.html" %}{% else %}<p class="muted">Not scanned yet.</p>{% endif %}

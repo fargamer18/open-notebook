@@ -1,0 +1,159 @@
+{% from "macros.html" import delete_trigger %}
+{% set o = overview %}
+{% set abase = sbase ~ "/audio/" ~ o.id %}
+{% set asset = o.latest_asset %}
+<section class="panel quiz-overview" aria-labelledby="audio-h">
+  <div class="panel-head"><h2 id="audio-h">{{ o.title }}</h2></div>
+  <p class="sr-only" role="status" aria-live="polite" id="quiz-announce"></p>
+  {% if o.status in ("pending", "retrieving", "generating_script") %}
+    {% include "partials/audio_status.html" %}
+  {% elif o.status in ("failed", "cancelled") %}
+    <div class="panel notice-panel notice-error" role="alert">
+      <p><strong>{{ "Generation cancelled." if o.status == "cancelled" else "No transcript was generated." }}</strong> {% if o.status == "failed" %}{{ o.error }}{% endif %}</p>
+      {% if o.status == "failed" and o.error and ("reach the LLM" in o.error or "Local AI" in o.error or "not configured" in o.error) %}<p><a class="btn btn-primary btn-sm" href="/settings/ai">Local AI settings</a></p>{% endif %}
+    </div>
+  {% endif %}
+  {% if o.message %}<p class="notice-warn" role="note">{{ o.message }}</p>{% endif %}
+  <dl class="kv">
+    <dt>Format</dt><dd>{{ o.format_label }}</dd>
+    <dt>Length</dt><dd>~{{ o.target_minutes }} min target{% if o.has_script %} · {{ o.word_count }} words, about {{ ((o.estimated_seconds / 60) | round(0, "ceil")) | int }} min at {{ o.words_per_minute }} words/min (estimate){% endif %}{% if asset and asset.status == "ready" %} · audio {{ asset.duration_s | duration }}{% endif %}</dd>
+    <dt>Sources</dt><dd class="wrap">{{ o.source_names | join(", ") or "—" }}{% if o.material.notes %} · My notes{% endif %}{% if o.material.chat %} · Chat history{% endif %}</dd>
+    {% if o.focus %}<dt>Focus</dt><dd class="wrap">{{ o.focus }}</dd>{% endif %}
+    <dt>Created</dt><dd>{{ o.created_at | ts }}{% if o.model %} <span class="muted">· {{ o.model }}</span>{% endif %}{% if o.has_script and o.meta.timings %} <span class="muted">· written in {{ o.meta.timings.total | duration }}</span>{% endif %}</dd>
+  </dl>
+</section>
+
+{% if o.has_script %}
+<section class="panel audio-panel" aria-labelledby="audio-player-h">
+  <h2 id="audio-player-h">Audio</h2>
+  {% if o.status == "synthesizing" %}{% include "partials/audio_status.html" %}{% endif %}
+  {% if asset and asset.status == "ready" %}
+    <audio id="audio-player" controls preload="metadata" src="{{ abase }}/audio/{{ asset.id }}" aria-describedby="audio-meta"></audio>
+    <p class="muted" id="audio-meta">{{ asset.duration_s | duration }} · {{ asset.size_bytes | filesize }} WAV · voices: {% for sp, v in asset.voices.items() %}{{ speaker_labels.get(sp, sp) }} — {{ v }}{% if not loop.last %}, {% endif %}{% endfor %} · {{ asset.engine }}</p>
+    <p><a class="btn btn-sm" href="{{ abase }}/audio/{{ asset.id }}?download=1">Download audio</a></p>
+    {% if asset.chapters %}
+    <h3>Chapters</h3>
+    <ol class="chapter-list" id="chapters">
+      {% for c in asset.chapters %}
+        {% set m = (c.start_s // 60) | int %}{% set sec = (c.start_s % 60) | int %}
+        <li><button class="btn btn-ghost btn-sm chapter" type="button" data-seek="{{ c.start_s }}" data-section="{{ c.section }}"
+              aria-label="Play from {{ '%02d:%02d' % (m, sec) }}: {{ c.title }}"><span class="mono">{{ '%02d:%02d' % (m, sec) }}</span> {{ c.title }}</button></li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+    <script type="application/json" id="turn-times">{{ asset.turn_times | tojson }}</script>
+  {% elif asset and asset.status in ("failed", "cancelled") and o.status != "synthesizing" %}
+    <p class="notice-warn" role="note">{{ asset.error }}</p>
+  {% elif o.status != "synthesizing" %}
+    <p class="muted">Audio not generated.</p>
+  {% endif %}
+  {% if o.status != "synthesizing" %}
+    {% if synth_error %}<p class="error" role="alert" id="synth-error">{{ synth_error }}</p>{% endif %}
+    {% if not speech.installed %}
+      <p><strong>Local speech is not installed.</strong> The transcript works without it.</p>
+      <p><a class="btn btn-primary btn-sm" href="/settings/ai#speech">Set up speech</a></p>
+    {% elif not speech.voices %}
+      <p><strong>No voice is installed yet.</strong></p>
+      <p><a class="btn btn-primary btn-sm" href="/settings/ai#speech">Add a voice</a></p>
+    {% else %}
+      <form method="post" action="{{ abase }}/synthesize" class="voice-form">
+        {% set installed = speech.voices %}
+        {% if speakers | length == 2 %}
+          {% for sp, field, default in (("A", "voice_a", speech.default_voices.get("A")), ("B", "voice_b", speech.default_voices.get("B"))) %}
+          <div class="field narrow-field">
+            <label for="{{ field }}">{{ speaker_labels[sp] }} voice</label>
+            <select id="{{ field }}" name="{{ field }}">
+              {% for v in installed %}<option value="{{ v.id }}" {% if v.id == default or (loop.index == 2 and sp == "B" and default not in speech.voice_ids) %}selected{% endif %}>{{ v.display_name }}</option>{% endfor %}
+            </select>
+          </div>
+          {% endfor %}
+          {% if installed | length < 2 %}<p class="hint">Only one voice is installed, so both hosts would sound the same. <a href="/settings/ai#speech">Add another voice</a>, or allow it below.</p>{% endif %}
+          <label class="check"><input type="checkbox" name="same_voice" value="1"> Use the same voice for both hosts</label>
+        {% else %}
+          <div class="field narrow-field">
+            <label for="voice_narrator">Narrator voice</label>
+            <select id="voice_narrator" name="voice_narrator">
+              {% for v in installed %}<option value="{{ v.id }}" {% if v.id == speech.default_voices.get("narrator") %}selected{% endif %}>{{ v.display_name }}</option>{% endfor %}
+            </select>
+          </div>
+        {% endif %}
+        <button class="btn {{ '' if asset and asset.status == 'ready' else 'btn-primary' }}" type="submit">{{ "Generate the audio again with these voices" if asset and asset.status == "ready" else "Generate audio" }}</button>
+        <p class="hint">Spoken locally from the transcript only; citation markers are not read aloud. The transcript never changes.</p>
+      </form>
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="panel transcript-panel" aria-labelledby="transcript-h">
+  <div class="panel-head">
+    <h2 id="transcript-h">Transcript</h2>
+    <div class="actions">
+      <button class="btn btn-sm" type="button" data-copy-transcript>Copy transcript</button>
+      <a class="btn btn-sm" href="{{ abase }}/transcript.txt">Download transcript</a>
+    </div>
+  </div>
+  <textarea id="transcript-text" class="sr-only" readonly tabindex="-1" aria-hidden="true" aria-label="Transcript text (for copying)">{{ transcript_plain }}</textarea>
+  <p class="sr-only" role="status" id="copy-status"></p>
+  {% for s in audio_sections %}
+  <section class="transcript-section" id="sec-{{ s.position }}" aria-labelledby="sec-{{ s.position }}-h">
+    <h3 class="review-head" id="sec-{{ s.position }}-h">{{ s.position }}. {{ s.title }}</h3>
+    {% for t in s.turns %}
+      <p class="turn turn-{{ t.speaker }}" id="turn-{{ t.id }}" data-turn="{{ t.id }}"><strong class="speaker">{{ t.speaker_label }}:</strong> {{ t.text }}
+        {%- for r in t.refs %}{% set e = audio_evidence.get(r) %}
+          {%- if e and e.kind == "source" and e.exists and e.chunk_exists %} <a class="cite" href="/notebooks/{{ nb_id }}/sources/{{ e.source_id }}/read?chunk={{ e.chunk_id }}&amp;audio={{ o.id }}" title="{{ e.title }}, page {{ e.page_no }}">{{ r }}</a>
+          {%- elif e and e.kind == "source" and e.exists %} <a class="cite" href="/notebooks/{{ nb_id }}/sources/{{ e.source_id }}/read?page={{ e.page_no }}&amp;audio={{ o.id }}" title="{{ e.title }}, page {{ e.page_no }}">{{ r }}</a>
+          {%- else %} <a class="cite{% if e and not e.exists %} cite-deleted{% endif %}" href="#ev-{{ r }}" title="{{ e.title if e else r }}{% if e and not e.exists %} (deleted){% endif %}">{{ r }}</a>{% endif %}
+        {%- endfor %}</p>
+    {% endfor %}
+  </section>
+  {% endfor %}
+</section>
+
+<section class="panel" aria-labelledby="audio-ev-h">
+  <h2 id="audio-ev-h">Evidence</h2>
+  <ul class="ev-list">
+  {% for label, e in audio_evidence.items() %}
+    <li class="ev-item" id="ev-{{ label }}">
+      <p class="ev-cite"><span class="cite">[{{ label }}]</span>
+        {% if e.kind == "source" %}{{ e.title }} · page {{ e.page_no }}{% elif e.kind == "note" %}Note: {{ e.title }}{% else %}Chat: {{ e.title }}{% endif %}
+        {% if not e.exists %}<span class="pill pill-failed">{{ "Source deleted" if e.kind == "source" else ("Note deleted" if e.kind == "note" else "Chat deleted") }}</span>{% endif %}</p>
+      <blockquote class="ev-text">{{ e.excerpt }}</blockquote>
+      {% if e.kind == "source" %}
+        {% if e.exists and e.chunk_exists %}<a class="btn btn-sm" href="/notebooks/{{ nb_id }}/sources/{{ e.source_id }}/read?chunk={{ e.chunk_id }}&amp;audio={{ o.id }}">Open in PDF</a>
+        {% elif e.exists %}<a class="btn btn-sm" href="/notebooks/{{ nb_id }}/sources/{{ e.source_id }}/read?page={{ e.page_no }}&amp;audio={{ o.id }}">Open page {{ e.page_no }} in PDF</a>
+        {% else %}<button class="btn btn-sm" type="button" disabled>Open in PDF</button> <span class="muted">The snapshot above was saved with the overview.</span>{% endif %}
+      {% elif e.kind == "note" and e.exists %}<a class="btn btn-sm btn-ghost" href="/notebooks/{{ nb_id }}/notes/{{ e.note_id }}">Open note</a>
+      {% elif e.kind == "chat" and e.exists %}<a class="btn btn-sm btn-ghost" href="/notebooks/{{ nb_id }}/chat/{{ e.conversation_id }}#msg-{{ e.message_id }}">Open chat</a>{% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if assets | length > 1 %}
+<section class="panel" aria-labelledby="versions-h">
+  <h2 id="versions-h">Audio versions</h2>
+  <ul class="attempt-list">
+    {% for a in assets %}<li><span>{{ a.created_at | ts }}</span> <span class="muted">{% for sp, v in a.voices.items() %}{{ speaker_labels.get(sp, sp) }}: {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+      {% if a.status == "ready" %}<strong>{{ a.duration_s | duration }}</strong> <a href="{{ abase }}/audio/{{ a.id }}?download=1">Download</a>{% else %}<span class="muted">{{ a.status }}</span>{% endif %}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if not o.busy %}
+<div class="actions quiz-delete">
+  <form method="post" action="{{ abase }}/regenerate"><button class="btn btn-ghost btn-sm" type="submit">Regenerate (new overview)</button></form>
+  {% set body = "The transcript, its evidence snapshots and all %d audio file%s are deleted. Sources, notes and chats are not affected." % (assets | length, "" if assets | length == 1 else "s") %}
+  {% if confirming %}
+    <form method="post" action="{{ abase }}/delete" class="panel notice-panel notice-error">
+      <p><strong>Delete this audio overview permanently?</strong> {{ body }}</p>
+      {% if delete_error %}<p class="error" role="alert">{{ delete_error }}</p>{% endif %}
+      <input type="hidden" name="confirm" value="{{ o.id }}">
+      <button class="btn btn-danger btn-sm" type="submit">Delete audio overview</button>
+      <a class="btn btn-ghost btn-sm" href="{{ abase }}">Keep it</a>
+    </form>
+  {% else %}
+    {{ delete_trigger(abase ~ "?delete=1", abase ~ "/delete", o.id, "Delete this audio overview permanently?", o.title, body, "Delete audio overview") }}
+  {% endif %}
+</div>
+{% endif %}

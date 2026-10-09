@@ -16,6 +16,20 @@
     <p class="muted">No quizzes yet.</p>
     {% endif %}
   </section>
+  <section class="panel study-tool" aria-labelledby="study-audio">
+    <div class="panel-head">
+      <h2 id="study-audio">Audio Overviews</h2>
+      <a class="btn btn-primary btn-sm" href="{{ sbase }}/audio/new">Create audio overview</a>
+    </div>
+    <p class="muted">A podcast-style discussion or narration of the selected sources, with citations. Audio is spoken by a local voice; the transcript works without it.</p>
+    <h3>Recent audio overviews</h3>
+    {% if overviews %}
+    <ul class="quiz-list">
+      {% for ov in overviews %}{% include "notebook/study/audio_row.html" %}{% endfor %}
+    </ul>
+    <p><a href="{{ sbase }}/audio">All audio overviews</a></p>
+    {% else %}<p class="muted">No audio overviews yet.</p>{% endif %}
+  </section>
   <section class="panel" aria-labelledby="study-review">
     <h2 id="study-review">Needs review</h2>
     {% if review %}

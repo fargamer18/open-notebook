@@ -172,7 +172,7 @@ def study_notebook(db, settings, tmp_path):
 def test_export_contains_quiz_tables(db, settings, tmp_path):
     nb_id, _ = study_notebook(db, settings, tmp_path)
     result = export_notebook(db, settings, nb_id, tmp_path / "x.zip")
-    assert result.manifest["export_format_version"] == FORMAT_VERSION == 2
+    assert result.manifest["export_format_version"] == FORMAT_VERSION >= 2
     assert result.manifest["schema_version"] == CURRENT_SCHEMA
     entries = read_entries(result.path)
     for table in TABLE_SINCE:

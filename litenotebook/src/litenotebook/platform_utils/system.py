@@ -348,3 +348,23 @@ def process_rss_bytes(pid: int) -> int | None:
         except (AttributeError, OSError):
             return None
     return None
+
+
+def with_library_dir(
+    env: Mapping[str, str], library_dir: Path, *, system: str | None = None
+) -> dict[str, str]:
+    """``env`` plus ``library_dir`` on the shared-library search path of a
+    child process: ``PATH`` on Windows (DLLs next to an exe's ``lib``
+    folder), ``LD_LIBRARY_PATH`` on Linux, ``DYLD_LIBRARY_PATH`` on macOS."""
+    kind = os_name(system)
+    key = {"windows": "PATH", "macos": "DYLD_LIBRARY_PATH"}.get(kind, "LD_LIBRARY_PATH")
+    out = dict(env)
+    current = out.get(key, "")
+    sep = ";" if kind == "windows" else ":"
+    out[key] = str(library_dir) + (sep + current if current else "")
+    return out
+
+
+def machine_arch() -> str:
+    """This computer's CPU architecture as reported by the OS (e.g. x86_64)."""
+    return platform.machine() or "unknown"

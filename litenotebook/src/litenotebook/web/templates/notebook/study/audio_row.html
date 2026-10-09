@@ -1,0 +1,14 @@
+{% set a = ov.latest_asset %}
+<li class="quiz-row">
+  <a class="quiz-title" href="{{ sbase }}/audio/{{ ov.id }}">{{ ov.title }}</a>
+  <span class="quiz-meta">
+    {% if ov.status in ("pending", "retrieving", "generating_script") %}<span class="pill pill-processing">Writing script…</span>
+    {% elif ov.status == "synthesizing" %}<span class="pill pill-processing">Generating audio…</span>
+    {% elif ov.status == "failed" %}<span class="pill pill-failed">Failed</span>
+    {% elif ov.status == "cancelled" %}<span class="pill">Cancelled</span>
+    {% elif a and a.status == "ready" %}<span class="pill pill-ready">Audio ready · {{ a.duration_s | duration }}</span>
+    {% else %}<span class="pill">Transcript only</span>{% endif %}
+    <span class="muted">{{ ov.created_at | ts }} · {{ ov.format_label }} · ~{{ ov.target_minutes }} min target{% if ov.has_script %} · about {{ ((ov.estimated_seconds / 60) | round(0, "ceil")) | int }} min estimated{% endif %}</span>
+    {% if ov.source_names %}<span class="muted quiz-sources">{{ ov.source_names | join(", ") }}</span>{% endif %}
+  </span>
+</li>

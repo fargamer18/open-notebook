@@ -21,9 +21,9 @@
   }
 
   document.addEventListener("htmx:afterSwap", (event) => {
-    const status = event.target && event.target.id === "quiz-status" ? event.target : document.getElementById("quiz-status");
+    const status = document.getElementById("quiz-status") || document.getElementById("audio-status");
     if (!status) return;
-    const stage = document.getElementById("quiz-stage");
+    const stage = document.getElementById("quiz-stage") || document.getElementById("audio-stage");
     if (stage) announce(stage.textContent.trim());
   });
 

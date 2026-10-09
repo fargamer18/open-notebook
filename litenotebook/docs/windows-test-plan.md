@@ -143,6 +143,28 @@ this is verified until the boxes below are ticked on a real Windows machine.
 - [ ] Source file names with spaces / non-ASCII characters appear correctly in
       evidence labels.
 
+## Audio Overviews and speech (Phase 14)
+
+- [ ] Study shows Quizzes and Audio Overviews; no new notebook tab.
+- [ ] Generate a ~5 min two-person transcript with Local AI; transcript,
+      citations and "Open in PDF" work with speech not installed.
+- [ ] Settings → Local AI → Speech: install the engine
+      (`sherpa-onnx-v1.13.8-win-x64-shared-MT-Release`). The archive layout
+      is marked unverified: confirm `bin\sherpa-onnx-offline-tts.exe` starts
+      with the DLLs from `lib\` on PATH, with no console window.
+- [ ] Add two voices; "Test voice" plays the sample in the browser.
+- [ ] Generate audio: two distinct voices, chapters seek, the transcript
+      follows playback; Task Manager shows at most one
+      `sherpa-onnx-offline-tts.exe` at a time and none afterwards.
+- [ ] Cancel during synthesis: the engine process disappears; the transcript
+      stays; no `.partial` / `.tmp-*` left under `notebooks\<id>\audio`.
+- [ ] Data folder and title with spaces / non-ASCII characters: audio plays
+      and downloads with a valid file name.
+- [ ] Delete the overview while the audio was just played (file handles
+      closed): the folder is removed.
+- [ ] Export / import a notebook with audio; import Phase 12 and Phase 13
+      archives.
+
 ## Results
 
 | Date | Windows build | Python | Tester | Result / notes |

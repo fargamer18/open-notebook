@@ -1,4 +1,4 @@
-"""Safe extraction of downloaded runtime archives (zip / tar.gz).
+"""Safe extraction of downloaded runtime archives (zip / tar.gz / tar.bz2).
 
 The same rules as notebook backups (Phase 10): every name must be a portable
 relative path (no ``..``, absolute, drive, UNC, backslash, control, reserved
@@ -166,14 +166,24 @@ def extract_zip(
 
 
 def extract_tar_gz(
-    archive: Path, dest: Path, limits: Limits = DEFAULT_LIMITS
+    archive: Path,
+    dest: Path,
+    limits: Limits = DEFAULT_LIMITS,
+    *,
+    compression: str = "gz",
 ) -> list[str]:
+    """tar.gz, or tar.bz2 with ``compression="bz2"`` (speech engine and voice
+    archives); the same rules either way."""
     seen, budget, files, links = _Seen(limits), [0], [], []
     try:
-        tf = tarfile.open(archive, mode="r:gz")
-    except (tarfile.TarError, OSError) as e:
+        tf = (
+            tarfile.open(archive, mode="r:bz2")
+            if compression == "bz2"
+            else tarfile.open(archive, mode="r:gz")
+        )
+    except (tarfile.TarError, OSError, EOFError) as e:
         raise UnsafeArchiveError(
-            "The runtime archive is not a valid tar.gz file"
+            f"The runtime archive is not a valid tar.{compression} file"
         ) from e
     with tf:
         for member in tf:
@@ -215,13 +225,10 @@ def extract(
     archive: Path, fmt: str, dest: Path, limits: Limits = DEFAULT_LIMITS
 ) -> list[str]:
     dest.mkdir(parents=True, exist_ok=True)
-    names = (
-        extract_zip(archive, dest, limits)
-        if fmt == "zip"
-        else extract_tar_gz(archive, dest, limits)
-        if fmt == "tar.gz"
-        else None
-    )
+    try:
+        names = _extract(archive, fmt, dest, limits)
+    except (tarfile.TarError, EOFError, zipfile.BadZipFile) as e:
+        raise UnsafeArchiveError("The archive is damaged or truncated") from e
     if names is None:
         raise UnsafeArchiveError(f"Unsupported runtime archive format {fmt!r}")
     for name in names:  # belt and braces: nothing landed outside the staging dir
@@ -230,3 +237,15 @@ def extract(
                 f"Extracted path escapes the staging folder: {name!r}"
             )
     return names
+
+
+def _extract(archive: Path, fmt: str, dest: Path, limits: Limits) -> list[str] | None:
+    return (
+        extract_zip(archive, dest, limits)
+        if fmt == "zip"
+        else extract_tar_gz(archive, dest, limits)
+        if fmt == "tar.gz"
+        else extract_tar_gz(archive, dest, limits, compression="bz2")
+        if fmt == "tar.bz2"
+        else None
+    )

@@ -177,6 +177,8 @@ class _Importer:
         self.progress = progress
         self.maps: Maps = {t: {} for t in TABLES}
         self.staged: dict[int, Path] = {}
+        self.staged_audio: dict[int, Path] = {}  # old asset id → staged file
+        self.audio_owner: dict[int, int] = {}  # new asset id → new overview id
         self.moved: list[Path] = []
         self.staging = settings.archive_tmp_dir / f"import-{uuid.uuid4().hex}"
         self.notebook_id = 0
@@ -205,6 +207,16 @@ class _Importer:
                     f"The PDF for “{row['original_filename']}” changed while reading"
                 )
             self.staged[sid] = dest
+        for aid, row in self.info.audio.items():
+            dest = self.staging / f"audio-{aid}.wav"
+            digest = hashlib.sha256()
+            with create_exclusive(dest) as out:
+                for chunk in self.reader.stream(f"{self.info.prefix}/audio/{aid}.wav"):
+                    digest.update(chunk)
+                    out.write(chunk)
+            if digest.hexdigest() != row["sha256"]:
+                raise ArchiveError("An audio file changed while reading")
+            self.staged_audio[aid] = dest
 
     # --- rows ------------------------------------------------------------------
 
@@ -378,6 +390,7 @@ class _Importer:
                 },
             )
         self._insert_study(nb)
+        self._insert_audio(nb)
         for new, link_type, target_key, memory_key in link_keys:
             self.conn.execute(
                 "UPDATE note_links SET target_key = ?, memory_key = ? WHERE id = ?",
@@ -483,6 +496,82 @@ class _Importer:
                 "study_concept_stats", {**r, "notebook_id": nb}
             )
 
+    def _insert_audio(self, nb: int) -> None:
+        """Audio Overviews (format version 3+): transcripts, evidence snapshots
+        and finished audio. Unfinished states become final ones."""
+        rows, prefix, m = self.reader.rows, self.info.prefix, self.maps
+        for r in rows(prefix, "audio_overviews"):
+            old = r.pop("id")
+            for col in ("material", "meta"):
+                if r[col] is not None:
+                    _check_json(r[col], f"audio overview {old} {col}")
+            material = json.loads(r["material"])
+            if isinstance(material, dict) and isinstance(material.get("sources"), list):
+                for item in material["sources"]:
+                    if isinstance(item, dict) and isinstance(item.get("id"), int):
+                        item["id"] = _soft(m, "sources", item["id"], None)
+            if r["status"] in ("pending", "retrieving", "generating_script"):
+                r.update(
+                    status="failed",
+                    stage="failed",
+                    error="Interrupted (exported while generating)",
+                )
+            elif r["status"] == "synthesizing":
+                r.update(status="script_ready", stage="script_ready")
+            m["audio_overviews"][old] = self._insert(
+                "audio_overviews",
+                {
+                    **r,
+                    "notebook_id": nb,
+                    "material": json.dumps(material, ensure_ascii=False),
+                },
+            )
+        for r in rows(prefix, "audio_sections"):
+            old = r.pop("id")
+            m["audio_sections"][old] = self._insert(
+                "audio_sections",
+                {**r, "overview_id": m["audio_overviews"][r["overview_id"]]},
+            )
+        for r in rows(prefix, "audio_turns"):
+            old = r.pop("id")
+            _check_json(r["refs"], f"audio turn {old}")
+            m["audio_turns"][old] = self._insert(
+                "audio_turns", {**r, "section_id": m["audio_sections"][r["section_id"]]}
+            )
+        for r in rows(prefix, "audio_evidence"):
+            old = r.pop("id")
+            m["audio_evidence"][old] = self._insert(
+                "audio_evidence",
+                {
+                    **r,
+                    "overview_id": m["audio_overviews"][r["overview_id"]],
+                    "source_id": _soft(m, "sources", r["source_id"], None),
+                    "chunk_id": _soft(m, "chunks", r["chunk_id"], None),
+                    "note_id": _soft(m, "notes", r["note_id"], None),
+                    "message_id": _soft(m, "messages", r["message_id"], None),
+                    "conversation_id": _soft(
+                        m, "conversations", r["conversation_id"], None
+                    ),
+                },
+            )
+        for r in rows(prefix, "audio_assets"):
+            old = r.pop("id")
+            for col in ("voices", "chapters", "turn_times"):
+                _check_json(r[col], f"audio asset {old} {col}")
+            times = json.loads(r["turn_times"])
+            remapped = [
+                [m["audio_turns"].get(t[0], 0), t[1], t[2]]
+                for t in times
+                if isinstance(t, list) and len(t) == 3 and isinstance(t[0], int)
+            ]
+            overview = m["audio_overviews"][r["overview_id"]]
+            new = self._insert(
+                "audio_assets",
+                {**r, "overview_id": overview, "turn_times": json.dumps(remapped)},
+            )
+            m["audio_assets"][old] = new
+            self.audio_owner[new] = overview
+
     def move_sources(self) -> None:
         for old, staged in self.staged.items():
             dest = self.settings.source_file(
@@ -492,6 +581,20 @@ class _Importer:
             if dest.exists():
                 raise ArchiveError(
                     "A source file already exists at the import location"
+                )
+            replace_file(staged, dest)
+            self.moved.append(dest)
+        from litenotebook.study.audio_store import asset_path
+
+        for old, staged in self.staged_audio.items():
+            new = self.maps["audio_assets"][old]
+            dest = asset_path(
+                self.settings, self.notebook_id, self.audio_owner[new], new
+            )
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                raise ArchiveError(
+                    "An audio file already exists at the import location"
                 )
             replace_file(staged, dest)
             self.moved.append(dest)
