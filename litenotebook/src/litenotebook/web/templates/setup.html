@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% set nav = "settings" %}
+{% block title %}Set up local AI{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Set up local AI</h1>
+  <p class="muted">Everything runs on this computer. You can skip any step, stop at any time and continue later; nothing is downloaded until you press a download button.</p>
+</section>
+
+<nav class="wizard-steps" aria-label="Setup steps">
+  <ol>
+    {% for s in steps %}
+    <li class="{{ 'is-done' if s in state.done else ('is-skipped' if s in state.skipped else '') }}">
+      <a href="/setup?step={{ s }}"{% if s == step %} aria-current="step"{% endif %}>{{ step_titles[s] }}</a>
+      {%- if s in state.done %}<span class="sr-only"> (done)</span>{% elif s in state.skipped %}<span class="sr-only"> (skipped)</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</nav>
+
+{% if error %}<div class="panel notice-panel notice-error" role="alert"><p class="error">{{ error }}</p></div>{% endif %}
+
+<div class="ai-job-region">
+  <p class="sr-only" aria-live="polite" id="ai-job-announce"></p>
+  {% if job %}{% with back = "/setup?step=" ~ step %}{% include "partials/ai_job.html" %}{% endwith %}{% endif %}
+</div>
+
+<section class="panel wizard-panel" aria-labelledby="step-title">
+{% if step == "welcome" %}
+  <h2 id="step-title" tabindex="-1">Welcome</h2>
+  <p>LiteNotebook can answer questions about your PDFs with an AI model that runs locally. This setup:</p>
+  <ol class="steps">
+    <li>checks your processor, memory, graphics card and free disk space;</li>
+    <li>optionally installs <strong>MiniLM</strong> (about 90 MB) for semantic search;</li>
+    <li>sets up <strong>llama.cpp</strong> — installed for you, one you already have, or an existing AI server;</li>
+    <li>recommends a model that fits this computer and tests it.</li>
+  </ol>
+  <div class="actions">
+    <form method="post" action="/setup/welcome"><button class="btn btn-primary" type="submit">Start</button></form>
+    <a class="btn btn-ghost" href="/">Set up later</a>
+  </div>
+
+{% elif step == "hardware" %}
+  <h2 id="step-title" tabindex="-1">Your computer</h2>
+  {% if hardware %}
+    {% include "partials/ai_hardware.html" %}
+  {% else %}
+    <p>LiteNotebook reads the hardware details from the operating system and the graphics driver. Nothing leaves this computer.</p>
+  {% endif %}
+  <div class="actions">
+    <form method="post" action="/setup/hardware"><input type="hidden" name="action" value="continue">
+      <button class="btn btn-primary" type="submit">{{ "Continue" if hardware else "Scan and continue" }}</button></form>
+    {% if hardware %}<form method="post" action="/setup/hardware"><input type="hidden" name="action" value="scan">
+      <button class="btn" type="submit">Scan again</button></form>{% endif %}
+  </div>
+
+{% elif step == "embeddings" %}
+  <h2 id="step-title" tabindex="-1">Semantic search (MiniLM)</h2>
+  <p>{{ embedding_entry.display_name }} finds passages by meaning, not only by exact words. It runs on the processor in its own process. Keyword search works without it.</p>
+  {% if embeddings.installed %}
+    <p class="status-line"><span class="dot dot-ok" aria-hidden="true"></span><strong>Already installed</strong> <span class="muted">— found in the local model cache; nothing to download.</span></p>
+    <form method="post" action="/setup/embeddings"><button class="btn btn-primary" type="submit">Continue</button></form>
+  {% else %}
+    <dl class="kv">
+      <dt>Download</dt><dd>{{ embeddings.size | filesize }} from huggingface.co ({{ embedding_entry.repository }})</dd>
+      <dt>License</dt><dd><a href="{{ embedding_entry.license_url }}" rel="noreferrer" target="_blank">{{ embedding_entry.license }}</a></dd>
+      {% if embeddings.state == "skipped" %}<dt>Status</dt><dd>Skipped earlier</dd>{% endif %}
+    </dl>
+    <div class="actions">
+      <form method="post" action="/setup/embeddings"><button class="btn btn-primary" type="submit">Download and install MiniLM</button></form>
+      <form method="post" action="/setup/embeddings/skip"><button class="btn btn-ghost" type="submit">Skip — keyword search only</button></form>
+    </div>
+  {% endif %}
+
+{% elif step == "generation" %}
+  <h2 id="step-title" tabindex="-1">AI runtime</h2>
+  <p>Chat needs a model server. Choose one way; you can change it later in Settings → Local AI.</p>
+  {% if profile.type not in ("unset", "none") %}<p class="muted">Current choice: <strong>{{ {"managed_llama": "llama.cpp installed by LiteNotebook", "external_llama": "your llama-server", "external_openai": "an existing server"}[profile.type] }}</strong>{% if profile.runtime_version %} ({{ profile.runtime_version }}){% endif %}.</p>{% endif %}
+
+  <form method="post" action="/setup/generation" class="choice-form">
+    <input type="hidden" name="choice" value="managed">
+    <fieldset>
+      <legend>Install llama.cpp for me <span class="muted">(recommended)</span></legend>
+      {% if not hardware %}<p class="muted">Scan your hardware first to see which build fits.</p>{% endif %}
+      {% for o in runtime_catalog %}
+      {% set r = o.entry %}
+      <label class="choice{{ '' if o.suitable else ' is-disabled' }}">
+        <input type="radio" name="runtime_id" value="{{ r.id }}" {% if not o.suitable %}disabled{% elif r.id == preferred_runtime %}checked{% endif %}>
+        <span><strong>llama.cpp {{ r.version }} — {{ "NVIDIA CUDA 12" if r.backend == "cuda" else "CPU" }}</strong>
+          <span class="muted">· {{ r.assets | sum(attribute="size") | filesize }} from github.com/ggml-org · <a href="{{ r.license_url }}" rel="noreferrer" target="_blank">{{ r.license }}</a>{% if o.installed %} · installed{% endif %}{% if not r.tested %} · not yet tested by LiteNotebook{% endif %}</span>
+          {% if not o.suitable %}<span class="muted"> — {{ o.why }}</span>{% endif %}</span>
+      </label>
+      {% else %}
+      <p class="muted">No pinned llama.cpp build for {{ platform }} on this processor.</p>
+      {% endfor %}
+      {% if runtime_catalog %}<button class="btn btn-primary" type="submit">Download and install</button>{% endif %}
+    </fieldset>
+  </form>
+
+  <form method="post" action="/setup/generation" class="choice-form">
+    <input type="hidden" name="choice" value="existing">
+    <fieldset>
+      <legend>Use a llama-server I already have</legend>
+      <div class="field">
+        <label for="exe-path">Path to llama-server</label>
+        <input id="exe-path" name="path" class="mono" autocomplete="off" required
+               value="{{ existing[0].executable if existing and existing[0].ok else '' }}" aria-describedby="exe-help">
+        <p class="muted" id="exe-help">Checked by running it with <span class="mono">--version</span>; LiteNotebook starts it itself on a free local port.{% if existing %} Found: {% for e in existing %}<span class="mono">{{ e.executable }}</span>{% if e.ok %} (build {{ e.build }}){% else %} (not usable){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}</p>
+      </div>
+      <button class="btn" type="submit">Check and use</button>
+    </fieldset>
+  </form>
+
+  <div class="actions">
+    <form method="post" action="/setup/generation"><input type="hidden" name="choice" value="external">
+      <button class="btn" type="submit">Use an AI server that is already running</button></form>
+    <form method="post" action="/setup/generation"><input type="hidden" name="choice" value="none">
+      <button class="btn btn-ghost" type="submit">No generation for now</button></form>
+  </div>
+  <p class="muted">An existing server uses the address and model from <a href="/settings">Settings → LLM server</a>.</p>
+
+{% elif step == "model" %}
+  <h2 id="step-title" tabindex="-1">Model</h2>
+  {% if profile.type == "external_openai" %}
+    <p>The server you connected chooses its own model; nothing to do here.</p>
+    <a class="btn btn-primary" href="/setup?step=test">Continue</a>
+  {% elif not profile.launches_runtime %}
+    <p>Choose a runtime first.</p><a class="btn" href="/setup?step=generation">Back to AI runtime</a>
+  {% else %}
+    {% set installed = models %}
+    {% if installed %}
+    <form method="post" action="/setup/model" class="choice-form">
+      <input type="hidden" name="choice" value="select">
+      <fieldset><legend>Models on this computer</legend>
+        {% for m, st in installed %}
+        <label class="choice"><input type="radio" name="model_id" value="{{ m.id }}" {% if m.id == profile.model_id or loop.first %}checked{% endif %} {% if st != "ok" %}disabled{% endif %}>
+          <span><strong>{{ m.display_name }}</strong> <span class="muted">· {{ m.size | filesize }}{% if not m.owned %} · used in place{% endif %}{% if m.verified %} · checksum verified{% endif %}{% if st != "ok" %} · {{ st }}{% endif %}</span></span></label>
+        {% endfor %}
+        <button class="btn btn-primary" type="submit">Use this model</button>
+      </fieldset>
+    </form>
+    {% endif %}
+
+    <form method="post" action="/setup/model" class="choice-form">
+      <input type="hidden" name="choice" value="install">
+      <fieldset><legend>Download a model</legend>
+        {% for mid, m in model_catalog.items() %}
+        {% set fit = fits[mid] if fits and mid in fits else none %}
+        <label class="choice{{ ' is-recommended' if fit and fit.recommended else '' }}">
+          <input type="radio" name="model_id" value="{{ mid }}" {% if fit and fit.recommended %}checked{% endif %}>
+          <span><strong>{{ m.display_name }}</strong>{% if fit %}{% if fit.recommended %} <span class="pill pill-ready">best fit</span>{% endif %} <span class="pill pill-{{ fit.rating }}">{{ rating_labels[fit.rating] }}</span>{% endif %}
+            <span class="muted">· {{ m.size | filesize }} · {{ m.publisher }} · <a href="{{ m.license_url }}" rel="noreferrer" target="_blank">{{ m.license }}</a></span>
+            {% if fit %}<span class="fit-reasons">{{ fit.reasons | join(" · ") }}</span>{% endif %}</span>
+        </label>
+        {% endfor %}
+        <p class="muted">Downloaded from huggingface.co and checked against a pinned SHA-256 before use. An interrupted download resumes.</p>
+        <button class="btn btn-primary" type="submit">Download</button>
+      </fieldset>
+    </form>
+
+    <form method="post" action="/setup/model" class="choice-form">
+      <input type="hidden" name="choice" value="import">
+      <fieldset><legend>Use a GGUF file I already have</legend>
+        <div class="field"><label for="gguf-path">Path to the .gguf file</label>
+          <input id="gguf-path" name="path" class="mono" autocomplete="off" required></div>
+        <label class="check"><input type="checkbox" name="copy" value="1"> Copy it into LiteNotebook's models folder <span class="muted">(otherwise it is used where it is and never deleted by LiteNotebook)</span></label>
+        <button class="btn" type="submit">Add model</button>
+      </fieldset>
+    </form>
+  {% endif %}
+
+{% elif step == "test" %}
+  <h2 id="step-title" tabindex="-1">Test</h2>
+  {% if profile.type == "none" %}
+    <p>Generation is off, so there is nothing to test.</p><a class="btn btn-primary" href="/setup?step=ready">Continue</a>
+  {% else %}
+    <p>Asks the model a fixed one-word question{% if profile.launches_runtime %} after starting llama-server on 127.0.0.1{% endif %}. None of your documents are used. If the model does not fit in memory, smaller settings are tried automatically.</p>
+    {% if profile.launches_runtime %}
+    <p class="muted">Planned: {{ "all layers on the GPU" if profile.gpu_layers >= 999 else (profile.gpu_layers ~ " layers on the GPU" if profile.gpu_layers else "processor only") }}, {{ profile.context }} tokens of context — adjusted to the memory that is actually free when it starts (another program may be using the GPU).</p>
+    {% endif %}
+    {% if profile.last_test %}<p class="status-line"><span class="dot dot-{{ 'ok' if profile.last_test.ok else 'err' }}" aria-hidden="true"></span>Last test: {{ "passed" if profile.last_test.ok else "failed — " ~ profile.last_test.error }}</p>{% endif %}
+    {% if profile.note %}<p class="muted">{{ profile.note }}</p>{% endif %}
+    <div class="actions">
+      <form method="post" action="/setup/test"><button class="btn btn-primary" type="submit">Run the test</button></form>
+      <form method="post" action="/setup/test/skip"><button class="btn btn-ghost" type="submit">Skip</button></form>
+    </div>
+  {% endif %}
+
+{% else %}
+  <h2 id="step-title" tabindex="-1">Ready</h2>
+  <ul class="plain-list">
+    {% for c in components %}
+    <li><strong>{{ c.label }}:</strong> {{ {"ready": "ready", "off": "off", "incomplete": "not finished", "skipped": "skipped", "check": ("installed" if embeddings.installed else "not installed")}.get(c.state, c.state) }} <span class="muted">— used by {{ c.used_by | join(", ") }}</span></li>
+    {% endfor %}
+  </ul>
+  {% if profile.launches_runtime %}<p class="muted">llama-server starts by itself the first time Chat needs it{% if not profile.autostart %} (turned off — start it in Settings → Local AI){% endif %} and stops when LiteNotebook closes.</p>{% endif %}
+  <div class="actions">
+    <form method="post" action="/setup/finish"><button class="btn btn-primary" type="submit">Finish</button></form>
+    <a class="btn btn-ghost" href="/settings/ai">Open Settings → Local AI</a>
+  </div>
+{% endif %}
+</section>
+{% endblock %}

@@ -20,7 +20,7 @@ import json
 import logging
 import threading
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -136,6 +136,10 @@ class ChatGeneration:
     guard: GenerationGuard
     transport: httpx.AsyncBaseTransport | None = None
     timings: dict[str, float] = field(default_factory=dict)
+    # Local AI (Phase 12): start a managed llama-server first, if needed, and
+    # where to send the user when generation is not set up or not reachable.
+    prepare: Callable[[], AppSettings | None] | None = None  # returns the endpoint
+    setup_url: str | None = None
 
     @property
     def message_id(self) -> int:
@@ -272,6 +276,24 @@ class ChatGeneration:
                 yield sse("done", {"message_id": mid, "status": "complete"})
                 return
 
+            if self.prepare is not None:
+                yield sse("status", {"stage": "starting_runtime"})
+                try:
+                    ready_llm = await anyio.to_thread.run_sync(self.prepare)
+                    if ready_llm is not None:
+                        self.llm = ready_llm
+                except Exception as e:
+                    message = str(e) or "Local AI could not be started"
+                    end_message(conn, mid, "failed", message, meta=self._meta(started))
+                    yield sse(
+                        "error",
+                        {
+                            "message_id": mid,
+                            "message": message,
+                            "setup_url": self.setup_url or "/settings/ai",
+                        },
+                    )
+                    return
             yield sse(
                 "status",
                 {
@@ -331,7 +353,10 @@ class ChatGeneration:
                     content="".join(parts).strip(),
                     meta=self._meta(started, stream),
                 )
-                yield sse("error", {"message_id": mid, "message": message})
+                event = {"message_id": mid, "message": message}
+                if self.setup_url:
+                    event["setup_url"] = self.setup_url
+                yield sse("error", event)
                 return
             self.timings["generation"] = round(time.perf_counter() - llm_started, 3)
 

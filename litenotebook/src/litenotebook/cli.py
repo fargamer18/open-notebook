@@ -7,6 +7,8 @@ python -m litenotebook.cli ask --notebook demo "question"
 python -m litenotebook.cli export notebook demo demo.zip
 python -m litenotebook.cli import notebook demo.zip [--name "New name"]
 python -m litenotebook.cli backup create|verify|restore backup.zip
+python -m litenotebook.cli ai status|hardware|test|benchmark
+python -m litenotebook.cli ai runtime|model|embeddings …
 """
 
 from __future__ import annotations
@@ -20,6 +22,8 @@ from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
+from litenotebook.ai.catalog import CatalogError
+from litenotebook.ai.service import SetupError
 from litenotebook.archive.format import ArchiveError
 from litenotebook.config import ConfigError, Settings, load_settings
 from litenotebook.db import open_db
@@ -60,6 +64,8 @@ USER_ERRORS = (
     EmbeddingError,
     ArchiveError,
     DataDirInUseError,
+    SetupError,
+    CatalogError,
 )
 
 
@@ -655,6 +661,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_diagnostics_platform)
+
+    from litenotebook.cli_ai import register as register_ai
+
+    register_ai(sub)
 
     serve = sub.add_parser("serve", help="run the local web app")
     serve.add_argument("--host", help="loopback address (default 127.0.0.1)")

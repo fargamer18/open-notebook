@@ -184,6 +184,26 @@ def spawn(
     return OwnedProcess(proc, tree=tree, job=job)
 
 
+def orphan_guard(command: Sequence[str]) -> list[str]:
+    """Wrap a long-lived child so it never outlives LiteNotebook.
+
+    POSIX: run it under ``platform_utils.supervise``, which stops the child
+    when the pipe from this process closes (kill, crash, closed terminal).
+    Windows: unchanged — ``spawn`` puts children in a kill-on-close Job
+    Object. Packaged builds without an interpreter run the command as is."""
+    if IS_WINDOWS:
+        return list(command)
+    from litenotebook.platform_utils.system import python_module_command
+
+    try:
+        return [
+            *python_module_command("litenotebook.platform_utils.supervise"),
+            *command,
+        ]
+    except RuntimeError:
+        return list(command)
+
+
 def _signal_tree(owned: OwnedProcess, sig: int) -> bool:
     """POSIX: signal our own process group (only if it really is ours)."""
     # returncode (not poll(), which would reap): an unreaped child — even a

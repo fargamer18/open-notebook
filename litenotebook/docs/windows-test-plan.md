@@ -84,6 +84,47 @@ Use a test account or a disposable data folder — never your only copy of data.
       memory graph, reader, Backup & Restore, Diagnostics (Copy works).
 - [ ] Downloads (export/backup) get a sane file name and open as ZIP files.
 
+## Local AI (Phase 12)
+
+Status: implemented and **simulated only** on Linux (`.exe` names, flat ZIP
+layout, Windows paths with spaces, registry GPU detection code path). None of
+this is verified until the boxes below are ticked on a real Windows machine.
+
+- [ ] `pytest tests/test_ai_planner.py tests/test_ai_download.py` pass
+      (`test_ai_runtime.py` / `test_ai_web.py` fake-server tests are POSIX-only
+      where they need a shebang script; note which ran).
+- [ ] `litenotebook ai hardware`: CPU, cores, RAM, free disk correct; an NVIDIA
+      GPU shows VRAM as *confirmed* (NVML via `nvml.dll`), other GPUs as
+      *estimated* (registry) or *unknown* — never guessed; no console window
+      flashes.
+- [ ] `litenotebook ai runtime list` shows only the `windows-x86_64` builds;
+      CUDA is offered only with an NVIDIA driver ≥ the catalog minimum.
+- [ ] Install the CPU build from the wizard: progress shows real bytes,
+      Cancel works, a second Install resumes the `.part`; the ZIP (flat
+      layout, `llama-server.exe` at the root) extracts under
+      `%LOCALAPPDATA%\LiteNotebook\runtime\llama.cpp\…`; nothing is left in
+      `tmp\downloads`.
+- [ ] Install the CUDA build (two ZIPs: the build + `cudart` DLLs) on an
+      NVIDIA machine; `ai runtime test` lists `CUDA0`.
+- [ ] "Use an existing llama-server": choosing `llama-server.exe` works; any
+      other `.exe` (e.g. `notepad.exe`) is refused; a path with spaces works.
+- [ ] Import a GGUF from a path with spaces and non-ASCII characters, by
+      reference and with "Copy"; Remove deletes only the copy.
+- [ ] Test / Benchmark start `llama-server.exe` with no console window
+      (`CREATE_NO_WINDOW`), bound to 127.0.0.1; Windows Firewall shows **no**
+      prompt (loopback only).
+- [ ] Port 8080 already used by another program → LiteNotebook picks another
+      port and never stops that program.
+- [ ] Stop (Settings), closing LiteNotebook (Ctrl+C) and killing LiteNotebook
+      from Task Manager all leave **no** `llama-server.exe` behind (Job Object).
+- [ ] Chat autostarts llama-server when Local AI is set up, and explains
+      "Local AI is not configured" with a setup link when generation is off.
+- [ ] "Install MiniLM" downloads into `%USERPROFILE%\.cache\huggingface`
+      only when pressed; normal use stays offline.
+- [ ] "Open models folder" opens Explorer at the models folder.
+- [ ] Antivirus (Defender) does not quarantine the extracted runtime; note
+      the first-start time (SmartScreen / scanning can slow it).
+
 ## Results
 
 | Date | Windows build | Python | Tester | Result / notes |

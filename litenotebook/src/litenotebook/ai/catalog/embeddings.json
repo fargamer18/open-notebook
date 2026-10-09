@@ -1,0 +1,72 @@
+{
+ "catalog_version": 1,
+ "kind": "embeddings",
+ "updated": "2026-10-08",
+ "embeddings": [
+  {
+   "id": "all-minilm-l6-v2",
+   "display_name": "MiniLM (all-MiniLM-L6-v2)",
+   "repository": "sentence-transformers/all-MiniLM-L6-v2",
+   "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+   "publisher": "sentence-transformers",
+   "license": "Apache-2.0",
+   "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+   "model_page": "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2",
+   "dimension": 384,
+   "files": [
+    {
+     "path": "modules.json",
+     "size": 349,
+     "sha256": null
+    },
+    {
+     "path": "config.json",
+     "size": 612,
+     "sha256": null
+    },
+    {
+     "path": "tokenizer.json",
+     "size": 466247,
+     "sha256": null
+    },
+    {
+     "path": "tokenizer_config.json",
+     "size": 350,
+     "sha256": null
+    },
+    {
+     "path": "special_tokens_map.json",
+     "size": 112,
+     "sha256": null
+    },
+    {
+     "path": "vocab.txt",
+     "size": 231508,
+     "sha256": null
+    },
+    {
+     "path": "sentence_bert_config.json",
+     "size": 53,
+     "sha256": null
+    },
+    {
+     "path": "config_sentence_transformers.json",
+     "size": 116,
+     "sha256": null
+    },
+    {
+     "path": "1_Pooling/config.json",
+     "size": 190,
+     "sha256": null
+    },
+    {
+     "path": "model.safetensors",
+     "size": 90868376,
+     "sha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db"
+    }
+   ],
+   "size": 91567913,
+   "purpose": "Semantic document search (Hybrid search and chat retrieval). Runs on the CPU in its own process."
+  }
+ ]
+}

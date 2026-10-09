@@ -837,3 +837,39 @@ mark { background: var(--accent-bg); color: var(--accent-strong); border-radius:
   .src-state { grid-column: 1 / -1; grid-row: 2; }
   .src-stats { justify-content: flex-start; }
 }
+
+/* --- Local AI setup (Phase 12) ------------------------------------------- */
+.wizard-steps ol { list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0 0 var(--space-3); padding: 0; counter-reset: step; }
+.wizard-steps li { counter-increment: step; }
+.wizard-steps a { display: inline-block; padding: 0.25rem 0.6rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+.wizard-steps a::before { content: counter(step) ". "; }
+.wizard-steps a[aria-current="step"] { color: var(--text); border-color: var(--accent); background: var(--accent-bg); }
+.wizard-steps .is-done a { color: var(--accent-strong); }
+.wizard-steps .is-done a::after { content: " ✓"; }
+.wizard-steps .is-skipped a { text-decoration: line-through; }
+.choice-form fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; margin: 0 0 var(--space-3); }
+.choice-form legend { font-weight: 600; padding: 0 0.3rem; }
+.choice { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.45rem 0; cursor: pointer; }
+.choice input { margin-top: 0.3rem; }
+.choice.is-disabled { opacity: 0.6; cursor: not-allowed; }
+.choice.is-recommended strong { color: var(--accent-strong); }
+.fit-reasons { display: block; color: var(--muted); font-size: 0.85rem; margin-top: 0.15rem; }
+.check { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0.5rem 0; }
+.inline-form { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin-top: 0.75rem; }
+.pill-recommended, .pill-good, .pill-ready { color: var(--accent-strong); border-color: #2c5a3d; }
+.pill-slow { color: var(--warn); }
+.pill-not_recommended { color: var(--danger); }
+.model-list li { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+.model-list .actions { margin-left: auto; }
+.model-path { flex-basis: 100%; font-size: 0.8rem; overflow-wrap: anywhere; }
+.ai-more { margin-top: var(--space-2); }
+.ai-more summary { cursor: pointer; color: var(--muted); }
+.ai-more[open] summary { margin-bottom: 0.5rem; }
+.ai-job { border-left: 3px solid var(--info); }
+.ai-job-done { border-left-color: var(--accent); }
+.ai-job-failed { border-left-color: var(--danger); }
+.ai-job-title { font-size: 1rem; margin: 0 0 0.4rem; }
+.ai-job-stage { display: flex; align-items: center; gap: 0.5rem; }
+.spinner { width: 0.9rem; height: 0.9rem; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: ln-spin 0.9s linear infinite; }
+@keyframes ln-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

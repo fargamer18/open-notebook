@@ -9,6 +9,7 @@ the generation, in a worker thread).
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -16,6 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from httpx import AsyncBaseTransport
 from starlette.concurrency import run_in_threadpool
 
+from litenotebook.ai.store import AIStore
 from litenotebook.chat import (
     INTERRUPTED_MESSAGE as _INTERRUPTED,
 )
@@ -45,6 +47,7 @@ from litenotebook.chat import (
 from litenotebook.db import connect
 from litenotebook.notebooks import get_notebook, get_summary
 from litenotebook.services.chat import BUSY_MESSAGE, ChatGeneration, GenerationGuard
+from litenotebook.services.settings import AppSettings
 from litenotebook.web.deps import (
     app_settings,
     get_db,
@@ -213,11 +216,42 @@ def _stream(request: Request, notebook_id: int, exchange: Exchange) -> EventStre
     settings = app_settings(request)
     g = guard(request)
     g.bind(exchange.assistant_message_id)
+    local_ai = request.app.state.local_ai
     conn = connect(settings.db_path)
     try:
         llm = settings_service(request, conn).effective()
+        endpoint = local_ai.generation_endpoint(conn, llm)
+        store = AIStore(conn)
+        launches = store.profile().launches_runtime
+        setup_url = None if store.setup().completed else "/setup"
     finally:
         conn.close()
+    if endpoint is not None:  # a managed runtime, or the configured server
+        llm = replace(
+            llm,
+            llm_base_url=endpoint.base_url,
+            llm_model=endpoint.model,
+            llm_api_key=endpoint.api_key or "",
+        )
+    prepare = None
+    if launches:
+        base = llm
+
+        def prepare() -> AppSettings | None:
+            # Starts llama-server if it is not running (autostart), then
+            # resolves the endpoint: the port may have changed on start.
+            c = connect(settings.db_path)
+            try:
+                local_ai.ensure_running(c)
+                ep = local_ai.generation_endpoint(c, base)
+            finally:
+                c.close()
+            if ep is None:
+                return None
+            return replace(
+                base, llm_base_url=ep.base_url, llm_model=ep.model, llm_api_key=""
+            )
+
     transport = llm_transport(request)
     generation = ChatGeneration(
         settings=settings,
@@ -228,6 +262,8 @@ def _stream(request: Request, notebook_id: int, exchange: Exchange) -> EventStre
         guard=g,
         # tests inject httpx.MockTransport, which is both sync and async
         transport=transport if isinstance(transport, AsyncBaseTransport) else None,
+        prepare=prepare,
+        setup_url=setup_url,
     )
     message_id = exchange.assistant_message_id
 
@@ -240,6 +276,21 @@ def _stream(request: Request, notebook_id: int, exchange: Exchange) -> EventStre
             cleanup.close()
 
     return EventStream(generation.events(), on_close=on_close)
+
+
+def _generation_off(request: Request) -> JSONResponse | None:
+    """The user chose no generation: say so, with the way to set it up,
+    instead of failing with a network error."""
+    conn = connect(app_settings(request).db_path)
+    try:
+        off = AIStore(conn).profile().type == "none"
+    finally:
+        conn.close()
+    if not off:
+        return None
+    return JSONResponse(
+        {"error": "Local AI is not configured.", "setup_url": "/setup"}, status_code=409
+    )
 
 
 def _begin(
@@ -298,6 +349,8 @@ async def send(
         status = 404 if isinstance(e, NOT_FOUND) else 422
         message = str(e) if isinstance(e, ChatError) else "Invalid conversation"
         return _error(message, status)
+    if (refusal := await run_in_threadpool(_generation_off, request)) is not None:
+        return refusal
     result = await run_in_threadpool(
         _begin, request, notebook_id, start_exchange, cid, question
     )
@@ -308,6 +361,8 @@ async def send(
 
 @router.post("/messages/{message_id}/retry", response_model=None)
 async def retry(request: Request, notebook_id: int, message_id: int) -> Response:
+    if (refusal := await run_in_threadpool(_generation_off, request)) is not None:
+        return refusal
     result = await run_in_threadpool(
         _begin, request, notebook_id, start_retry, message_id
     )

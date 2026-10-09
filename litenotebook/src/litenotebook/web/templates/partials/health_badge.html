@@ -6,9 +6,10 @@
 {% if health.status != "ok" %}
   <span class="dot dot-err" aria-hidden="true"></span><a href="/settings">Storage error</a>
 {% else %}
-  <a href="/settings" class="health-item" title="{{ llm.message }}">
-    <span class="dot dot-{{ ('ok' if llm.model_available != false else 'warn') if llm.status == 'reachable' else 'err' }}" aria-hidden="true"></span>
-    <span>LLM <span class="health-detail">{{ "Connected" if llm.status == "reachable" else "Unavailable" }}</span></span>
+  {% set llm_label = {"reachable": "Connected", "off": "Off", "stopped": "Stopped"}.get(llm.status, "Unavailable") %}
+  <a href="{{ '/settings/ai' if llm.status in ('off', 'stopped') or llm.managed else '/settings' }}" class="health-item" title="{{ llm.message }}">
+    <span class="dot dot-{{ (('ok' if llm.model_available != false else 'warn') if llm.status == 'reachable' else ('' if llm.status in ('off', 'stopped') else 'err')) }}" aria-hidden="true"></span>
+    <span>{{ "Local AI" if llm.status == "off" else "LLM" }} <span class="health-detail">{{ llm_label }}</span></span>
   </a>
   <span class="health-sep" aria-hidden="true">·</span>
   <a href="/settings" class="health-item" title="Embedding model (all-MiniLM-L6-v2): {{ emb_label }}">

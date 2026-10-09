@@ -25,6 +25,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from litenotebook import __version__
+from litenotebook.ai.jobs import JobManager
+from litenotebook.ai.runtime_manager import RuntimeManager
+from litenotebook.ai.service import LocalAI
 from litenotebook.chat import (
     CitationNotFoundError,
     ConversationNotFoundError,
@@ -51,6 +54,7 @@ from litenotebook.services.uploads import clean_stale_uploads
 from litenotebook.sources import SourceNotFoundError, recover_interrupted
 from litenotebook.web.deps import render
 from litenotebook.web.routes import (
+    ai,
     backup,
     chat,
     health,
@@ -75,6 +79,7 @@ def create_app(
     env: Mapping[str, str] | None = None,
     llm_transport: httpx.BaseTransport | None = None,
     embedder_factory: EmbedderFactory | None = None,
+    local_ai: LocalAI | None = None,
 ) -> FastAPI:
     """Build the app. ``env``, ``llm_transport`` and ``embedder_factory`` are
     injection points for tests. The ingestion worker runs only inside the
@@ -113,6 +118,7 @@ def create_app(
             yield
         finally:
             worker.stop()
+            local_ai_service.runtime.stop()  # only the llama-server this app started
             embedder.close()  # stops and reaps the MiniLM child process
             keeper.close()
             instance.release()
@@ -135,6 +141,11 @@ def create_app(
     app.state.worker = worker
     app.state.embedder = embedder
     app.state.generation_guard = GenerationGuard()
+    # Nothing starts here: llama-server starts on request (or autostart when
+    # Chat needs it); hardware is scanned only when a setup page asks.
+    local_ai_service = local_ai or LocalAI(app_settings, RuntimeManager(app_settings))
+    app.state.local_ai = local_ai_service
+    app.state.ai_jobs = JobManager()
 
     app.add_middleware(LocalOnlyMiddleware)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -150,6 +161,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(shell.router)
     app.include_router(backup.router)
+    app.include_router(ai.router)
 
     async def missing_item(request: Request, exc: Exception) -> HTMLResponse:
         # A missing notebook gets no "back to notebook" link.

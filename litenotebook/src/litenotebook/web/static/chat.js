@@ -36,8 +36,16 @@
   textarea.addEventListener("input", grow);
   textarea.addEventListener("input", () => { if (!errorEl.hidden && textarea.value.trim() && !active) showError(""); });
 
-  function showError(text) {
+  function showError(text, setupUrl) {
     errorEl.textContent = text || "";
+    // Only a same-site path is linked; text is never parsed as HTML.
+    if (text && typeof setupUrl === "string" && /^\/[a-z]/.test(setupUrl)) {
+      errorEl.appendChild(document.createTextNode(" "));
+      const link = document.createElement("a");
+      link.href = setupUrl;
+      link.textContent = "Set up local AI";
+      errorEl.appendChild(link);
+    }
     errorEl.hidden = !text;
   }
 
@@ -112,8 +120,13 @@
       const type = response.headers.get("content-type") || "";
       if (!response.ok || !type.startsWith("text/event-stream")) {
         let message = "Request failed (" + response.status + ")";
-        try { message = (await response.json()).error || message; } catch (e) { /* not JSON */ }
-        showError(message);
+        let setupUrl = null;
+        try {
+          const failure = await response.json();
+          message = failure.error || message;
+          setupUrl = failure.setup_url || null;
+        } catch (e) { /* not JSON */ }
+        showError(message, setupUrl);
         if (userEl && userEl.dataset.transient) userEl.remove();
         if (assistantEl.dataset.transient) assistantEl.remove();
         else if (assistantEl.dataset.messageId) replaceWithServerMessage(assistantEl, assistantEl.dataset.messageId);
@@ -140,6 +153,8 @@
               if (data.sources) parts.push(data.sources + " passage" + (data.sources === 1 ? "" : "s"));
               if (data.memories) parts.push(data.memories + " memor" + (data.memories === 1 ? "y" : "ies"));
               statusEl.textContent = "Generating from " + (parts.join(" + ") || "the notebook") + "…";
+            } else if (data.stage === "starting_runtime") {
+              statusEl.textContent = "Starting local AI… (this can take a minute)";
             } else if (data.stage === "loading_model") {
               statusEl.textContent = "Loading embedding model… (first question after a pause)";
             } else {
@@ -151,7 +166,7 @@
             scrollIfFollowing(follow);
           } else if (event === "done" || event === "error") {
             finished = true;
-            if (event === "error") showError(data.message);
+            if (event === "error") showError(data.message, data.setup_url);
           }
         });
       }

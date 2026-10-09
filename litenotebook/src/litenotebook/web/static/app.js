@@ -397,11 +397,30 @@
     document.querySelectorAll("[data-busy-form] .busy-label").forEach((l) => { l.hidden = true; });
   });
 
+  // --- Local AI setup jobs ---------------------------------------------------
+  // The polled job panel is replaced every second; only a *changed* stage is
+  // announced (not each byte count), through a live region outside the panel.
+  let lastJobMessage = "";
+  function announceJob(root) {
+    const job = root && root.id === "ai-job" ? root : document.getElementById("ai-job");
+    const region = document.getElementById("ai-job-announce");
+    if (!job || !region) return;
+    const message = job.dataset.jobMessage || "";
+    if (message && message !== lastJobMessage) {
+      lastJobMessage = message;
+      region.textContent = message;
+    }
+    const next = job.querySelector("[data-job-continue]");
+    if (next && root === job) next.focus();  // finished while the user waited
+  }
+  document.addEventListener("htmx:load", (event) => announceJob(event.target));
+
   // --- boot -----------------------------------------------------------------
 
   function boot() {
     document.querySelectorAll("#toasts [data-toast]").forEach(arm);
     setupCollapsers(document);
+    announceJob(null);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();

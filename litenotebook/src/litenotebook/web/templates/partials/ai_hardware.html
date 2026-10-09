@@ -1,0 +1,18 @@
+{# Detected hardware. VRAM shows how sure we are: "confirmed" comes from the
+   driver (NVML); "estimated" from the OS; "unknown" is never guessed. #}
+{% set hw = hardware %}
+<dl class="kv">
+  <dt>System</dt><dd>{{ platform }} {{ hw.os_release }} · {{ hw.architecture }}</dd>
+  <dt>Processor</dt><dd>{{ hw.cpu or "Unknown" }}{% if hw.physical_cores %} · {{ hw.physical_cores }} cores / {{ hw.logical_cores }} threads{% endif %}</dd>
+  <dt>Memory</dt><dd>{% if hw.total_ram_bytes %}{{ hw.total_ram_bytes | filesize }} total, {{ hw.available_ram_bytes | filesize }} free{% else %}Unknown{% endif %}</dd>
+  <dt>Free disk</dt><dd>{{ hw.free_disk_bytes | filesize if hw.free_disk_bytes else "Unknown" }} <span class="muted">(data folder)</span></dd>
+  {% for g in hw.gpus %}
+  <dt>Graphics{% if hw.gpus | length > 1 %} {{ loop.index }}{% endif %}</dt>
+  <dd>{{ g.name }}{% if g.integrated %} <span class="muted">(integrated)</span>{% endif %} ·
+    {% if g.vram_bytes %}{{ g.vram_bytes | filesize }} video memory <span class="pill">{{ g.confidence }}</span>{% if g.vram_free_bytes is not none %} <span class="muted">{{ g.vram_free_bytes | filesize }} free now</span>{% endif %}{% else %}video memory unknown{% endif %}
+    {% if g.driver_version %}<span class="muted">· driver {{ g.driver_version }}</span>{% endif %}</dd>
+  {% else %}
+  <dt>Graphics</dt><dd>No supported GPU found — models run on the processor.</dd>
+  {% endfor %}
+</dl>
+<p class="muted">Scanned in {{ hw.scan_ms | round | int }} ms. Recommendations use these numbers with a safety margin; they never depend on the GPU's name.</p>

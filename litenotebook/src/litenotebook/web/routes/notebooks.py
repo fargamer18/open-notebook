@@ -12,6 +12,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
+from litenotebook.ai.store import AIStore
 from litenotebook.notebooks import (
     MAX_DESCRIPTION_LENGTH,
     MAX_NAME_LENGTH,
@@ -55,7 +56,13 @@ def _index(
     return render(
         request,
         "notebooks/index.html",
-        {"summaries": list_summaries(conn), "limits": LIMITS, "form": {}, **context},
+        {
+            "summaries": list_summaries(conn),
+            "limits": LIMITS,
+            "form": {},
+            "ai_setup": AIStore(conn).setup(),  # stored state only: no scan
+            **context,
+        },
         status_code=status_code,
     )
 

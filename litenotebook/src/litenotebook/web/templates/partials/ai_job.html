@@ -1,0 +1,46 @@
+{# One background setup job. While it runs, HTMX re-fetches this element;
+   app.js announces stage changes through the stable live region outside it
+   (not every byte count). Numbers are real: bytes only when known. #}
+{% set running = job.state == "running" %}
+<div class="panel ai-job ai-job-{{ job.state }}" id="ai-job" data-job-stage="{{ job.stage if running else job.state }}"
+     data-job-message="{{ job.stage if running else (job.message or ('Complete' if job.state == 'done' else job.state)) }}"
+     {% if running %}hx-get="/ai/jobs/{{ job.id }}?back={{ back | urlencode }}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <h2 class="ai-job-title">{{ job.label }}</h2>
+  {% if running %}
+    <p class="ai-job-stage"><span class="spinner" aria-hidden="true"></span> {{ job.stage }}</p>
+    {% if job.total %}
+      <progress max="{{ job.total }}" value="{{ job.done or 0 }}" aria-label="{{ job.label }}: {{ ((job.done or 0) * 100 / job.total) | round | int }}%"></progress>
+      <p class="muted ai-job-bytes">{{ (job.done or 0) | filesize }} of {{ (job.total) | filesize }}{% if job.rate_bps %} · {{ (job.rate_bps | int) | filesize }}/s{% endif %}</p>
+    {% elif job.done %}
+      <p class="muted ai-job-bytes">{{ (job.done) | filesize }}</p>
+    {% endif %}
+    <form method="post" action="/ai/jobs/{{ job.id }}/cancel?back={{ back | urlencode }}">
+      <button class="btn btn-ghost btn-sm" type="submit">Cancel</button>
+    </form>
+    <noscript><p><a href="{{ back }}{{ '&' if '?' in back else '?' }}job={{ job.id }}">Refresh progress</a></p></noscript>
+  {% elif job.state == "done" %}
+    {% set outcome = job.result.outcome if job.result and job.result.outcome else none %}
+    <p class="status-line"><span class="dot dot-ok" aria-hidden="true"></span><strong>Done.</strong>
+      {% if outcome %}{{ outcome.message }}{% endif %}</p>
+    {% if outcome %}
+    <dl class="kv">
+      {% if outcome.reply %}<dt>Reply</dt><dd>{{ outcome.reply }}</dd>{% endif %}
+      {% if outcome.load_s is not none %}<dt>Load time</dt><dd>{{ outcome.load_s | duration }}</dd>{% endif %}
+      {% if outcome.ttft_s is not none %}<dt>First token</dt><dd>{{ outcome.ttft_s | duration }}</dd>{% endif %}
+      {% if outcome.tokens_per_s %}<dt>Speed</dt><dd>{{ outcome.tokens_per_s }} tokens/s</dd>{% endif %}
+      {% if outcome.config and outcome.config.type in ("managed_llama", "external_llama") %}<dt>Ran with</dt><dd>{{ "all layers on the GPU" if outcome.config.gpu_layers >= 999 else (outcome.config.gpu_layers ~ " layers on the GPU" if outcome.config.gpu_layers else "the processor only") }}, {{ outcome.config.context }} tokens of context</dd>{% endif %}
+      {% if outcome.rss_bytes %}<dt>Memory (RAM)</dt><dd>{{ (outcome.rss_bytes) | filesize }}</dd>{% endif %}
+      {% if outcome.changes %}<dt>Adjusted</dt><dd>{{ outcome.changes | join("; ") }}</dd>{% endif %}
+    </dl>
+    <p class="muted">Measured once on this computer; real speed varies with document length.</p>
+    {% endif %}
+    {% if job.result and job.result.test %}<p class="muted">MiniLM loaded in its worker process in {{ job.result.test.seconds }} s.</p>{% endif %}
+    {% set next_url = job.result.next if job.result and job.result.next else back %}
+    <p><a class="btn btn-primary" href="{{ next_url }}" data-job-continue>Continue</a></p>
+  {% else %}
+    <p class="status-line" role="alert"><span class="dot dot-{{ 'err' if job.state == 'failed' else '' }}" aria-hidden="true"></span>
+      <strong>{{ "Failed" if job.state == "failed" else "Cancelled" }}.</strong> {{ job.message }}</p>
+    <p class="muted">Partial downloads are kept and resumed next time; nothing half-installed is used.</p>
+    <p><a class="btn" href="{{ back }}" data-job-continue>Back</a></p>
+  {% endif %}
+</div>

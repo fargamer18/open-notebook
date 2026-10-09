@@ -7,6 +7,14 @@
   <p class="muted">Each notebook keeps its own sources, search index, chats, notes and memory.</p>
 </section>
 
+{% if ai_setup and not ai_setup.completed %}
+<section class="panel notice-panel ai-banner" aria-labelledby="ai-banner-title" data-dismiss-key="ai-banner">
+  <h2 id="ai-banner-title">Set up local AI</h2>
+  <p class="muted">Check what this computer can run, then choose a llama.cpp runtime and a model — or connect a server you already use. Nothing is downloaded until you confirm it.{% if ai_setup.done or ai_setup.skipped %} You can continue where you stopped.{% endif %}</p>
+  <p><a class="btn btn-primary" href="/setup">{{ "Continue setup" if ai_setup.done or ai_setup.skipped else "Set up local AI" }}</a></p>
+</section>
+{% endif %}
+
 {% if not summaries %}
 <section class="panel empty-state start-guide" id="start-guide" aria-labelledby="start-title">
   <h2 id="start-title">Get started</h2>

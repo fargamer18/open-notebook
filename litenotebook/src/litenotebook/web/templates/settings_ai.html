@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, delete_trigger %}
+{% set nav = "settings" %}
+{% block title %}Local AI{% endblock %}
+{% block content %}
+{{ crumbs([("Settings", "/settings"), ("Local AI", "")]) }}
+<section class="page-head">
+  <h1>Local AI</h1>
+  <p class="muted">Runtime, models and semantic search on this computer. Opening this page does not start, scan or download anything.</p>
+</section>
+
+{% if error %}<div class="panel notice-panel notice-error" role="alert"><p class="error">{{ error }}</p></div>{% endif %}
+{% if not setup.completed %}
+<div class="panel notice-panel"><p>Setup is not finished. <a href="/setup">Continue the setup wizard</a></p></div>
+{% endif %}
+
+{% if confirm_remove %}
+<section class="panel danger-zone" aria-labelledby="rm-title">
+  <h2 id="rm-title">Remove {{ confirm_remove.display_name }}?</h2>
+  <p>{{ "The model file is deleted from LiteNotebook's models folder." if confirm_remove.owned else "It is removed from the list only; your file is not touched." }}</p>
+  <form method="post" action="/settings/ai/remove" class="actions">
+    <input type="hidden" name="confirm" value="{{ confirm_remove.id }}">
+    <button class="btn btn-danger" type="submit">Remove</button> <a class="btn btn-ghost" href="/settings/ai">Cancel</a>
+  </form>
+</section>
+{% endif %}
+
+<div class="ai-job-region">
+  <p class="sr-only" aria-live="polite" id="ai-job-announce"></p>
+  {% if job %}{% with back = "/settings/ai" %}{% include "partials/ai_job.html" %}{% endwith %}{% endif %}
+</div>
+
+{% set type_labels = {"unset": "Not set up — Chat uses the LLM server in Settings", "managed_llama": "llama.cpp installed by LiteNotebook", "external_llama": "Your llama-server, started by LiteNotebook", "external_openai": "An existing OpenAI-compatible server", "none": "Off"} %}
+<section class="panel" aria-labelledby="gen-title">
+  <h2 id="gen-title">Generation</h2>
+  <dl class="kv">
+    <dt>Runtime</dt><dd>{{ type_labels.get(profile.type, profile.type) }}{% if profile.runtime_version %} <span class="muted">· {{ profile.runtime_version }}{% if profile.backend == "cuda" %} · CUDA{% endif %}</span>{% endif %}</dd>
+    {% if profile.type == "external_llama" %}<dt>Program</dt><dd class="mono">{{ profile.executable }}</dd>{% endif %}
+    {% if profile.launches_runtime %}
+    <dt>Model</dt><dd>{{ active_model.display_name if active_model else "None selected" }}</dd>
+    <dt>Settings</dt><dd>{{ "all layers on the GPU" if profile.gpu_layers >= 999 else (profile.gpu_layers ~ " layers on the GPU" if profile.gpu_layers else "processor only") }} · {{ profile.context }} tokens · {{ profile.threads }} threads · KV cache {{ profile.kv_type }}</dd>
+    <dt>Status</dt><dd><span class="status-line"><span class="dot dot-{{ 'ok' if runtime.state == 'running' else ('err' if runtime.state == 'failed' else ('warn' if runtime.state == 'starting' else '')) }}" aria-hidden="true"></span>
+      {{ {"stopped": "Stopped", "starting": "Starting", "running": "Running", "stopping": "Stopping", "failed": "Failed"}.get(runtime.state, runtime.state) }}{% if runtime.state == "running" %} <span class="muted">on 127.0.0.1:{{ runtime.port }}{% if runtime.rss_bytes %} · {{ runtime.rss_bytes | filesize }} RAM{% endif %}{% if runtime.load_s %} · loaded in {{ runtime.load_s | duration }}{% endif %}</span>{% endif %}</span>
+      {% if runtime.last_error %}<span class="error">{{ runtime.last_error }}</span>{% endif %}</dd>
+    {% endif %}
+    {% if profile.last_test %}<dt>Last test</dt><dd>{{ "Passed" if profile.last_test.ok else "Failed" }}{% if profile.last_test.ttft_s %} · first token {{ profile.last_test.ttft_s | duration }}{% endif %}{% if profile.last_test.tokens_per_s %} · {{ profile.last_test.tokens_per_s }} tokens/s{% endif %}{% if profile.last_test.error %} · {{ profile.last_test.error }}{% endif %}</dd>{% endif %}
+    {% if profile.last_benchmark %}<dt>Benchmark</dt><dd>{% if profile.last_benchmark.tokens_per_s %}{{ profile.last_benchmark.tokens_per_s }} tokens/s{% endif %}{% if profile.last_benchmark.ttft_s %} · first token {{ profile.last_benchmark.ttft_s | duration }}{% endif %}{% if profile.last_benchmark.load_s %} · load {{ profile.last_benchmark.load_s | duration }}{% endif %} <span class="muted">(measured once; varies with document length)</span></dd>{% endif %}
+  </dl>
+  {% if profile.note %}<p class="muted">{{ profile.note }}</p>{% endif %}
+  <div class="actions">
+    {% if profile.launches_runtime %}
+      {% if runtime.state == "running" %}
+      <form method="post" action="/settings/ai/stop"><button class="btn" type="submit">Stop</button></form>
+      <form method="post" action="/settings/ai/restart"><button class="btn" type="submit">Restart</button></form>
+      {% else %}
+      <form method="post" action="/settings/ai/start"><button class="btn btn-primary" type="submit" {% if not active_model %}disabled{% endif %}>Start</button></form>
+      {% endif %}
+    {% endif %}
+    {% if profile.type != "none" %}
+    <form method="post" action="/settings/ai/test"><button class="btn" type="submit">Test</button></form>
+    <form method="post" action="/settings/ai/benchmark"><button class="btn btn-ghost" type="submit">Benchmark</button></form>
+    {% endif %}
+    <a class="btn btn-ghost" href="/setup?step=generation">Change runtime…</a>
+  </div>
+  {% if profile.launches_runtime %}
+  <form method="post" action="/settings/ai/autostart" class="inline-form">
+    <label class="check"><input type="checkbox" name="autostart" value="1" {% if profile.autostart %}checked{% endif %}> Start llama-server automatically when Chat needs it</label>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="models-title">
+  <h2 id="models-title">Models</h2>
+  {% if models %}
+  <ul class="plain-list model-list">
+    {% for m, st in models %}
+    <li>
+      <strong>{{ m.display_name }}</strong>{% if active_model and m.id == active_model.id %} <span class="pill pill-ready">selected</span>{% endif %}
+      <span class="muted">· {{ m.size | filesize }} · {{ "in LiteNotebook's folder" if m.owned else "used in place (never deleted)" }}{% if m.verified %} · checksum verified{% endif %}{% if st != "ok" %} · <span class="error">{{ st }}</span>{% endif %}</span>
+      <span class="mono muted model-path">{{ m.path }}</span>
+      <span class="actions">
+        {% if not (active_model and m.id == active_model.id) and st == "ok" %}
+        <form method="post" action="/settings/ai/select"><input type="hidden" name="model_id" value="{{ m.id }}"><button class="btn btn-sm" type="submit">Select</button></form>
+        {% endif %}
+        {{ delete_trigger("/settings/ai?remove=" ~ m.id, "/settings/ai/remove", m.id, "Remove this model?", m.display_name,
+           ("The model file is deleted from LiteNotebook's models folder." if m.owned else "It is removed from the list only; your file is not touched."), "Remove", text="Remove…") }}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No models yet.</p>{% endif %}
+  <p class="muted">Models folder: <span class="mono">{{ models_dir }}</span></p>
+  <div class="actions">
+    <form method="post" action="/settings/ai/open-models-folder"><button class="btn btn-ghost btn-sm" type="submit">Open models folder</button></form>
+  </div>
+
+  <details class="ai-more">
+    <summary>Download a model</summary>
+    <form method="post" action="/settings/ai/install-model" class="choice-form">
+      {% for mid, m in model_catalog.items() %}
+      {% set fit = fits[mid] if fits and mid in fits else none %}
+      <label class="choice"><input type="radio" name="model_id" value="{{ mid }}" {% if fit and fit.recommended %}checked{% endif %} required>
+        <span><strong>{{ m.display_name }}</strong>{% if fit %}{% if fit.recommended %} <span class="pill pill-ready">best fit</span>{% endif %} <span class="pill pill-{{ fit.rating }}">{{ rating_labels[fit.rating] }}</span>{% endif %} <span class="muted">· {{ m.size | filesize }} · <a href="{{ m.license_url }}" rel="noreferrer" target="_blank">{{ m.license }}</a></span>
+        {% if fit %}<span class="fit-reasons">{{ fit.reasons | join(" · ") }}</span>{% endif %}</span></label>
+      {% endfor %}
+      {% if not hardware %}<p class="muted">Scan the hardware below to see which models fit.</p>{% endif %}
+      <button class="btn" type="submit">Download</button>
+    </form>
+  </details>
+  <details class="ai-more">
+    <summary>Add a GGUF file I already have</summary>
+    <form method="post" action="/settings/ai/import">
+      <div class="field"><label for="import-path">Path to the .gguf file</label><input id="import-path" name="path" class="mono" required autocomplete="off"></div>
+      <label class="check"><input type="checkbox" name="copy" value="1"> Copy it into the models folder</label>
+      <button class="btn" type="submit">Add model</button>
+    </form>
+  </details>
+</section>
+
+<section class="panel" aria-labelledby="rt-title">
+  <h2 id="rt-title">llama.cpp runtimes</h2>
+  {% if runtimes %}
+  <ul class="plain-list">{% for r in runtimes %}<li><strong>{{ r.id }}</strong> <span class="muted">· build {{ r.version }} · {{ "CUDA" if r.backend == "cuda" else "CPU" }}</span></li>{% endfor %}</ul>
+  {% else %}<p class="muted">None installed by LiteNotebook.</p>{% endif %}
+  <details class="ai-more">
+    <summary>Install or repair a runtime</summary>
+    <form method="post" action="/settings/ai/install-runtime" class="choice-form">
+      {% for o in runtime_catalog %}{% set r = o.entry %}
+      <label class="choice{{ '' if o.suitable else ' is-disabled' }}"><input type="radio" name="runtime_id" value="{{ r.id }}" {% if not o.suitable %}disabled{% elif r.id == preferred_runtime %}checked{% endif %} required>
+        <span><strong>llama.cpp {{ r.version }} — {{ "CUDA 12" if r.backend == "cuda" else "CPU" }}</strong> <span class="muted">· {{ r.assets | sum(attribute="size") | filesize }}{% if o.installed %} · installed{% endif %}{% if not o.suitable %} — {{ o.why }}{% endif %}</span></span></label>
+      {% else %}<p class="muted">Scan the hardware below first.</p>{% endfor %}
+      {% if runtime_catalog %}<button class="btn" type="submit">Download and install</button>{% endif %}
+    </form>
+  </details>
+  <details class="ai-more">
+    <summary>Use an existing llama-server</summary>
+    <form method="post" action="/settings/ai/use-runtime">
+      <div class="field"><label for="rt-path">Path to llama-server</label><input id="rt-path" name="path" class="mono" required autocomplete="off"></div>
+      <button class="btn" type="submit">Check and use</button>
+    </form>
+  </details>
+</section>
+
+<section class="panel" aria-labelledby="emb-ai-title">
+  <h2 id="emb-ai-title">Semantic search (MiniLM)</h2>
+  <p class="status-line"><span class="dot dot-{{ 'ok' if embeddings.installed else '' }}" aria-hidden="true"></span>
+    <strong>{{ "Installed" if embeddings.installed else ("Skipped" if embeddings.state == "skipped" else "Not installed") }}</strong>
+    <span class="muted">· {{ embeddings.name }} · {{ embeddings.size | filesize }} · <a href="{{ embeddings.license_url }}" rel="noreferrer" target="_blank">{{ embeddings.license }}</a></span></p>
+  {% if not embeddings.installed %}
+  <form method="post" action="/settings/ai/install-embeddings"><button class="btn" type="submit">Download and install MiniLM</button></form>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="hw-title">
+  <h2 id="hw-title">Hardware</h2>
+  {% if hardware %}{% include "partials/ai_hardware.html" %}{% else %}<p class="muted">Not scanned yet.</p>{% endif %}
+  <form method="post" action="/settings/ai/rescan"><button class="btn btn-sm" type="submit">{{ "Scan again" if hardware else "Scan hardware" }}</button></form>
+</section>
+
+<section class="panel" aria-labelledby="comp-title">
+  <h2 id="comp-title">Components</h2>
+  <ul class="plain-list">{% for c in components %}<li><strong>{{ c.label }}</strong>{% if c.optional %} <span class="muted">(optional)</span>{% endif %} — used by {{ c.used_by | join(", ") }}</li>{% endfor %}</ul>
+  <form method="post" action="/setup/reset"><button class="btn btn-ghost btn-sm" type="submit">Run the setup wizard again</button></form>
+  <p class="muted">Re-running setup never deletes models, runtimes or notebooks.</p>
+</section>
+{% endblock %}

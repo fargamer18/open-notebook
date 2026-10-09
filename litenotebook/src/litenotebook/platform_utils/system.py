@@ -138,6 +138,17 @@ def open_browser(url: str) -> bool:
         return False
 
 
+def open_folder(path: Path) -> bool:
+    """Show a folder in the file manager. The path is passed as a file:// URL
+    to the standard ``webbrowser`` dispatcher: no shell, no command string."""
+    import webbrowser
+
+    try:
+        return path.is_dir() and webbrowser.open(path.resolve().as_uri())
+    except (webbrowser.Error, ValueError, OSError):
+        return False
+
+
 # --- hardware / OS summary ---------------------------------------------------------
 
 
@@ -283,3 +294,57 @@ def system_info(disk_path: Path | None = None) -> SystemInfo:
         available_ram_bytes=available,
         disk_free_bytes=disk_free,
     )
+
+
+def process_rss_bytes(pid: int) -> int | None:
+    """Resident memory of a process LiteNotebook started (None if unknown)."""
+    kind = os_name()
+    if kind == "linux":
+        try:
+            for line in (
+                Path(f"/proc/{pid}/status").read_text(encoding="utf-8").splitlines()
+            ):
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+        except (OSError, ValueError, IndexError):
+            return None
+        return None
+    if kind == "windows":
+
+        class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("cb", ctypes.c_ulong),
+                ("PageFaultCount", ctypes.c_ulong),
+                *[
+                    (n, ctypes.c_size_t)
+                    for n in (
+                        "PeakWorkingSetSize",
+                        "WorkingSetSize",
+                        "QuotaPeakPagedPoolUsage",
+                        "QuotaPagedPoolUsage",
+                        "QuotaPeakNonPagedPoolUsage",
+                        "QuotaNonPagedPoolUsage",
+                        "PagefileUsage",
+                        "PeakPagefileUsage",
+                    )
+                ],
+            ]
+
+        try:
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            psapi = ctypes.windll.psapi  # type: ignore[attr-defined]
+            handle = kernel32.OpenProcess(0x1000 | 0x0010, False, pid)
+            if not handle:
+                return None
+            try:
+                counters = PROCESS_MEMORY_COUNTERS()
+                counters.cb = ctypes.sizeof(counters)
+                if psapi.GetProcessMemoryInfo(
+                    handle, ctypes.byref(counters), counters.cb
+                ):
+                    return int(counters.WorkingSetSize)
+            finally:
+                kernel32.CloseHandle(handle)
+        except (AttributeError, OSError):
+            return None
+    return None

@@ -7,6 +7,12 @@
   <p class="muted">Stored locally in SQLite. <span class="mono">LITENOTEBOOK_*</span> environment variables take precedence and are never saved.</p>
 </section>
 
+<section class="panel" aria-labelledby="ai-link-title">
+  <h2 id="ai-link-title">Local AI</h2>
+  <p class="muted">The llama.cpp runtime, generation model and MiniLM: install, test, start and stop. The LLM server below is used when Local AI points at an existing OpenAI-compatible server (or was never set up).</p>
+  <p><a class="btn" href="/settings/ai">Open Local AI</a> <a class="btn btn-ghost" href="/setup">Setup wizard</a></p>
+</section>
+
 <section class="panel" id="settings-form-panel">
   {% include "partials/settings_form.html" %}
 </section>

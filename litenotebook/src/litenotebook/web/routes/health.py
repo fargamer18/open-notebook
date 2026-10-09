@@ -4,16 +4,24 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from dataclasses import replace
 from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from litenotebook.ai.store import AIStore
 from litenotebook.db import connect, schema_version
 from litenotebook.services.settings import check_connection
 from litenotebook.web.deps import app_settings, llm_transport, render, settings_service
 
 router = APIRouter()
+
+
+class _Reported(Exception):
+    """The LLM status is already known without a network call."""
+
+
 HEALTH_LLM_TIMEOUT_S = 2.0
 
 
@@ -49,6 +57,27 @@ def collect_health(request: Request) -> dict[str, Any]:
         if conn is None:
             raise RuntimeError("settings unavailable: database error")
         effective = settings_service(request, conn).effective()
+        profile = AIStore(conn).profile()
+        if profile.type == "none":
+            health["llm"] = {"status": "off", "message": "Local AI is off"}
+            raise _Reported
+        if profile.launches_runtime:
+            runtime = request.app.state.local_ai.runtime.status()
+            if runtime.get("state") != "running":  # no network call when stopped
+                health["llm"] = {
+                    "status": "stopped"
+                    if runtime.get("state") != "failed"
+                    else "unreachable",
+                    "managed": True,
+                    "message": runtime.get("last_error") or "Local AI is not running",
+                }
+                raise _Reported
+            effective = replace(
+                effective,
+                llm_base_url=f"http://127.0.0.1:{runtime['port']}/v1",
+                llm_model=runtime.get("alias") or effective.llm_model,
+                llm_api_key="",
+            )
         report = check_connection(
             effective, transport=llm_transport(request), timeout_s=HEALTH_LLM_TIMEOUT_S
         )
@@ -60,6 +89,8 @@ def collect_health(request: Request) -> dict[str, Any]:
             "message": report.message,
             "elapsed_ms": round(report.elapsed_ms, 1),
         }
+    except _Reported:
+        pass
     except Exception as e:  # health must never raise
         health["llm"] = {"status": "unreachable", "message": str(e)}
     finally:

@@ -174,14 +174,16 @@ def test_cached_minilm_loads_and_embeds_with_network_disabled():
     out = _run(
         """
         import numpy as np
-        from huggingface_hub import hf_hub_download
+        from huggingface_hub import try_to_load_from_cache
         from tokenizers import Tokenizer
         from litenotebook.embed.embedder import MiniLMEmbedder, count_tokens
         texts = ["Gaussian elimination uses pivots.", "x" * 900, "Ünïcødé ∑ text"]
-        # The Phase 1 tokenizer source, read from the cache without network
-        old = Tokenizer.from_file(hf_hub_download(
-            "sentence-transformers/all-MiniLM-L6-v2", "tokenizer.json",
-            local_files_only=True))
+        # The Phase 1 tokenizer source, read straight from the cache. Not
+        # hf_hub_download(local_files_only=True): since huggingface_hub 1.33
+        # it still builds request headers, which refresh an "agent registry"
+        # from huggingface.co once its 24-hour cache is stale.
+        old = Tokenizer.from_file(try_to_load_from_cache(
+            "sentence-transformers/all-MiniLM-L6-v2", "tokenizer.json"))
         old.no_truncation()
         old.no_padding()
         n = all(count_tokens(t) == len(old.encode(t).ids) for t in texts)

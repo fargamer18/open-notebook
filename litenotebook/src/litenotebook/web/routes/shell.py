@@ -100,6 +100,8 @@ def palette_commands(
         _cmd("LiteNotebook", "New notebook", "/?new=1", "create"),
         _cmd("LiteNotebook", "Search all notebooks", "/search", "find"),
         _cmd("LiteNotebook", "Settings", "/settings", "llm model status"),
+        _cmd("LiteNotebook", "Local AI", "/settings/ai", "llama model gpu setup"),
+        _cmd("LiteNotebook", "Set up local AI", "/setup", "wizard first run"),
         _cmd("LiteNotebook", "Backup & Restore", "/backup", "export import verify zip"),
         _cmd("LiteNotebook", "Diagnostics", "/settings/diagnostics", "platform report"),
         _cmd("LiteNotebook", "Keyboard shortcuts", "", "help keys", action="shortcuts"),

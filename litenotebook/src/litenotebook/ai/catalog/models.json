@@ -1,0 +1,131 @@
+{
+ "catalog_version": 1,
+ "kind": "models",
+ "updated": "2026-10-08",
+ "note": "Curated, pinned to repository revisions; sizes and SHA-256 from the Hugging Face API.",
+ "models": [
+  {
+   "id": "qwen3-1.7b-q8_0",
+   "display_name": "Qwen3 1.7B",
+   "family": "qwen3",
+   "publisher": "Qwen (Alibaba Cloud)",
+   "parameter_class": "1.7B",
+   "size_class": "light",
+   "quantization": "Q8_0",
+   "filename": "Qwen3-1.7B-Q8_0.gguf",
+   "repository": "Qwen/Qwen3-1.7B-GGUF",
+   "revision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+   "url": "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/90862c4b9d2787eaed51d12237eafdfe7c5f6077/Qwen3-1.7B-Q8_0.gguf",
+   "sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+   "size": 1834426016,
+   "architecture": {
+    "layers": 28,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "max_context": 32768
+   },
+   "recommended_contexts": [
+    4096,
+    8192
+   ],
+   "capabilities": [
+    "chat",
+    "grounded-answers",
+    "summaries"
+   ],
+   "alias": "Qwen/Qwen3-1.7B-GGUF:Q8_0",
+   "runtime_args": [
+    "--jinja",
+    "--reasoning-budget",
+    "0"
+   ],
+   "model_page": "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF",
+   "license": "Apache-2.0",
+   "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+   "min_runtime_version": "b5000",
+   "notes": "Small and fast; fits modest laptops. Answers are simpler than the 4B model's."
+  },
+  {
+   "id": "qwen3-4b-q4_k_m",
+   "display_name": "Qwen3 4B",
+   "family": "qwen3",
+   "publisher": "Qwen (Alibaba Cloud)",
+   "parameter_class": "4B",
+   "size_class": "balanced",
+   "quantization": "Q4_K_M",
+   "filename": "Qwen3-4B-Q4_K_M.gguf",
+   "repository": "Qwen/Qwen3-4B-GGUF",
+   "revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+   "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf",
+   "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+   "size": 2497280256,
+   "architecture": {
+    "layers": 36,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "max_context": 32768
+   },
+   "recommended_contexts": [
+    4096,
+    8192
+   ],
+   "capabilities": [
+    "chat",
+    "grounded-answers",
+    "summaries"
+   ],
+   "alias": "Qwen/Qwen3-4B-GGUF:Q4_K_M",
+   "runtime_args": [
+    "--jinja",
+    "--reasoning-budget",
+    "0"
+   ],
+   "model_page": "https://huggingface.co/Qwen/Qwen3-4B-GGUF",
+   "license": "Apache-2.0",
+   "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+   "min_runtime_version": "b5000",
+   "notes": "Balanced quality and speed. Proven with LiteNotebook (GTX 1650 Ti 4 GB, 8192-token context)."
+  },
+  {
+   "id": "qwen3-8b-q4_k_m",
+   "display_name": "Qwen3 8B",
+   "family": "qwen3",
+   "publisher": "Qwen (Alibaba Cloud)",
+   "parameter_class": "8B",
+   "size_class": "large",
+   "quantization": "Q4_K_M",
+   "filename": "Qwen3-8B-Q4_K_M.gguf",
+   "repository": "Qwen/Qwen3-8B-GGUF",
+   "revision": "7c41481f57cb95916b40956ab2f0b139b296d974",
+   "url": "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/7c41481f57cb95916b40956ab2f0b139b296d974/Qwen3-8B-Q4_K_M.gguf",
+   "sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+   "size": 5027783488,
+   "architecture": {
+    "layers": 36,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "max_context": 32768
+   },
+   "recommended_contexts": [
+    4096,
+    8192
+   ],
+   "capabilities": [
+    "chat",
+    "grounded-answers",
+    "summaries"
+   ],
+   "alias": "Qwen/Qwen3-8B-GGUF:Q4_K_M",
+   "runtime_args": [
+    "--jinja",
+    "--reasoning-budget",
+    "0"
+   ],
+   "model_page": "https://huggingface.co/Qwen/Qwen3-8B-GGUF",
+   "license": "Apache-2.0",
+   "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+   "min_runtime_version": "b5000",
+   "notes": "Better answers; needs about 6 GB of GPU memory or a fast CPU with plenty of RAM."
+  }
+ ]
+}
