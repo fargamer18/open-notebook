@@ -165,6 +165,21 @@ this is verified until the boxes below are ticked on a real Windows machine.
 - [ ] Export / import a notebook with audio; import Phase 12 and Phase 13
       archives.
 
+## Desktop package (Phase 15)
+
+Run the BUILT package (from the Windows CI workflow or `tools/build.py` on
+Windows), not the source tree. See the gap list in `docs/packaging.md`.
+
+- [ ] `tools/build.py` succeeds on Windows (PyInstaller + Inno Setup)
+- [ ] `python tools/packaged_smoke.py dist\litenotebook` passes (with and
+      without `--runtime-archive`)
+- [ ] Installer: per-user install, Start menu + optional desktop shortcut,
+      "Start LiteNotebook" on finish, uninstall keeps `%LOCALAPPDATA%\LiteNotebook`
+- [ ] No console window for LiteNotebook.exe, the worker, llama-server or speech
+- [ ] User profile paths with a space and with non-ASCII characters
+- [ ] Quit LiteNotebook / Task-Manager kill: no child process left
+- [ ] Upgrade a Phase 12–14 data folder: data kept, safety copy in `backups\`
+
 ## Results
 
 | Date | Windows build | Python | Tester | Result / notes |

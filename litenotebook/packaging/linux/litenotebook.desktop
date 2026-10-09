@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=LiteNotebook
+GenericName=Notebook research assistant
+Comment=Local notebook for your PDFs with source-grounded answers
+Exec=litenotebook
+Icon=litenotebook
+Terminal=false
+Categories=Office;Education;Science;
+StartupNotify=true

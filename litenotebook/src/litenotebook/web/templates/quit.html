@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% set nav = "settings" %}
+{% block title %}LiteNotebook stopped{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>LiteNotebook is stopping</h1>
+  <p>It stops the processes it started (the search worker, a Local AI server it launched, speech). Your notebooks stay in your data folder.</p>
+  <p class="muted">You can close this tab. Start LiteNotebook again from the application menu or Start menu.</p>
+</section>
+{% endblock %}

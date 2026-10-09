@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="LiteNotebook">
+  <!-- LiteNotebook application icon (original artwork, placeholder until v1). -->
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="#16261c"/>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="none" stroke="#6fbf8a" stroke-width="8"/>
+  <path d="M72 52h92l36 36v116a12 12 0 0 1-12 12H72a12 12 0 0 1-12-12V64a12 12 0 0 1 12-12z" fill="#d7ddd9"/>
+  <path d="M164 52v24a12 12 0 0 0 12 12h24z" fill="#8b958f"/>
+  <rect x="84" y="104" width="88" height="12" rx="6" fill="#6fbf8a"/>
+  <rect x="84" y="132" width="72" height="12" rx="6" fill="#2f3833"/>
+  <rect x="84" y="160" width="80" height="12" rx="6" fill="#2f3833"/>
+  <circle cx="176" cy="178" r="26" fill="#6fbf8a"/>
+  <path d="M164 178l9 9 16-18" fill="none" stroke="#16261c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

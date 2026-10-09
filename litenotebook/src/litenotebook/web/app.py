@@ -89,6 +89,7 @@ def create_app(
     embedder_factory: EmbedderFactory | None = None,
     local_ai: LocalAI | None = None,
     speech_provider: Callable[[Settings], SpeechProvider | None] | None = None,
+    instance_info: Mapping[str, str] | None = None,
 ) -> FastAPI:
     """Build the app. ``env``, ``llm_transport`` and ``embedder_factory`` are
     injection points for tests. The ingestion worker runs only inside the
@@ -109,7 +110,9 @@ def create_app(
         # One writer per data folder: refuse to start (clear message) if
         # another LiteNotebook process holds it. The OS drops the lock on exit
         # or crash, so a left-over lock file never blocks a later start.
-        instance = InstanceLock(app_settings.data_dir).acquire_or_raise("server")
+        instance = InstanceLock(app_settings.data_dir).acquire_or_raise(
+            "server", info=instance_info
+        )
         keeper = connect(app_settings.db_path)
         interrupted = recover_interrupted(keeper)
         if interrupted:
@@ -176,6 +179,8 @@ def create_app(
     app.state.speech_jobs = {}  # overview id → running synthesis
     app.state.speech_lock = threading.Lock()  # one speech job at a time
     app.state.speech_provider = speech_provider or provider_for
+    # Set by the desktop launcher: "Quit LiteNotebook" stops the server.
+    app.state.shutdown = None
 
     app.add_middleware(LocalOnlyMiddleware)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

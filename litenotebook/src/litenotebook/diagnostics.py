@@ -85,6 +85,13 @@ def collect(
     effective_llm: Mapping[str, Any] | None = None,
     worker_status: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    from litenotebook.packaging import (
+        app_dir,
+        build_manifest,
+        embed_worker_command,
+        is_frozen,
+        runtime_status,
+    )
     from litenotebook.platform_utils.filesystem import InstanceLock, in_use
     from litenotebook.platform_utils.system import (
         find_executable,
@@ -95,11 +102,12 @@ def collect(
 
     info = system_info(settings.data_dir)
     try:
-        worker_cmd = [
-            redact_path(p) for p in python_module_command("litenotebook.embed.worker")
-        ]
-    except RuntimeError as e:
+        worker_cmd = [redact_path(p) for p in embed_worker_command(settings)]
+    except Exception as e:  # missing runtime / unsupported: say why
         worker_cmd = [f"unavailable: {e}"]
+    del python_module_command
+    runtime = runtime_status(settings)
+    manifest = build_manifest()
     llama = find_executable("llama-server")
     data_in_use = settings.data_dir.exists() and in_use(settings.data_dir)
     holder = InstanceLock(settings.data_dir).holder() if data_in_use else None
@@ -124,6 +132,14 @@ def collect(
     llm = dict(effective_llm or {})
     return {
         "litenotebook": __version__,
+        "application": {
+            "version": __version__,
+            "mode": "packaged" if is_frozen() else "source",
+            "executable": redact_path(sys.executable),
+            "app_folder": redact_path(folder) if (folder := app_dir()) else None,
+            "build": manifest.get("built_at"),
+            "build_platform": manifest.get("platform"),
+        },
         "platform": {
             "os": f"{info.os} {info.os_release}",
             "family": os_name(),
@@ -147,6 +163,7 @@ def collect(
             "data_origin": settings.data_dir_origin,
             "config": redact_path(settings.config_path),
             "cache": redact_path(settings.cache_path),
+            "logs": redact_path(settings.log_path),
             "data_in_use": data_in_use,
             "in_use_by": {"pid": holder.get("pid"), "purpose": holder.get("purpose")}
             if holder
@@ -164,6 +181,9 @@ def collect(
         },
         "embedding_worker": {
             "command": worker_cmd,
+            "runtime": "source checkout"
+            if not runtime["packaged"]
+            else (runtime["where"] or "not installed"),
             "model": EMBED_MODEL,
             "model_cached_locally": _minilm_cached(),
             "status": dict(worker_status)

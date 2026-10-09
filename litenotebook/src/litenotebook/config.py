@@ -18,14 +18,18 @@ Where data lives (``load_settings``), in order:
    ``%LOCALAPPDATA%\\LiteNotebook``.
 
 Existing data is never moved between these locations automatically.
-Config and cache folders follow the same rule (``LITENOTEBOOK_CONFIG_DIR`` /
-``LITENOTEBOOK_CACHE_DIR`` override them); in development and custom mode
-they sit inside the data folder.
+Config, cache and log folders follow the same rule
+(``LITENOTEBOOK_CONFIG_DIR`` / ``LITENOTEBOOK_CACHE_DIR`` /
+``LITENOTEBOOK_LOG_DIR`` override them); in development and custom mode they
+sit inside the data folder. Platform log folders:
+``%LOCALAPPDATA%\\LiteNotebook\\Logs`` and ``$XDG_STATE_HOME/LiteNotebook/logs``
+(``~/.local/state``).
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +42,8 @@ ORIGIN_PLATFORM = "platform default"
 
 
 def is_source_checkout(root: Path = PROJECT_ROOT) -> bool:
+    if getattr(sys, "frozen", False):  # a packaged app is never "development"
+        return False
     return (root / "pyproject.toml").is_file() and (
         root / "src" / "litenotebook"
     ).is_dir()
@@ -70,6 +76,7 @@ class Settings:
     data_dir_origin: str = ORIGIN_CUSTOM
     config_dir: Path | None = None  # default: <data_dir>/config
     cache_dir: Path | None = None  # default: <data_dir>/cache
+    log_dir: Path | None = None  # default: <data_dir>/logs
     port: int = 5056
 
     # Chunking, measured in MiniLM wordpiece tokens.
@@ -146,6 +153,11 @@ class Settings:
     @property
     def cache_path(self) -> Path:
         return self.cache_dir if self.cache_dir is not None else self.data_dir / "cache"
+
+    @property
+    def log_path(self) -> Path:
+        """Per-user log folder (startup, worker and runtime failures)."""
+        return self.log_dir if self.log_dir is not None else self.data_dir / "logs"
 
     @property
     def max_upload_bytes(self) -> int:
@@ -232,7 +244,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     if mode is not None and mode not in MODES:
         raise ConfigError(f"{ENV_PREFIX}MODE must be one of {', '.join(MODES)}")
     explicit = get("DATA_DIR")
-    config_dir = cache_dir = None
+    config_dir = cache_dir = log_dir = None
     if explicit:
         data_dir, origin = path(explicit), ORIGIN_CUSTOM
     elif mode == "user" or (mode is None and not is_source_checkout()):
@@ -241,16 +253,20 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         dirs = app_dirs(env)
         data_dir, origin = Path(dirs.data), ORIGIN_PLATFORM
         config_dir, cache_dir = Path(dirs.config), Path(dirs.cache)
+        log_dir = Path(dirs.log) if dirs.log is not None else None
     else:
         data_dir, origin = PROJECT_ROOT / "data", ORIGIN_DEVELOPMENT
     if raw_config := get("CONFIG_DIR"):
         config_dir = path(raw_config)
     if raw_cache := get("CACHE_DIR"):
         cache_dir = path(raw_cache)
+    if raw_log := get("LOG_DIR"):
+        log_dir = path(raw_log)
     return Settings(
         data_dir=data_dir,
         data_dir_origin=origin,
         config_dir=config_dir,
         cache_dir=cache_dir,
+        log_dir=log_dir,
         **overrides,  # type: ignore[arg-type]
     )

@@ -28,9 +28,12 @@ def worker_embedder_factory(settings: Settings | None = None) -> EmbedderFactory
 
         if settings is None:
             return WorkerEmbedder()
+        from litenotebook.packaging import embed_worker_command
+
         return WorkerEmbedder(
             idle_seconds=settings.embed_worker_idle_s,
             start_timeout=settings.embed_worker_start_timeout_s,
+            command=embed_worker_command(settings),  # packaged: separate exe
         )
 
     return factory

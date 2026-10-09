@@ -4,8 +4,10 @@ A lightweight, local-first alternative to Open Notebook: upload PDFs and text
 into notebooks, search them, and ask questions answered by a local Qwen model
 with source / page / chunk citations.
 
-**Status:** Phase 0 (scaffold and environment only). No ingestion, retrieval,
-or web UI yet.
+**Status:** 0.9.0 pre-release, not a public v1 release. Release blockers:
+PyMuPDF licensing is unresolved, Windows is prepared but not runtime verified,
+and production Linux builds must come from Ubuntu 22.04 (glibc 2.35). See
+[docs/packaging.md](docs/packaging.md#release-blockers-09x-is-not-a-public-v1-release).
 
 ## Requirements
 

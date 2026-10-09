@@ -64,6 +64,7 @@ from litenotebook.ai.runtimes import (
 )
 from litenotebook.ai.store import AIStore, GenerationProfile, ModelRecord
 from litenotebook.config import Settings
+from litenotebook.packaging import runtime_status
 from litenotebook.platform_utils.filesystem import is_within
 from litenotebook.platform_utils.system import os_name
 
@@ -196,6 +197,7 @@ class LocalAI:
             "models_dir": models_dir(self.settings, store),
             "components": components(profile, active, store, self.speech_status()),
             "speech": self.speech_status(),
+            "embedding_runtime": runtime_status(self.settings),
         }
 
     # --- speech (optional, Phase 14) -------------------------------------------------

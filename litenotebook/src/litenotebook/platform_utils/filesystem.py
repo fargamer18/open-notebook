@@ -36,7 +36,7 @@ import os
 import shutil
 import stat
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
@@ -162,7 +162,9 @@ class InstanceLock:
         self.path = Path(data_dir) / self.FILENAME
         self._file: IO[bytes] | None = None
 
-    def acquire(self, purpose: str = "server") -> bool:
+    def acquire(
+        self, purpose: str = "server", info: Mapping[str, Any] | None = None
+    ) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(
             self.path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600
@@ -188,6 +190,7 @@ class InstanceLock:
             f.write(
                 json.dumps(
                     {
+                        **dict(info or {}),  # e.g. the app's loopback URL
                         "pid": os.getpid(),
                         "purpose": purpose,
                         "since": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -221,8 +224,10 @@ class InstanceLock:
             return None
         return data if isinstance(data, dict) else None
 
-    def acquire_or_raise(self, purpose: str = "server") -> InstanceLock:
-        if not self.acquire(purpose):
+    def acquire_or_raise(
+        self, purpose: str = "server", info: Mapping[str, Any] | None = None
+    ) -> InstanceLock:
+        if not self.acquire(purpose, info):
             who = self.holder() or {}
             detail = (
                 f" (process {who['pid']}, {who.get('purpose', 'server')}, since "

@@ -180,8 +180,15 @@ def test_worker_command_and_frozen_builds(monkeypatch):
         "litenotebook.embed.worker",
     ]
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    with pytest.raises(RuntimeError, match="Packaged builds are not supported yet"):
+    # packaged: the worker is its own executable; only small helpers run
+    # inside the app as "<app> --internal <module>"
+    with pytest.raises(RuntimeError, match="cannot be started from a packaged"):
         python_module_command("litenotebook.embed.worker")
+    assert python_module_command("litenotebook.platform_utils.supervise") == [
+        sys.executable,
+        "--internal",
+        "litenotebook.platform_utils.supervise",
+    ]
 
 
 def test_creation_flags():  # simulation for Windows

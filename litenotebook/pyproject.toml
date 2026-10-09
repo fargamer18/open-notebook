@@ -1,6 +1,6 @@
 [project]
 name = "litenotebook"
-version = "0.1.0"
+version = "0.9.0"
 description = "Lightweight, local-first notebook RAG: SQLite + FAISS + MiniLM + llama.cpp"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -33,15 +33,19 @@ dev = [
     "ruff>=0.9",
     "mypy>=1.14",
 ]
+packaging = [
+    "pyinstaller==6.22.3",
+    "pyinstaller-hooks-contrib==2026.7",
+]
 
 [build-system]
 requires = ["uv_build>=0.8,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv]
-# Linux-only personal deployment; keeps the lockfile small and avoids
-# resolving torch wheels for platforms we never install on.
-environments = ["sys_platform == 'linux'"]
+# Linux and Windows (the desktop packages and the Windows CI need a resolved
+# lockfile for both). macOS is not a target yet.
+environments = ["sys_platform == 'linux'", "sys_platform == 'win32'"]
 
 # CPU-only torch: the GPU is reserved for llama.cpp (Qwen). The default PyPI
 # torch wheel pulls ~4 GB of nvidia-* / triton packages.

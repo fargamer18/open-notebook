@@ -76,6 +76,8 @@ def migrate(conn: sqlite3.Connection) -> int:
         )
     if current == len(migrations):
         return current
+    if current > 0:  # an existing database: keep a copy before upgrading it
+        backup_before_migration(conn, current, len(migrations))
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
         for version, path in migrations[current:]:
@@ -97,3 +99,28 @@ def migrate(conn: sqlite3.Connection) -> int:
     finally:
         conn.execute("PRAGMA foreign_keys = ON")
     return schema_version(conn)
+
+
+def backup_before_migration(
+    conn: sqlite3.Connection, current: int, target: int
+) -> Path | None:
+    """Copy the database (SQLite online backup, WAL-safe) to
+    ``<data>/backups/before-schema-<target>-from-<current>-<time>.sqlite3``
+    before migrations change it. An upgrade never resets data; this copy is
+    the way back if something goes wrong."""
+    from datetime import UTC, datetime
+
+    row = conn.execute("PRAGMA database_list").fetchone()
+    file = row[2] if row is not None else ""
+    if not file:  # in-memory database
+        return None
+    folder = Path(file).parent / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    target_path = folder / f"before-schema-{target}-from-{current}-{stamp}.sqlite3"
+    dest = sqlite3.connect(target_path)
+    try:
+        conn.backup(dest)
+    finally:
+        dest.close()
+    return target_path

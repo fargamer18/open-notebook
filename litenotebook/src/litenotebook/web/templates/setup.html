@@ -57,7 +57,10 @@
 
 {% elif step == "embeddings" %}
   <h2 id="step-title" tabindex="-1">Semantic search (MiniLM)</h2>
-  <p>{{ embedding_entry.display_name }} finds passages by meaning, not only by exact words. It runs on the processor in its own process. Keyword search works without it.</p>
+  <p>{{ embedding_entry.display_name }} finds passages by meaning, not only by exact words. It runs on the processor in its own process. Keyword search works without it on notebooks that are already indexed; indexing new PDFs needs it.</p>
+  {% if embedding_runtime.packaged and not embedding_runtime.installed %}
+  <div class="panel notice-panel" role="note"><p><strong>The semantic search runtime is not installed.</strong> This packaged app keeps it as a separate optional download; MiniLM runs inside it. You can install it later from <a href="/settings/ai">Settings → Local AI</a>.</p></div>
+  {% endif %}
   {% if embeddings.installed %}
     <p class="status-line"><span class="dot dot-ok" aria-hidden="true"></span><strong>Already installed</strong> <span class="muted">— found in the local model cache; nothing to download.</span></p>
     <form method="post" action="/setup/embeddings"><button class="btn btn-primary" type="submit">Continue</button></form>

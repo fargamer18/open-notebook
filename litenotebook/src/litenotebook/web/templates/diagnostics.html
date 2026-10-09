@@ -8,6 +8,18 @@
   <h1>Diagnostics</h1>
   <p class="muted">Environment details for bug reports. Nothing secret is included (no API key, no document names); your home folder is shown as “~”. Showing this page does not start the embedding model or contact the LLM.</p>
 </section>
+<section class="panel" aria-labelledby="diag-app">
+  <h2 id="diag-app">Application</h2>
+  <dl class="kv">
+    <dt>Version</dt><dd>LiteNotebook {{ report.application.version }} <span class="muted">({{ report.application.mode }})</span></dd>
+    <dt>Logs</dt><dd class="mono wrap">{{ report.paths.logs }}</dd>
+  </dl>
+  {% if opened == "0" %}<p class="notice-warn" role="status">Could not open a file manager here; the folder is shown above.</p>{% endif %}
+  <div class="actions">
+    <form method="post" action="/settings/diagnostics/open-logs"><button class="btn btn-sm" type="submit">Open logs folder</button></form>
+    {% if can_quit %}<form method="post" action="/app/quit"><button class="btn btn-sm btn-ghost" type="submit">Quit LiteNotebook</button></form>{% endif %}
+  </div>
+</section>
 <section class="panel" aria-labelledby="diag-title">
   <div class="panel-head">
     <h2 id="diag-title">Report</h2>

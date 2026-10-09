@@ -1,0 +1,52 @@
+# LiteNotebook desktop builds (Linux AppImage/tarball, Windows installer).
+#
+# INACTIVE: GitHub only runs workflows from the repository's
+# .github/workflows/ folder, and this repository is still the inherited Open
+# Notebook one (whose CI must not change). Once LiteNotebook has its own
+# repository with litenotebook/ as its root, move this file to
+# .github/workflows/build.yml and adjust `working-directory`.
+#
+# The Linux job builds on Ubuntu 22.04 so the result runs on distributions
+# with glibc 2.35 or newer. Windows artifacts are BUILT here; running them
+# on Windows (docs/windows-test-plan.md) is a separate, manual verification.
+name: litenotebook-build
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: litenotebook
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.21"
+      - name: Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        run: choco install innosetup --version=6.4.3 -y --no-progress
+      - name: Dependencies
+        run: uv sync --group packaging --group dev
+      - name: Tests (source mode)
+        run: uv run pytest -q
+      - name: Build
+        run: uv run --group packaging python tools/build.py
+      - name: Packaged smoke test
+        run: uv run python tools/packaged_smoke.py dist/litenotebook
+      - uses: actions/upload-artifact@v4
+        with:
+          name: litenotebook-${{ matrix.os }}
+          path: |
+            litenotebook/dist/litenotebook/*.tar.gz
+            litenotebook/dist/litenotebook/*.zip
+            litenotebook/dist/litenotebook/*.AppImage
+            litenotebook/dist/litenotebook/*-Setup.exe
+            litenotebook/dist/litenotebook/SHA256SUMS
+            litenotebook/dist/litenotebook/build-report.json

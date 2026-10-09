@@ -52,6 +52,7 @@ class AppDirs:
     data: PurePath
     config: PurePath
     cache: PurePath
+    log: PurePath | None = None  # default: <data>/logs
 
 
 def app_dirs(
@@ -75,12 +76,17 @@ def app_dirs(
             else base_home / "AppData" / "Local"
         )
         app = root / APP_NAME
-        return AppDirs(data=app, config=app, cache=app / "Cache")
+        return AppDirs(data=app, config=app, cache=app / "Cache", log=app / "Logs")
     P = PurePosixPath if simulated else Path
     base_home = P(home) if home is not None else P(Path.home())
     if kind == "macos":
         support = base_home / "Library" / "Application Support" / APP_NAME
-        return AppDirs(support, support, base_home / "Library" / "Caches" / APP_NAME)
+        return AppDirs(
+            support,
+            support,
+            base_home / "Library" / "Caches" / APP_NAME,
+            base_home / "Library" / "Logs" / APP_NAME,
+        )
 
     def xdg(var: str, fallback: PurePath) -> PurePath:
         value = env.get(var, "").strip()
@@ -90,6 +96,7 @@ def app_dirs(
         data=xdg("XDG_DATA_HOME", base_home / ".local" / "share") / APP_NAME,
         config=xdg("XDG_CONFIG_HOME", base_home / ".config") / APP_NAME,
         cache=xdg("XDG_CACHE_HOME", base_home / ".cache") / APP_NAME,
+        log=xdg("XDG_STATE_HOME", base_home / ".local" / "state") / APP_NAME / "logs",
     )
 
 
@@ -114,17 +121,23 @@ def find_executable(base: str, extra_dirs: tuple[Path, ...] = ()) -> Path | None
     return Path(found) if found else None
 
 
+# Helper modules a packaged app can run in a child copy of itself
+# (``<app> --internal <module>``); everything else needs its own executable.
+INTERNAL_MODULES = frozenset({"litenotebook.platform_utils.supervise"})
+INTERNAL_FLAG = "--internal"
+
+
 def python_module_command(module: str) -> list[str]:
     """How to run ``python -m <module>`` as a child process.
 
-    A frozen (packaged) build has no interpreter to pass ``-m`` to, and
-    ``sys.executable`` is the app itself, so spawning it would start a
-    second LiteNotebook. Packaging is not supported yet: say so clearly."""
+    In a packaged (frozen) build ``sys.executable`` is the app itself: the
+    small helpers in ``INTERNAL_MODULES`` run as ``<app> --internal <module>``.
+    The embedding worker is a separate executable (``litenotebook.packaging``)
+    and anything else is refused rather than starting a second app."""
     if getattr(sys, "frozen", False):
-        raise RuntimeError(
-            "Packaged builds are not supported yet: the embedding worker needs a "
-            "Python interpreter"
-        )
+        if module in INTERNAL_MODULES:
+            return [sys.executable, INTERNAL_FLAG, module]
+        raise RuntimeError(f"{module} cannot be started from a packaged build")
     return [sys.executable, "-m", module]
 
 
@@ -368,3 +381,17 @@ def with_library_dir(
 def machine_arch() -> str:
     """This computer's CPU architecture as reported by the OS (e.g. x86_64)."""
     return platform.machine() or "unknown"
+
+
+def show_error_dialog(title: str, message: str, *, system: str | None = None) -> bool:
+    """A native error box where one exists without extra dependencies
+    (Windows MessageBoxW). Returns False elsewhere; callers then fall back
+    to a page in the browser and the log file."""
+    if os_name(system) != "windows":
+        return False
+    try:
+        user32 = ctypes.WinDLL("user32")  # type: ignore[attr-defined]
+        user32.MessageBoxW(None, message, title, 0x10)  # MB_ICONERROR
+        return True
+    except (AttributeError, OSError):
+        return False

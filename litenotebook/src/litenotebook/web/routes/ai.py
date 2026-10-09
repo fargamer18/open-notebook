@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -496,6 +497,8 @@ def settings_ai_action(
             profile.autostart = bool(autostart)
             store.save_profile(profile)
             return _done(request, "Saved")
+        if action == "install-embedding-runtime":
+            return _install_embedding_runtime(request, path.strip(), back)
         if action in SPEECH_ACTIONS:
             return _speech_action(request, conn, action, voice_id, confirm, back)
         if action == "open-models-folder":
@@ -509,6 +512,32 @@ def settings_ai_action(
     except SetupError as e:
         return _error(request, str(e), back)
     return _error(request, "Unknown action.", back)
+
+
+def _install_embedding_runtime(request: Request, path: str, back: str) -> Response:
+    """Packaged builds: install the optional MiniLM worker runtime from the
+    release archive the user downloaded (checked against this build's
+    manifest: exact file name, size and SHA-256)."""
+    from litenotebook.packaging import RuntimeInstallError, install_runtime_archive
+
+    if not path:
+        return _error(request, "Enter the path of the runtime archive.", back)
+    settings = app_settings(request)
+
+    def work(c: sqlite3.Connection, job: Job) -> Any:
+        try:
+            install_runtime_archive(settings, Path(path), progress=job.update)
+        except RuntimeInstallError as e:
+            raise SetupError(str(e)) from e
+        return {"next": back}
+
+    return _after_job(
+        request,
+        _run_job(
+            request, "embedding-runtime", "Installing the semantic search runtime", work
+        ),
+        back,
+    )
 
 
 SPEECH_ACTIONS = (

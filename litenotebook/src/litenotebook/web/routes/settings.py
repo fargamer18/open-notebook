@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from litenotebook.services.settings import (
@@ -138,5 +138,43 @@ def diagnostics_page(request: Request, conn: Db) -> HTMLResponse:
     return render(
         request,
         "diagnostics.html",
-        {"nav": "settings", "report": report, "text": format_text(report)},
+        {
+            "nav": "settings",
+            "report": report,
+            "text": format_text(report),
+            "can_quit": request.app.state.shutdown is not None,
+            "opened": request.query_params.get("opened"),
+        },
     )
+
+
+@router.post("/settings/diagnostics/open-logs", response_model=None)
+def open_logs(request: Request) -> Response:
+    """Open the per-user log folder in the file manager (never a shell)."""
+    from litenotebook.platform_utils.system import open_folder
+
+    folder = app_settings(request).log_path
+    folder.mkdir(parents=True, exist_ok=True)
+    opened = open_folder(folder)
+    return redirect(f"/settings/diagnostics?opened={'1' if opened else '0'}")
+
+
+@router.post("/app/quit", response_class=HTMLResponse)
+def quit_app(request: Request, background: BackgroundTasks) -> HTMLResponse:
+    """Desktop app only: stop LiteNotebook after this page is sent. It stops
+    only the processes it started (worker, managed llama-server, speech)."""
+    shutdown = request.app.state.shutdown
+    if shutdown is None:
+        return render(
+            request,
+            "error.html",
+            {
+                "title": "Not available",
+                "status": 409,
+                "message": "This LiteNotebook was started from a terminal; "
+                "stop it there.",
+            },
+            status_code=409,
+        )
+    background.add_task(shutdown)
+    return render(request, "quit.html", {"nav": "settings"})

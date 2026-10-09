@@ -150,6 +150,22 @@
   {% if not embeddings.installed %}
   <form method="post" action="/settings/ai/install-embeddings"><button class="btn" type="submit">Download and install MiniLM</button></form>
   {% endif %}
+  {% set rt = embedding_runtime %}
+  {% if rt.packaged %}
+  <p class="status-line"><span class="dot dot-{{ 'ok' if rt.installed else 'warn' }}" aria-hidden="true"></span>
+    <strong>Search runtime: {{ "installed (" ~ rt.where ~ ")" if rt.installed else "not installed" }}</strong></p>
+  {% if not rt.installed %}
+    <p class="muted">The packaged app keeps the semantic search runtime (PyTorch + sentence-transformers, about {{ (rt.expected.unpacked_size if rt.expected and rt.expected.unpacked_size else 0) | filesize }} unpacked) as a separate, optional download so the main download stays small. LiteNotebook needs it to index PDFs.</p>
+    {% if rt.expected %}
+    <form method="post" action="/settings/ai/install-embedding-runtime" class="inline-form">
+      <div class="field"><label for="rt-archive">Path to <span class="mono">{{ rt.expected.file }}</span></label>
+        <input id="rt-archive" name="path" class="mono" required autocomplete="off"></div>
+      <button class="btn" type="submit">Check and install</button>
+    </form>
+    <p class="hint">Only the exact file published with this version is accepted (size and SHA-256 are checked). Alternatively, unpack it as an <span class="mono">embedding-runtime</span> folder next to the LiteNotebook program.</p>
+    {% endif %}
+  {% endif %}
+  {% endif %}
 </section>
 
 <section class="panel" aria-labelledby="speech-title" id="speech">

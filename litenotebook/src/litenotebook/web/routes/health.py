@@ -107,6 +107,18 @@ def collect_health(request: Request) -> dict[str, Any]:
     return health
 
 
+@router.get("/livez")
+def livez() -> JSONResponse:
+    """Is LiteNotebook up? No database, model or network check (the desktop
+    launcher and a second launch use it to recognise a running instance)."""
+    from litenotebook import __version__
+
+    return JSONResponse(
+        {"app": "LiteNotebook", "version": __version__},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.get("/healthz")
 def healthz(request: Request) -> JSONResponse:
     health = collect_health(request)

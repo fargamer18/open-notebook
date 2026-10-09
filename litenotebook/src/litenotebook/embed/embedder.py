@@ -48,8 +48,9 @@ class EmbeddingModelUnavailableError(EmbeddingError):
         super().__init__(
             f"The embedding model {EMBED_MODEL} is not available locally"
             f"{f' ({detail})' if detail else ''}. LiteNotebook does not download "
-            f"models during ingestion. Download it once with "
-            f"`.venv/bin/hf download {EMBED_MODEL}`, then retry."
+            "models during ingestion. Install it once from Settings → Local AI "
+            "(Semantic search), or in a source checkout with "
+            f"`hf download {EMBED_MODEL}`, then retry."
         )
 
 
