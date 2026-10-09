@@ -8,7 +8,7 @@
 <h1 class="sr-only">Reader: {{ src.original_filename }}</h1>
 <div class="reader-head">
   {{ crumbs([("Notebooks", "/"), (nb.name, "/notebooks/%d?tab=sources" % nb.id), ("Sources", "/notebooks/%d?tab=sources" % nb.id), (src.original_filename, "/notebooks/%d/sources/%d" % (nb.id, src.id)), ("Reader", "")]) }}
-  {% if back_url %}<a class="btn btn-sm btn-ghost" href="{{ back_url }}">← Back to chat</a>{% endif %}
+  {% if back_url %}<a class="btn btn-sm btn-ghost" href="{{ back_url }}">← {{ back_label or "Back to chat" }}</a>{% endif %}
   {% with tab = "reader", reader_src = src %}{% include "partials/nb_nav.html" %}{% endwith %}
 </div>
 <div class="reader-layout" id="reader"

@@ -9,6 +9,7 @@ the generation, in a worker thread).
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Annotated, Any
 
@@ -46,7 +47,12 @@ from litenotebook.chat import (
 )
 from litenotebook.db import connect
 from litenotebook.notebooks import get_notebook, get_summary
-from litenotebook.services.chat import BUSY_MESSAGE, ChatGeneration, GenerationGuard
+from litenotebook.services.chat import (
+    BUSY_MESSAGE,
+    QUIZ_BUSY_MESSAGE,
+    ChatGeneration,
+    GenerationGuard,
+)
 from litenotebook.services.settings import AppSettings
 from litenotebook.web.deps import (
     app_settings,
@@ -212,10 +218,14 @@ def _error(message: str, status_code: int) -> JSONResponse:
     return JSONResponse({"error": message}, status_code=status_code)
 
 
-def _stream(request: Request, notebook_id: int, exchange: Exchange) -> EventStream:
+def generation_target(
+    request: Request,
+) -> tuple[AppSettings, Callable[[], AppSettings | None] | None, str | None]:
+    """The LLM settings to generate with, a ``prepare`` callable that starts a
+    managed llama-server first when needed (or None), and where to send the
+    user to set up Local AI (None once setup is complete). Shared by Chat and
+    Study so both use one runtime and one endpoint."""
     settings = app_settings(request)
-    g = guard(request)
-    g.bind(exchange.assistant_message_id)
     local_ai = request.app.state.local_ai
     conn = connect(settings.db_path)
     try:
@@ -252,6 +262,14 @@ def _stream(request: Request, notebook_id: int, exchange: Exchange) -> EventStre
                 base, llm_base_url=ep.base_url, llm_model=ep.model, llm_api_key=""
             )
 
+    return llm, prepare, setup_url
+
+
+def _stream(request: Request, notebook_id: int, exchange: Exchange) -> EventStream:
+    settings = app_settings(request)
+    g = guard(request)
+    g.bind(exchange.assistant_message_id)
+    llm, prepare, setup_url = generation_target(request)
     transport = llm_transport(request)
     generation = ChatGeneration(
         settings=settings,
@@ -299,7 +317,7 @@ def _begin(
     """Take the global generation lease, then persist the exchange."""
     g = guard(request)
     if not g.try_acquire():
-        return _error(BUSY_MESSAGE, 409)
+        return _error(QUIZ_BUSY_MESSAGE if g.kind == "quiz" else BUSY_MESSAGE, 409)
     conn = connect(app_settings(request).db_path)
     try:
         reconcile_generating(conn, set())  # nothing else can be generating now

@@ -1,0 +1,68 @@
+{% from "macros.html" import delete_trigger %}
+{% set qbase = sbase ~ "/quizzes/" ~ quiz.id %}
+<section class="panel quiz-overview" aria-labelledby="quiz-h">
+  <div class="panel-head">
+    <h2 id="quiz-h">{{ quiz.title }}</h2>
+  </div>
+  <p class="sr-only" role="status" aria-live="polite" id="quiz-announce"></p>
+  {% if quiz.status == "generating" %}
+    {% include "partials/quiz_status.html" with context %}
+  {% elif quiz.status in ("failed", "cancelled") %}
+    <div class="panel notice-panel notice-error" role="alert">
+      <p><strong>{{ "Generation cancelled." if quiz.status == "cancelled" else "No quiz was generated." }}</strong> {% if quiz.status == "failed" %}{{ quiz.error }}{% endif %}</p>
+      {% if quiz.status == "failed" and quiz.error and ("not configured" in quiz.error or "reach the LLM" in quiz.error or "Local AI" in quiz.error) %}<p><a class="btn btn-primary btn-sm" href="/settings/ai">Local AI settings</a></p>{% endif %}
+    </div>
+  {% endif %}
+  {% if quiz.message %}<p class="notice-warn" role="note">{{ quiz.message }}</p>{% endif %}
+  <dl class="kv">
+    <dt>Questions</dt><dd>{% if quiz.status == "ready" %}{{ quiz.question_count }}{% if quiz.question_count != quiz.requested_count %} of {{ quiz.requested_count }} requested{% endif %}{% else %}{{ quiz.requested_count }} requested{% endif %}</dd>
+    <dt>Difficulty</dt><dd>{{ quiz.difficulty_label }}</dd>
+    <dt>Types</dt><dd>{{ quiz.type_labels | join(", ") }}</dd>
+    <dt>Sources</dt><dd class="wrap">{{ quiz.source_names | join(", ") or "—" }}{% if quiz.material.notes %} · My notes{% endif %}{% if quiz.material.chat %} · Chat history{% endif %}</dd>
+    {% if quiz.focus %}<dt>Focus</dt><dd class="wrap">{{ quiz.focus }}</dd>{% endif %}
+    <dt>Created</dt><dd>{{ quiz.created_at | ts }}</dd>
+    {% if quiz.status == "ready" and quiz.meta.timings %}<dt>Generated in</dt><dd>{{ quiz.meta.timings.total | duration }}{% if quiz.model %} <span class="muted">· {{ quiz.model }}</span>{% endif %}</dd>{% endif %}
+  </dl>
+  {% if quiz.status == "ready" %}
+  <div class="actions">
+    {% if quiz.open_attempt %}
+      <a class="btn btn-primary" href="{{ sbase }}/attempts/{{ quiz.open_attempt }}">Resume</a>
+      <form method="post" action="{{ qbase }}/start"><button class="btn" type="submit">Start over</button></form>
+    {% else %}
+      <form method="post" action="{{ qbase }}/start"><button class="btn btn-primary" type="submit">{{ "Retake quiz" if quiz.attempts else "Start quiz" }}</button></form>
+    {% endif %}
+    <a class="btn btn-ghost" href="{{ sbase }}/quizzes/new">Create another quiz</a>
+  </div>
+  {% endif %}
+  {% if attempts %}
+  <h3>Attempts</h3>
+  <ul class="attempt-list">
+    {% for a in attempts %}
+      <li>
+        <span>{{ a.started_at | ts }}</span>
+        <span class="muted">{{ "Retry of mistakes" if a.mode == "mistakes" else "Full quiz" }}</span>
+        {% if a.status == "completed" %}<strong>{{ a.score }}/{{ a.total }}</strong>
+          <a href="{{ sbase }}/attempts/{{ a.id }}/result">Result</a> · <a href="{{ sbase }}/attempts/{{ a.id }}/review">Review</a>
+        {% elif a.status == "in_progress" %}<span>{{ a.answered }}/{{ a.total }} answered</span> <a href="{{ sbase }}/attempts/{{ a.id }}">Resume</a>
+        {% else %}<span class="muted">Not finished ({{ a.answered }}/{{ a.total }} answered)</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if quiz.status != "generating" %}
+  <div class="actions quiz-delete">
+    {% set body = "The quiz, its questions, evidence snapshots and all %d attempt%s are deleted. Concept progress is recalculated from your other quizzes. Sources, notes and chats are not affected." % (attempts | length, "" if attempts | length == 1 else "s") %}
+    {% if confirming %}
+      <form method="post" action="{{ qbase }}/delete" class="panel notice-panel notice-error">
+        <p><strong>Delete this quiz permanently?</strong> {{ body }}</p>
+        {% if delete_error %}<p class="error" role="alert">{{ delete_error }}</p>{% endif %}
+        <input type="hidden" name="confirm" value="{{ quiz.id }}">
+        <button class="btn btn-danger btn-sm" type="submit">Delete quiz</button>
+        <a class="btn btn-ghost btn-sm" href="{{ qbase }}">Keep it</a>
+      </form>
+    {% else %}
+      {{ delete_trigger(qbase ~ "?delete=1", qbase ~ "/delete", quiz.id, "Delete this quiz permanently?", quiz.title, body, "Delete quiz") }}
+    {% endif %}
+  </div>
+  {% endif %}
+</section>

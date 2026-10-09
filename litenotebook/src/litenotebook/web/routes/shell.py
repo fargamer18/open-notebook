@@ -80,6 +80,13 @@ def palette_commands(
                 _cmd(group, "Sources", f"{base}?tab=sources", "pdf upload files"),
                 _cmd(group, "Chat", f"{base}/chat", "conversations ask"),
                 _cmd(group, "Notes", f"{base}/notes", "write"),
+                _cmd(group, "Study", f"{base}/study", "quiz quizzes review practice"),
+                _cmd(
+                    group,
+                    "New quiz",
+                    f"{base}/study/quizzes/new",
+                    "study test practice",
+                ),
                 _cmd(group, "Memory", f"{base}/memory", "remembered history"),
                 _cmd(group, "Memory graph", f"{base}/memory/graph", "concepts map"),
                 _cmd(group, "Export this notebook", f"{base}/export", "backup zip"),

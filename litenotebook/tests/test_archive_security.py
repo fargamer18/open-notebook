@@ -12,6 +12,7 @@ from litenotebook.archive.export import export_notebook
 from litenotebook.archive.format import ArchiveError, Limits, UnsupportedArchiveError
 from litenotebook.archive.importer import import_archive
 from litenotebook.archive.reader import verify_archive
+from litenotebook.db import available_migrations
 from litenotebook.platform_utils.filesystem import (
     InstanceLock,
     create_exclusive,
@@ -22,6 +23,8 @@ from litenotebook.platform_utils.paths import (
     download_name,
     portable_key,
 )
+
+CURRENT_SCHEMA = len(available_migrations())
 
 
 @pytest.fixture
@@ -38,7 +41,7 @@ def export(conn, settings, tmp_path):
 
 def check(path, settings, limits=None):
     return verify_archive(
-        path, limits or Limits.from_settings(settings), current_schema=8
+        path, limits or Limits.from_settings(settings), current_schema=CURRENT_SCHEMA
     )
 
 

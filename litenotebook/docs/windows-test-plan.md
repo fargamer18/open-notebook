@@ -125,6 +125,24 @@ this is verified until the boxes below are ticked on a real Windows machine.
 - [ ] Antivirus (Defender) does not quarantine the extracted runtime; note
       the first-start time (SmartScreen / scanning can slow it).
 
+## Study / quizzes (Phase 13)
+
+- [ ] Study tab appears between Notes and Memory; Study home and quiz history
+      open with Local AI stopped (no llama-server.exe, no MiniLM worker in
+      Task Manager).
+- [ ] Generate a 5-question quiz from two of three PDFs; the stages are shown,
+      Cancel stops `llama-server.exe` generating (CPU drops), and no second
+      `llama-server.exe` is started for quizzes while Chat is used.
+- [ ] Take the quiz with the keyboard only (arrow keys, Space, Enter, 1–4);
+      Hint, explanation, evidence and "Open in PDF" (Reader jumps to the
+      highlighted passage, "Back to quiz" returns).
+- [ ] Retry mistakes, result page, history; delete a quiz (confirmation).
+- [ ] Export the notebook, import it on the same machine and from the Linux
+      archive: quizzes, attempts and evidence survive; a Phase 12 (v1) backup
+      still imports.
+- [ ] Source file names with spaces / non-ASCII characters appear correctly in
+      evidence labels.
+
 ## Results
 
 | Date | Windows build | Python | Tester | Result / notes |

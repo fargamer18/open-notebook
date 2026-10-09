@@ -40,6 +40,8 @@ Browser (Jinja2 + HTMX, vendored, no CDN)
   + `os.replace`), is checked against SQLite (count, model, dimension) on load,
   and can always be rebuilt from SQLite without re-embedding.
 - **One LLM call per normal question.** No multi-step agent chains.
+  Quiz generation (Study, Phase 13) makes a small, bounded number of batched
+  requests; see `docs/study-quizzes.md`.
 - **Bind to loopback only.** No auth in the MVP; mutating requests must pass a
   Host/Origin check. No telemetry, no CDN assets.
 - **Never import from `legacy/` or the Open Notebook packages** (`open_notebook`,

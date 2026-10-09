@@ -1,0 +1,32 @@
+{% from "notebook/study/macros.html" import verdict %}
+{% set abase = sbase ~ "/attempts/" ~ attempt.id %}
+<section class="panel quiz-result" aria-labelledby="result-h">
+  <h2 id="result-h" tabindex="-1" data-autofocus>{{ quiz.title }}: result</h2>
+  <p class="score" role="status"><span class="score-n">{{ attempt.score }} / {{ attempt.total }}</span> <span class="muted">{{ "retry of mistakes" if attempt.mode == "mistakes" else "full quiz" }} · {{ attempt.completed_at | ts }}</span></p>
+  <dl class="kv score-kv">
+    <dt>Correct</dt><dd>{{ attempt.correct }}</dd>
+    <dt>Incorrect</dt><dd>{{ attempt.incorrect }}</dd>
+    {% if attempt.skipped %}<dt>Skipped</dt><dd>{{ attempt.skipped }}</dd>{% endif %}
+  </dl>
+  {% if to_review %}
+  <h3>Needs review</h3>
+  <ul class="concept-list">{% for c in to_review %}<li>{{ c }}</li>{% endfor %}</ul>
+  {% endif %}
+  <h3>Questions</h3>
+  <ol class="result-list">
+    {% for item in attempt.items %}{% set q = by_id[item.question_id] %}
+      <li>{{ verdict(item) }} <a href="{{ abase }}/review#rq-{{ item.position }}">Q{{ item.position }}</a> <span class="muted">{{ q.question | truncate(110) }}</span></li>
+    {% endfor %}
+  </ol>
+  <div class="actions">
+    {% if attempt.missed %}
+      <a class="btn" href="{{ abase }}/review?only=mistakes">Review mistakes</a>
+      <form method="post" action="{{ abase }}/retry-mistakes"><button class="btn btn-primary" type="submit">Retry mistakes ({{ attempt.missed | length }})</button></form>
+    {% else %}
+      <a class="btn" href="{{ abase }}/review">Review answers</a>
+    {% endif %}
+    <a class="btn btn-ghost" href="{{ sbase }}/quizzes/new">Create another quiz</a>
+    <a class="btn btn-ghost" href="{{ sbase }}/quizzes/{{ quiz.id }}">Quiz overview</a>
+  </div>
+  <p class="hint">A correct answer shows what you knew this time; it is not a measure of mastery.</p>
+</section>

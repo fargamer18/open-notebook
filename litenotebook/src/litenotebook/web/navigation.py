@@ -31,6 +31,7 @@ FLASH_MESSAGES: dict[str, tuple[str, str]] = {
     "settings-saved": ("success", "Settings saved"),
     "restore-cancelled": ("info", "Pending restore cancelled"),
     "ai-updated": ("success", "Local AI updated"),
+    "quiz-deleted": ("success", "Quiz deleted"),
 }
 
 

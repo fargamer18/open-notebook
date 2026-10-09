@@ -1,0 +1,11 @@
+<section class="panel" aria-labelledby="quiz-history">
+  <div class="panel-head">
+    <h2 id="quiz-history">Quiz history</h2>
+    <a class="btn btn-primary btn-sm" href="{{ sbase }}/quizzes/new">Create quiz</a>
+  </div>
+  {% if quizzes %}
+  <ul class="quiz-list">
+    {% for qz in quizzes %}{% include "notebook/study/quiz_row.html" %}{% endfor %}
+  </ul>
+  {% else %}<p class="muted">No quizzes yet.</p>{% endif %}
+</section>

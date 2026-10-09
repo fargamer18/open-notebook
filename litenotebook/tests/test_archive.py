@@ -52,7 +52,7 @@ from litenotebook.archive.restore import (
     staging_dir,
 )
 from litenotebook.config import EMBED_MODEL, load_settings
-from litenotebook.db import open_db, schema_version
+from litenotebook.db import available_migrations, open_db, schema_version
 from litenotebook.index.faiss_store import FaissStore
 from litenotebook.ingest.pipeline import delete_source, ingest_pdf
 from litenotebook.notebooks import create_notebook, delete_notebook
@@ -62,6 +62,8 @@ from litenotebook.web.app import create_app
 BASE = "http://127.0.0.1:5056"
 ORIGIN = {"Origin": BASE}
 SECRET = "sk-test-SECRET-123456"
+
+CURRENT_SCHEMA = len(available_migrations())
 
 
 @pytest.fixture
@@ -75,7 +77,9 @@ def limits(settings):
 
 def verify(path, settings, conn=None):
     return verify_archive(
-        path, limits(settings), current_schema=schema_version(conn) if conn else 8
+        path,
+        limits(settings),
+        current_schema=schema_version(conn) if conn else CURRENT_SCHEMA,
     )
 
 
@@ -101,8 +105,10 @@ def test_export_layout_manifest_and_checksums(conn, settings, tmp_path, rich):
     assert set(entries) == expected
     manifest = json.loads(entries["manifest.json"])
     assert manifest["format"] == "litenotebook-archive"
-    assert manifest["export_format_version"] == FORMAT_VERSION == 1
-    assert manifest["kind"] == "notebook" and manifest["schema_version"] == 8
+    assert manifest["export_format_version"] == FORMAT_VERSION == 2  # Phase 13
+    assert (
+        manifest["kind"] == "notebook" and manifest["schema_version"] == CURRENT_SCHEMA
+    )
     assert manifest["embedding"] == {
         "model": EMBED_MODEL,
         "dim": 384,
@@ -597,7 +603,10 @@ def test_backup_contains_every_notebook_and_verify_changes_nothing(
 
 def test_newer_versions_are_refused_clearly(conn, settings, tmp_path, rich):
     out = export_notebook(conn, settings, rich.notebook_id, tmp_path / "x.zip").path
-    for field, value in (("export_format_version", 2), ("schema_version", 99)):
+    for field, value in (
+        ("export_format_version", FORMAT_VERSION + 1),
+        ("schema_version", 99),
+    ):
         entries = read_entries(out)
         manifest = json.loads(entries["manifest.json"])
         manifest[field] = value
@@ -922,7 +931,7 @@ build_rich_notebook(c, s, tmp)
 for m in ("torch", "sentence_transformers", "transformers"):
     assert m not in sys.modules, m
 out = export_notebook(c, s, 1, tmp / "x.zip").path
-verify_archive(out, Limits.from_settings(s), current_schema=8)
+verify_archive(out, Limits.from_settings(s), current_schema={CURRENT_SCHEMA})
 import_archive(c, s, out)
 create_backup(c, s, tmp / "b.zip")
 c.close()

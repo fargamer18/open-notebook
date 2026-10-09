@@ -1,0 +1,24 @@
+{# Generation progress: real stages only, no invented percentages. #}
+{% set stage = quiz.stage %}
+{% set parts = stage.split(":") %}
+<div class="panel quiz-status" id="quiz-status" data-quiz-status="{{ quiz.status }}"
+     {% if quiz.status == "generating" %}hx-get="/notebooks/{{ nb_id }}/study/quizzes/{{ quiz.id }}/status" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  {% if quiz.status == "generating" %}
+    <p class="status-line"><span class="spinner" aria-hidden="true"></span>
+      <strong id="quiz-stage" data-stage="{{ parts[0] }}">
+      {%- if parts[0] == "queued" %}Queued…
+      {%- elif parts[0] == "loading_model" %}Loading the embedding model…
+      {%- elif parts[0] == "retrieving" %}Retrieving evidence…
+      {%- elif parts[0] == "starting_runtime" %}Starting Local AI…
+      {%- elif parts[0] == "generating" %}Generating questions…{% if parts | length == 3 %} (request {{ parts[1] }} of {{ parts[2] }}){% elif parts | length == 2 %} (replacing rejected questions){% endif %}
+      {%- elif parts[0] == "validating" %}Validating quiz…
+      {%- elif parts[0] == "saving" %}Saving…
+      {%- else %}Working…{% endif -%}
+      </strong></p>
+    <p class="muted">Started {{ quiz.created_at | ts }}. Questions are checked against their evidence before anything is saved.</p>
+    <form method="post" action="/notebooks/{{ nb_id }}/study/quizzes/{{ quiz.id }}/cancel">
+      <button class="btn btn-ghost btn-sm" type="submit">Cancel</button>
+    </form>
+    <noscript><p><a href="/notebooks/{{ nb_id }}/study/quizzes/{{ quiz.id }}">Refresh progress</a></p></noscript>
+  {% endif %}
+</div>

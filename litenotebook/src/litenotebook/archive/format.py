@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from litenotebook.config import Settings
 
 FORMAT_NAME = "litenotebook-archive"
-FORMAT_VERSION = 1  # independent of the database schema version
+FORMAT_VERSION = 2  # independent of the database schema version
+# Version history: 1 = Phase 10 (sources, chats, notes, annotations, memory);
+# 2 = Phase 13 adds the Study tables below. Version 1 archives are still
+# imported: tables introduced later are simply absent (no quizzes).
 KINDS = ("notebook", "backup")
 MANIFEST = "manifest.json"
 CHECKSUMS = "checksums.json"
@@ -99,7 +102,53 @@ TABLES: dict[str, tuple[Column, ...]] = {
         "question:text excerpt:text outcome:text? correction:text? sources:text "
         "remembered_at:text"
     ),
+    "quizzes": _cols(
+        "id:int title:text status:text stage:text difficulty:text "
+        "question_types:text requested_count:int question_count:int focus:text "
+        "material:text message:text? error:text? model:text? meta:text? "
+        "created_at:text updated_at:text completed_at:text?"
+    ),
+    "quiz_questions": _cols(
+        "id:int quiz_id:int position:int qtype:text question:text explanation:text "
+        "hint:text difficulty:text concepts:text"
+    ),
+    "quiz_question_options": _cols(
+        "id:int question_id:int position:int text:text is_correct:int"
+    ),
+    "quiz_evidence": _cols(
+        "id:int question_id:int ordinal:int kind:text source_id:int? chunk_id:int? "
+        "page_no:int? chunk_ord:int? note_id:int? message_id:int? "
+        "conversation_id:int? label:text excerpt:text"
+    ),
+    "quiz_attempts": _cols(
+        "id:int quiz_id:int mode:text parent_attempt_id:int? status:text total:int "
+        "score:int? started_at:text completed_at:text?"
+    ),
+    "quiz_attempt_items": _cols(
+        "id:int attempt_id:int question_id:int position:int selected:text? "
+        "is_correct:int? hint_used:int answered_at:text?"
+    ),
+    "study_concept_stats": _cols(
+        "id:int concept_key:text label:text times_seen:int correct_count:int "
+        "incorrect_count:int streak:int last_result:text? last_seen:text?"
+    ),
 }
+# The first archive format version that contains each table (default 1).
+TABLE_SINCE = {
+    "quizzes": 2,
+    "quiz_questions": 2,
+    "quiz_question_options": 2,
+    "quiz_evidence": 2,
+    "quiz_attempts": 2,
+    "quiz_attempt_items": 2,
+    "study_concept_stats": 2,
+}
+
+
+def tables_for(version: int) -> list[str]:
+    """Tables an archive of this format version contains, in import order."""
+    return [t for t in TABLES if TABLE_SINCE.get(t, 1) <= version]
+
 
 _NB = r"notebooks/(?P<nb>[1-9]\d{0,11})"
 ENTRY_PATTERNS = {

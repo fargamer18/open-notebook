@@ -65,6 +65,7 @@ def reader_page(
     chunk: int | None = None,
     citation: int | None = None,
     annotation: int | None = None,
+    attempt: int | None = None,
 ) -> HTMLResponse:
     settings = app_settings(request)
     summary = get_summary(conn, notebook_id)
@@ -111,6 +112,16 @@ def reader_page(
         if a.source_id != source_id:
             raise AnnotationNotFoundError("That annotation belongs to another source")
         start, focus_kind, focus_id = a.page_no, "annotation", a.id
+    back_label = "Back to chat"
+    if attempt is not None:  # opened from quiz evidence
+        row = conn.execute(
+            "SELECT a.id FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id "
+            "WHERE a.id = ? AND q.notebook_id = ?",
+            (attempt, notebook_id),
+        ).fetchone()
+        if row is not None:
+            back_url = f"/notebooks/{notebook_id}/study/attempts/{row[0]}/review"
+            back_label = "Back to quiz"
     start = min(max(1, start), reader.page_count)
     return render(
         request,
@@ -126,6 +137,7 @@ def reader_page(
             "colors": COLORS,
             "nb_id": notebook_id,
             "back_url": back_url,
+            "back_label": back_label,
         },
     )
 

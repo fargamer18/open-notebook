@@ -137,6 +137,13 @@ def _remap_json_ids(raw: str | None, maps: Maps, list_key: str | None) -> str | 
     return json.dumps(data, ensure_ascii=False)
 
 
+def _check_json(raw: str, where: str) -> None:
+    try:
+        json.loads(raw)
+    except ValueError as e:
+        raise ArchiveError(f"Invalid data in {where}") from e
+
+
 def unique_name(conn: sqlite3.Connection, base: str) -> str:
     """``base`` if free, else "base (Imported)", "base (Imported 2)", …"""
     base = " ".join(base.split())[:MAX_NAME_LENGTH] or "Imported notebook"
@@ -370,6 +377,7 @@ class _Importer:
                     "sources": _remap_json_ids(r["sources"], m, None) or "[]",
                 },
             )
+        self._insert_study(nb)
         for new, link_type, target_key, memory_key in link_keys:
             self.conn.execute(
                 "UPDATE note_links SET target_key = ?, memory_key = ? WHERE id = ?",
@@ -378,6 +386,101 @@ class _Importer:
                     remap_key(memory_key, m) if memory_key is not None else None,
                     new,
                 ),
+            )
+
+    def _insert_study(self, nb: int) -> None:
+        """Quizzes, attempts and study progress (format version 2+). Evidence
+        snapshots keep their text; ids of sources, chunks, notes and chats
+        are remapped, and become NULL when the item was not exported."""
+        rows, prefix, m = self.reader.rows, self.info.prefix, self.maps
+        for r in rows(prefix, "quizzes"):
+            old = r.pop("id")
+            for col in ("question_types", "material", "meta"):
+                _check_json(r[col], f"quiz {old} {col}")
+            material = json.loads(r["material"])
+            if isinstance(material, dict) and isinstance(material.get("sources"), list):
+                for item in material["sources"]:
+                    if isinstance(item, dict) and isinstance(item.get("id"), int):
+                        item["id"] = _soft(m, "sources", item["id"], None)
+            if r["status"] == "generating":  # exported mid-generation
+                r.update(
+                    status="failed",
+                    stage="failed",
+                    error="Interrupted (exported while generating)",
+                )
+            m["quizzes"][old] = self._insert(
+                "quizzes",
+                {
+                    **r,
+                    "notebook_id": nb,
+                    "material": json.dumps(material, ensure_ascii=False),
+                },
+            )
+        for r in rows(prefix, "quiz_questions"):
+            old = r.pop("id")
+            _check_json(r["concepts"], f"quiz question {old} concepts")
+            m["quiz_questions"][old] = self._insert(
+                "quiz_questions", {**r, "quiz_id": m["quizzes"][r["quiz_id"]]}
+            )
+        for r in rows(prefix, "quiz_question_options"):
+            old = r.pop("id")
+            m["quiz_question_options"][old] = self._insert(
+                "quiz_question_options",
+                {**r, "question_id": m["quiz_questions"][r["question_id"]]},
+            )
+        for r in rows(prefix, "quiz_evidence"):
+            old = r.pop("id")
+            m["quiz_evidence"][old] = self._insert(
+                "quiz_evidence",
+                {
+                    **r,
+                    "question_id": m["quiz_questions"][r["question_id"]],
+                    "source_id": _soft(m, "sources", r["source_id"], None),
+                    "chunk_id": _soft(m, "chunks", r["chunk_id"], None),
+                    "note_id": _soft(m, "notes", r["note_id"], None),
+                    "message_id": _soft(m, "messages", r["message_id"], None),
+                    "conversation_id": _soft(
+                        m, "conversations", r["conversation_id"], None
+                    ),
+                },
+            )
+        for r in rows(prefix, "quiz_attempts"):
+            old = r.pop("id")
+            m["quiz_attempts"][old] = self._insert(
+                "quiz_attempts",
+                {
+                    **r,
+                    "quiz_id": m["quizzes"][r["quiz_id"]],
+                    "parent_attempt_id": _soft(
+                        m, "quiz_attempts", r["parent_attempt_id"], None
+                    ),
+                },
+            )
+        for r in rows(prefix, "quiz_attempt_items"):
+            old = r.pop("id")
+            if r["selected"] is not None:
+                _check_json(r["selected"], f"quiz answer {old}")
+            m["quiz_attempt_items"][old] = self._insert(
+                "quiz_attempt_items",
+                {
+                    **r,
+                    "attempt_id": m["quiz_attempts"][r["attempt_id"]],
+                    "question_id": m["quiz_questions"][r["question_id"]],
+                },
+            )
+        mismatched = self.conn.execute(
+            "SELECT count(*) FROM quiz_attempt_items i JOIN quiz_attempts a "
+            "ON a.id = i.attempt_id JOIN quiz_questions q ON q.id = i.question_id "
+            "JOIN quizzes z ON z.id = a.quiz_id WHERE z.notebook_id = ? "
+            "AND q.quiz_id != a.quiz_id",
+            (nb,),
+        ).fetchone()[0]
+        if mismatched:
+            raise ArchiveError("Quiz answers refer to questions of another quiz")
+        for r in rows(prefix, "study_concept_stats"):
+            old = r.pop("id")
+            m["study_concept_stats"][old] = self._insert(
+                "study_concept_stats", {**r, "notebook_id": nb}
             )
 
     def move_sources(self) -> None:

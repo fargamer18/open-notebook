@@ -1,0 +1,28 @@
+{% from "notebook/study/macros.html" import evidence_list, verdict, answer_key %}
+{% set abase = sbase ~ "/attempts/" ~ attempt.id %}
+<section class="panel quiz-review" aria-labelledby="review-h">
+  <div class="panel-head">
+    <h2 id="review-h">{{ "Mistakes" if only == "mistakes" else "Review" }}: {{ quiz.title }}</h2>
+    <div class="actions">
+      {% if only == "mistakes" %}<a class="btn btn-sm btn-ghost" href="{{ abase }}/review">All questions</a>{% elif attempt.missed %}<a class="btn btn-sm btn-ghost" href="{{ abase }}/review?only=mistakes">Only mistakes</a>{% endif %}
+      {% if attempt.status == "completed" %}<a class="btn btn-sm" href="{{ abase }}/result">Result</a>{% else %}<a class="btn btn-sm" href="{{ abase }}">Back to the quiz</a>{% endif %}
+    </div>
+  </div>
+  {% for item in items %}{% set q = by_id[item.question_id] %}
+  <article class="review-q" id="rq-{{ item.position }}" aria-labelledby="rq-{{ item.position }}-h">
+    <h3 class="review-head" id="rq-{{ item.position }}-h">Q{{ item.position }} · {{ verdict(item) }} <span class="muted">· {{ q.type_label }}</span></h3>
+    <p class="quiz-question">{{ q.question }}</p>
+    {% if item.answered or attempt.status != "in_progress" %}
+      {{ answer_key(q, item) }}
+      <h4 class="quiz-sub">Explanation</h4>
+      <p>{{ q.explanation }}</p>
+      {% if q.hint %}<p class="muted">Hint{% if item.hint_used %} (used){% endif %}: {{ q.hint }}</p>{% endif %}
+      {{ evidence_list(q, nb_id, attempt.id) }}
+    {% else %}
+      <p class="muted">Not answered yet; the answer and evidence appear after you answer it.</p>
+    {% endif %}
+  </article>
+  {% else %}
+  <p class="muted">Nothing to review: every question was answered correctly.</p>
+  {% endfor %}
+</section>

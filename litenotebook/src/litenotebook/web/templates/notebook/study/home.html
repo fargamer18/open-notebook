@@ -1,0 +1,39 @@
+<div class="study-grid">
+  <section class="panel study-tool" aria-labelledby="study-quizzes">
+    <div class="panel-head">
+      <h2 id="study-quizzes">Quizzes</h2>
+      <a class="btn btn-primary btn-sm" href="{{ sbase }}/quizzes/new">Create quiz</a>
+    </div>
+    <p class="muted">Create source-grounded quizzes from this notebook. Every question is checked against the passages it cites.</p>
+    <h3>Recent quizzes</h3>
+    {% if quizzes %}
+    <ul class="quiz-list">
+      {% for qz in quizzes %}{% include "notebook/study/quiz_row.html" %}{% endfor %}
+    </ul>
+    {% if total_quizzes > quizzes | length %}<p><a href="{{ sbase }}/quizzes">All {{ total_quizzes }} quizzes</a></p>
+    {% else %}<p><a href="{{ sbase }}/quizzes">Quiz history</a></p>{% endif %}
+    {% else %}
+    <p class="muted">No quizzes yet.</p>
+    {% endif %}
+  </section>
+  <section class="panel" aria-labelledby="study-review">
+    <h2 id="study-review">Needs review</h2>
+    {% if review %}
+      <p class="muted">Concepts answered incorrectly the last time they came up.</p>
+      <ul class="concept-list">
+        {% for c in review %}<li><span class="concept-label">{{ c.label }}</span> <span class="muted">{{ c.correct }} of {{ c.times_seen }} correct · last {{ c.last_seen | ts }}</span></li>{% endfor %}
+      </ul>
+    {% elif progress %}
+      <p class="muted">Nothing needs review right now.</p>
+    {% else %}
+      <p class="muted">Take a quiz to see which concepts need another look.</p>
+    {% endif %}
+    {% if progress %}
+    <h3>Recent concepts</h3>
+    <ul class="concept-list">
+      {% for c in progress %}<li><span class="concept-label">{{ c.label }}</span> <span class="pill concept-{{ c.status | lower | replace(' ', '-') }}">{{ c.status }}</span> <span class="muted">{{ c.correct }}/{{ c.times_seen }} correct</span></li>{% endfor %}
+    </ul>
+    <p class="hint">“Strong recently” means the last two answers were correct; it is not a measure of mastery.</p>
+    {% endif %}
+  </section>
+</div>

@@ -53,6 +53,7 @@ from litenotebook.archive.format import (
     ArchiveError,
     Limits,
     UnsupportedArchiveError,
+    tables_for,
 )
 from litenotebook.config import EMBED_DIM, EMBED_MODEL
 from litenotebook.platform_utils.filesystem import COPY_BUFFER_BYTES
@@ -73,6 +74,14 @@ PARENTS: dict[str, list[tuple[str, str]]] = {
     "reading_state": [("source_id", "sources")],
     "note_links": [("note_id", "notes")],
     "message_memory_refs": [("message_id", "messages")],
+    "quiz_questions": [("quiz_id", "quizzes")],
+    "quiz_question_options": [("question_id", "quiz_questions")],
+    "quiz_evidence": [("question_id", "quiz_questions")],
+    "quiz_attempts": [("quiz_id", "quizzes"), ("parent_attempt_id", "quiz_attempts")],
+    "quiz_attempt_items": [
+        ("attempt_id", "quiz_attempts"),
+        ("question_id", "quiz_questions"),
+    ],
 }
 
 
@@ -139,6 +148,7 @@ class ArchiveReader:
         self.zf: zipfile.ZipFile | None = None
         self.infos: dict[str, zipfile.ZipInfo] = {}
         self.manifest: dict[str, Any] = {}
+        self.version = FORMAT_VERSION  # set from the manifest by validate()
         self.checksums: dict[str, str] = {}
 
     # --- lifecycle -----------------------------------------------------------
@@ -283,6 +293,8 @@ class ArchiveReader:
         """Validated rows: exactly the allowed columns with the right types.
         BLOB columns come back as bytes."""
         name = f"{prefix}/tables/{table}.jsonl"
+        if table not in tables_for(self.version):
+            return  # an older archive: this table did not exist yet
         columns = TABLES[table]
         expected = {c.name for c in columns}
         for n, raw in enumerate(self.iter_lines(name), 1):
@@ -313,6 +325,7 @@ class ArchiveReader:
             raise ArchiveError("The archive manifest has an invalid format version")
         if version > FORMAT_VERSION:
             raise UnsupportedArchiveError(NEWER_VERSION_MESSAGE)
+        self.version = version
         schema = manifest.get("schema_version")
         if not isinstance(schema, int) or isinstance(schema, bool) or schema < 1:
             raise ArchiveError("The archive manifest has an invalid schema version")
@@ -439,12 +452,17 @@ class ArchiveReader:
             )
         if not meta["name"].strip():
             raise ArchiveError(f"{meta_name}: the notebook name is empty")
-        for table in TABLES:
+        expected_tables = tables_for(self.version)
+        for table in expected_tables:
             if f"{prefix}/tables/{table}.jsonl" not in self.infos:
                 raise ArchiveError(f"{prefix}/tables/{table}.jsonl is missing")
         for name in self.infos:
             m = ENTRY_PATTERNS["table"].match(name)
-            if m and m.group("nb") == str(nb_id) and m.group("table") not in TABLES:
+            if (
+                m
+                and m.group("nb") == str(nb_id)
+                and m.group("table") not in expected_tables
+            ):
                 raise ArchiveError(f"Unknown table in archive: {name!r}")
 
         info = NotebookInfo(nb_id, prefix, meta)
@@ -452,7 +470,7 @@ class ArchiveReader:
             meta["embed_model"] == EMBED_MODEL and meta["embed_dim"] == EMBED_DIM
         )
         ids: dict[str, set[int]] = {}
-        for table in TABLES:
+        for table in expected_tables:
             key = "source_id" if table == "reading_state" else "id"
             seen: set[int] = set()
             parents = PARENTS.get(table, [])

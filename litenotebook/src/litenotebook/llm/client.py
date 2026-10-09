@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -247,6 +247,76 @@ class ChatStream:
             if isinstance(content, str) and content:
                 out.append(content)  # reasoning_content is deliberately ignored
         return out
+
+
+class StreamStopped(LLMError):
+    """``should_stop`` returned True; the upstream response was closed."""
+
+
+def complete_streaming(
+    base_url: str,
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    api_key: str | None = None,
+    timeout_s: float = 180.0,
+    max_tokens: int = 1024,
+    temperature: float = 0.2,
+    extra: dict[str, Any] | None = None,
+    transport: httpx.BaseTransport | None = None,
+    should_stop: Callable[[], bool] | None = None,
+) -> tuple[str, StreamInfo]:
+    """A whole completion, streamed (sync), for background work such as quiz
+    generation. Streaming keeps it cancellable: when ``should_stop`` returns
+    True the response is closed, which makes llama-server stop generating.
+    Thinking is disabled and any ``<think>`` text is removed."""
+    parser = ChatStream(base_url, model, api_key=api_key)
+    payload: dict[str, Any] = {
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": True,
+        "chat_template_kwargs": {"enable_thinking": False},
+        **(extra or {}),
+    }
+    if model:
+        payload["model"] = model
+    parts: list[str] = []
+    think = ThinkFilter()
+    try:
+        with httpx.Client(
+            base_url=parser.base_url,
+            headers=parser._headers,
+            timeout=parser._timeout,
+            transport=transport,
+        ) as client:
+            with client.stream("POST", "chat/completions", json=payload) as response:
+                if response.status_code >= 400:
+                    body = response.read()[:300]
+                    raise LLMResponseError(
+                        f"LLM server returned HTTP {response.status_code}: "
+                        f"{body.decode('utf-8', 'replace')}"
+                    )
+                for line in response.iter_lines():
+                    for delta in parser._parse_line(line):
+                        parts.append(think.feed(delta))
+                    if should_stop is not None and should_stop():
+                        raise StreamStopped("Stopped")
+                    if parser.info.done:
+                        break
+        if parser.info.finish_reason is None:
+            raise LLMResponseError("The LLM stream ended unexpectedly")
+    except httpx.ConnectError as e:
+        raise LLMError(
+            f"Cannot reach the LLM server at {parser.base_url} — is llama-server "
+            "running?"
+        ) from e
+    except httpx.TimeoutException as e:
+        raise LLMError("The LLM server timed out") from e
+    except httpx.HTTPError as e:
+        raise LLMError(f"LLM request failed: {type(e).__name__}") from e
+    parts.append(think.flush())
+    return "".join(parts), parser.info
 
 
 class LLMClient:

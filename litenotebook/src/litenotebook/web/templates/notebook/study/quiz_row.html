@@ -1,0 +1,13 @@
+<li class="quiz-row">
+  <a class="quiz-title" href="{{ sbase }}/quizzes/{{ qz.id }}">{{ qz.title }}</a>
+  <span class="quiz-meta">
+    {% if qz.status == "generating" %}<span class="pill pill-processing">Generating…</span>
+    {% elif qz.status == "failed" %}<span class="pill pill-failed">Failed</span>
+    {% elif qz.status == "cancelled" %}<span class="pill">Cancelled</span>
+    {% elif qz.latest %}<span class="pill pill-ready">Latest {{ qz.latest[0] }}/{{ qz.latest[1] }}</span>
+    {% elif qz.open_attempt %}<span class="pill">In progress</span>
+    {% else %}<span class="pill">Not started</span>{% endif %}
+    <span class="muted">{{ qz.created_at | ts }} · {{ qz.difficulty_label }} · {{ qz.question_count if qz.status == "ready" else qz.requested_count }} question{{ "" if (qz.question_count if qz.status == "ready" else qz.requested_count) == 1 else "s" }}{% if qz.attempts %} · {{ qz.attempts }} attempt{{ "" if qz.attempts == 1 else "s" }}{% if qz.best is not none %} · best {{ qz.best }}/{{ qz.question_count }}{% endif %}{% endif %}</span>
+    {% if qz.source_names %}<span class="muted quiz-sources">{{ qz.source_names | join(", ") }}</span>{% endif %}
+  </span>
+</li>

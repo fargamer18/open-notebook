@@ -72,6 +72,18 @@ _WHERE = {
     "note_links": "WHERE note_id IN (SELECT id FROM notes WHERE notebook_id = :nb)",
     "message_memory_refs": "WHERE message_id IN (SELECT m.id FROM messages m "
     "JOIN conversations c ON c.id = m.conversation_id WHERE c.notebook_id = :nb)",
+    "quizzes": "WHERE notebook_id = :nb",
+    "quiz_questions": "WHERE quiz_id IN "
+    "(SELECT id FROM quizzes WHERE notebook_id = :nb)",
+    "quiz_question_options": "WHERE question_id IN (SELECT qq.id FROM quiz_questions "
+    "qq JOIN quizzes q ON q.id = qq.quiz_id WHERE q.notebook_id = :nb)",
+    "quiz_evidence": "WHERE question_id IN (SELECT qq.id FROM quiz_questions qq "
+    "JOIN quizzes q ON q.id = qq.quiz_id WHERE q.notebook_id = :nb)",
+    "quiz_attempts": "WHERE quiz_id IN "
+    "(SELECT id FROM quizzes WHERE notebook_id = :nb)",
+    "quiz_attempt_items": "WHERE attempt_id IN (SELECT a.id FROM quiz_attempts a "
+    "JOIN quizzes q ON q.id = a.quiz_id WHERE q.notebook_id = :nb)",
+    "study_concept_stats": "WHERE notebook_id = :nb",
 }
 
 
@@ -349,6 +361,10 @@ def summary(conn: sqlite3.Connection, notebook_id: int) -> dict[str, int]:
         ),
         "messages": one(f"SELECT count(*) FROM messages {_WHERE['messages']}"),
         "annotations": one(f"SELECT count(*) FROM annotations {_WHERE['annotations']}"),
+        "quizzes": one(f"SELECT count(*) FROM quizzes {_WHERE['quizzes']}"),
+        "quiz_attempts": one(
+            f"SELECT count(*) FROM quiz_attempts {_WHERE['quiz_attempts']}"
+        ),
         "source_bytes": one(
             f"SELECT coalesce(sum(size_bytes), 0) FROM sources {_WHERE['sources']}"
         ),

@@ -52,6 +52,8 @@ from litenotebook.services.ingestion import IngestionWorker
 from litenotebook.services.settings import SettingsError
 from litenotebook.services.uploads import clean_stale_uploads
 from litenotebook.sources import SourceNotFoundError, recover_interrupted
+from litenotebook.study.store import AttemptNotFoundError, QuizNotFoundError
+from litenotebook.study.store import recover_generating as recover_quizzes
 from litenotebook.web.deps import render
 from litenotebook.web.routes import (
     ai,
@@ -66,6 +68,7 @@ from litenotebook.web.routes import (
     settings,
     shell,
     sources,
+    study,
 )
 from litenotebook.web.security import LocalOnlyMiddleware
 
@@ -109,6 +112,8 @@ def create_app(
         clean_archive_tmp(app_settings)
         if interrupted_answers := recover_generating(keeper):
             log.warning("Interrupted answers marked: %d", interrupted_answers)
+        if interrupted_quizzes := recover_quizzes(keeper):
+            log.warning("Interrupted quiz generations marked: %d", interrupted_quizzes)
         # Deterministic, idempotent: derive graph memory for any exchange that
         # has none yet (e.g. conversations from before Phase 5). No LLM calls.
         if remembered := backfill(keeper):
@@ -118,6 +123,8 @@ def create_app(
             yield
         finally:
             worker.stop()
+            for job in list(app.state.quiz_jobs.values()):
+                job.cancel.set()  # quiz threads stop at their next check
             local_ai_service.runtime.stop()  # only the llama-server this app started
             embedder.close()  # stops and reaps the MiniLM child process
             keeper.close()
@@ -146,6 +153,7 @@ def create_app(
     local_ai_service = local_ai or LocalAI(app_settings, RuntimeManager(app_settings))
     app.state.local_ai = local_ai_service
     app.state.ai_jobs = JobManager()
+    app.state.quiz_jobs = {}  # quiz id → running QuizJob (for Cancel)
 
     app.add_middleware(LocalOnlyMiddleware)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -162,6 +170,7 @@ def create_app(
     app.include_router(shell.router)
     app.include_router(backup.router)
     app.include_router(ai.router)
+    app.include_router(study.router)
 
     async def missing_item(request: Request, exc: Exception) -> HTMLResponse:
         # A missing notebook gets no "back to notebook" link.
@@ -178,6 +187,8 @@ def create_app(
         memory.MemoryNodeNotFoundError,
         NoteNotFoundError,
         AnnotationNotFoundError,
+        QuizNotFoundError,
+        AttemptNotFoundError,
     ):
         app.add_exception_handler(missing, missing_item)
 

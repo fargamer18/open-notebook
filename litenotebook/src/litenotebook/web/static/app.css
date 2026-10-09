@@ -873,3 +873,61 @@ mark { background: var(--accent-bg); color: var(--accent-strong); border-radius:
 .spinner { width: 0.9rem; height: 0.9rem; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: ln-spin 0.9s linear infinite; }
 @keyframes ln-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* --- Study / quizzes (Phase 13) ------------------------------------------- */
+.study-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
+@media (max-width: 960px) { .study-grid { grid-template-columns: minmax(0, 1fr); } }
+.quiz-list, .concept-list, .attempt-list, .result-list, .ev-list, .opt-review { list-style: none; margin: 0; padding: 0; }
+.quiz-row { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.quiz-row:last-child { border-bottom: 0; }
+.quiz-title { font-weight: 600; overflow-wrap: anywhere; }
+.quiz-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 0.6rem; align-items: center; font-size: 0.85rem; min-width: 0; }
+.quiz-sources { flex-basis: 100%; overflow-wrap: anywhere; }
+.concept-list li, .attempt-list li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.6rem; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
+.concept-label { font-weight: 600; overflow-wrap: anywhere; }
+.concept-needs-review { color: var(--warn); }
+.concept-strong-recently { color: var(--accent-strong); }
+.quiz-form fieldset, .quiz-q { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem 1rem 0.75rem; margin: 0 0 var(--space-3); min-width: 0; }
+.quiz-form legend { font-weight: 600; padding: 0 0.3rem; }
+.quiz-form input:not([type]), .quiz-form input[type="text"] { width: 100%; }
+.choice-row { display: flex; flex-wrap: wrap; gap: 0.2rem 1.2rem; }
+.quiz-take, .quiz-review, .quiz-result, .quiz-new { max-width: 52rem; }
+.quiz-progress { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; align-items: center; }
+.quiz-progress progress { flex: 1 1 10rem; max-width: 20rem; }
+.quiz-count, .quiz-answered { margin: 0; }
+.quiz-title-sm { font-size: 0.85rem; color: var(--muted); font-weight: 500; margin: 0.6rem 0; }
+.quiz-question { font-size: 1.05rem; font-weight: 600; padding: 0 0.3rem; overflow-wrap: anywhere; }
+.quiz-q legend.quiz-question { margin-bottom: 0.4rem; }
+.opt { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.45rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); margin: 0.4rem 0; overflow-wrap: anywhere; }
+.opt-choice { cursor: pointer; }
+.opt-choice:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.opt-choice:has(input:checked) { border-color: var(--accent); background: var(--accent-bg); }
+.opt-choice input { margin-top: 0.25rem; }
+.opt-letter { font-family: var(--mono); color: var(--muted); min-width: 1.2rem; }
+.opt-text { flex: 1 1 auto; min-width: 0; }
+.opt-tag { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+.opt-correct { border-color: #2c5a3d; background: var(--accent-bg); }
+.opt-correct .opt-tag:first-of-type { color: var(--accent-strong); }
+.opt-wrong { border-color: #5a2a2a; background: var(--danger-bg); }
+.opt-wrong .opt-tag { color: #f0a0a0; }
+.quiz-feedback { border-left: 3px solid var(--border-strong); padding: 0.4rem 0 0.4rem 0.9rem; margin: var(--space-3) 0; }
+.quiz-feedback.is-correct { border-left-color: var(--accent); }
+.quiz-feedback.is-wrong { border-left-color: var(--danger); }
+.verdict { font-weight: 600; }
+.verdict-ok { color: var(--accent-strong); }
+.verdict-bad { color: var(--danger); }
+.verdict-skip { color: var(--muted); }
+.quiz-sub { font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0.75rem 0 0.35rem; }
+.ev-item { padding: 0.5rem 0; border-top: 1px solid var(--border); }
+.ev-cite { display: flex; flex-wrap: wrap; gap: 0.3rem 0.5rem; align-items: center; margin: 0 0 0.3rem; overflow-wrap: anywhere; }
+.quiz-hint { margin: var(--space-3) 0; }
+.hint-text { border-left: 3px solid var(--info); padding-left: 0.8rem; }
+.quiz-nav { margin-top: var(--space-4); }
+.quiz-finish { margin-left: auto; }
+.score { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; align-items: baseline; }
+.score-n { font-size: 2rem; font-weight: 700; }
+.result-list li { padding: 0.25rem 0; overflow-wrap: anywhere; }
+.review-q { border-top: 1px solid var(--border); padding: var(--space-3) 0; }
+.review-head { text-transform: none; letter-spacing: 0; font-size: 0.95rem; color: var(--text); }
+.quiz-delete { margin-top: var(--space-4); }
+.quiz-status { border-left: 3px solid var(--info); }

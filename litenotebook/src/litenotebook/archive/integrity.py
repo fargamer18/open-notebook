@@ -114,6 +114,28 @@ def notebook_counts(conn: sqlite3.Connection, notebook_id: int) -> dict[str, int
         "annotations": one("SELECT count(*) FROM annotations WHERE notebook_id = ?"),
         "memory_nodes": one("SELECT count(*) FROM memory_nodes WHERE notebook_id = ?"),
         "memory_edges": one("SELECT count(*) FROM memory_edges WHERE notebook_id = ?"),
+        "quizzes": one("SELECT count(*) FROM quizzes WHERE notebook_id = ?"),
+        "quiz_questions": one(
+            "SELECT count(*) FROM quiz_questions q JOIN quizzes z ON z.id = q.quiz_id "
+            "WHERE z.notebook_id = ?"
+        ),
+        "quiz_evidence": one(
+            "SELECT count(*) FROM quiz_evidence e JOIN quiz_questions q "
+            "ON q.id = e.question_id JOIN quizzes z ON z.id = q.quiz_id "
+            "WHERE z.notebook_id = ?"
+        ),
+        "quiz_attempts": one(
+            "SELECT count(*) FROM quiz_attempts a JOIN quizzes z ON z.id = a.quiz_id "
+            "WHERE z.notebook_id = ?"
+        ),
+        "quiz_answers": one(
+            "SELECT count(*) FROM quiz_attempt_items i JOIN quiz_attempts a "
+            "ON a.id = i.attempt_id JOIN quizzes z ON z.id = a.quiz_id "
+            "WHERE z.notebook_id = ? AND i.answered_at IS NOT NULL"
+        ),
+        "study_concepts": one(
+            "SELECT count(*) FROM study_concept_stats WHERE notebook_id = ?"
+        ),
     }
 
 
@@ -134,6 +156,10 @@ def notebook_report(
     problems += [f"FAISS: {p}" for p in status.problems]
     memory = memory_check(conn, notebook_id)
     problems += [f"Memory: {p}" for p in memory.problems]
+    from litenotebook.study.store import stats_consistent
+
+    if not stats_consistent(conn, notebook_id):
+        problems.append("Study: concept progress does not match the quiz answers")
     for sid, filename in conn.execute(
         "SELECT id, original_filename FROM sources WHERE notebook_id = ?",
         (notebook_id,),

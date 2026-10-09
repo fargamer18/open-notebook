@@ -1,0 +1,13 @@
+{# Study tab. Every page here reads SQLite only: no MiniLM, no LLM. #}
+{% set nb = s.notebook %}
+{% set sbase = "/notebooks/" ~ nb.id ~ "/study" %}
+<div class="study" id="study">
+{% if study_view == "home" %}{% include "notebook/study/home.html" %}
+{% elif study_view == "history" %}{% include "notebook/study/history.html" %}
+{% elif study_view == "new" %}{% include "notebook/study/new.html" %}
+{% elif study_view == "quiz" %}{% include "notebook/study/quiz.html" %}
+{% elif study_view == "take" %}{% include "notebook/study/take.html" %}
+{% elif study_view == "result" %}{% include "notebook/study/result.html" %}
+{% elif study_view == "review" %}{% include "notebook/study/review.html" %}
+{% endif %}
+</div>

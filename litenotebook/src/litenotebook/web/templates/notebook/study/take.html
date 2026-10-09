@@ -1,0 +1,61 @@
+{% from "notebook/study/macros.html" import evidence_list, verdict, answer_key %}
+{% set abase = sbase ~ "/attempts/" ~ attempt.id %}
+{% set multi = question.qtype == "multiple" %}
+<section class="panel quiz-take" aria-labelledby="q-head">
+  <div class="quiz-progress">
+    <p id="q-head" class="quiz-count"><strong>Question {{ item.position }} of {{ attempt.total }}</strong>
+      <span class="muted">· {{ question.type_label }}{% if attempt.mode == "mistakes" %} · retrying mistakes{% endif %}</span></p>
+    <progress max="{{ attempt.total }}" value="{{ attempt.answered }}" aria-label="{{ attempt.answered }} of {{ attempt.total }} answered"></progress>
+    <p class="muted quiz-answered">{{ attempt.answered }} of {{ attempt.total }} answered</p>
+  </div>
+  <h2 class="quiz-title-sm">{{ quiz.title }}</h2>
+  {% if not item.answered %}
+  <form method="post" action="{{ abase }}/answer" class="quiz-form-q" id="answer-form">
+    <input type="hidden" name="q" value="{{ item.position }}">
+    <fieldset class="quiz-q" aria-describedby="{% if multi %}q-multi-hint{% endif %}">
+      <legend class="quiz-question">{{ question.question }}</legend>
+      {% if multi %}<p class="hint" id="q-multi-hint">Select all that apply (2 or 3 are correct).</p>{% endif %}
+      {% for o in question.options %}
+        <label class="opt opt-choice"><input type="{{ 'checkbox' if multi else 'radio' }}" name="choice" value="{{ o.position }}" {% if loop.first %}data-autofocus{% endif %}>
+          <span class="opt-letter" aria-hidden="true">{{ o.letter }}</span> <span class="opt-text">{{ o.text }}</span></label>
+      {% endfor %}
+    </fieldset>
+    {% if answer_error %}<p class="error" role="alert" id="answer-error">Choose {{ "one or more answers" if multi else "an answer" }} first.</p>{% endif %}
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Submit answer</button>
+    </div>
+  </form>
+  {% if question.hint %}
+  <div class="quiz-hint" id="hint">
+    {% if show_hint %}
+      <p class="hint-text" role="note"><strong>Hint:</strong> {{ question.hint }}</p>
+    {% else %}
+      <form method="post" action="{{ abase }}/hint"><input type="hidden" name="q" value="{{ item.position }}"><button class="btn btn-ghost btn-sm" type="submit">Hint</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+  <p class="hint">Keys: arrow keys move between choices, Space selects, Enter submits{% if not multi %}, 1–{{ question.options | length }} pick an option{% endif %}.</p>
+  {% else %}
+  <div class="quiz-q quiz-answered-q">
+    <p class="quiz-question" id="q-text">{{ question.question }}</p>
+    {{ answer_key(question, item) }}
+  </div>
+  <div class="quiz-feedback {{ 'is-correct' if item.is_correct else 'is-wrong' }}" id="feedback" tabindex="-1" data-autofocus role="status">
+    <p class="feedback-verdict">{{ verdict(item) }}{% if item.hint_used %} <span class="muted">· hint used</span>{% endif %}</p>
+    <h3 class="quiz-sub">Explanation</h3>
+    <p>{{ question.explanation }}</p>
+  </div>
+  {{ evidence_list(question, nb_id, attempt.id) }}
+  {% endif %}
+  <nav class="actions quiz-nav" aria-label="Questions">
+    {% if item.position > 1 %}<a class="btn btn-ghost" href="{{ abase }}?q={{ item.position - 1 }}">← Previous</a>{% endif %}
+    {% if item.answered %}
+      {% if item.position < attempt.total %}<a class="btn btn-primary" href="{{ abase }}?q={{ item.position + 1 }}" data-next>Next →</a>
+      {% elif attempt.status == "completed" %}<a class="btn btn-primary" href="{{ abase }}/result" data-next>See result</a>
+      {% else %}<a class="btn btn-primary" href="{{ abase }}" data-next>Next unanswered →</a>{% endif %}
+    {% elif item.position < attempt.total %}<a class="btn btn-ghost" href="{{ abase }}?q={{ item.position + 1 }}">Skip for now →</a>{% endif %}
+    {% if attempt.status == "in_progress" %}
+    <form method="post" action="{{ abase }}/finish" class="quiz-finish"><button class="btn btn-ghost btn-sm" type="submit">Finish now{% if attempt.answered < attempt.total %} ({{ attempt.total - attempt.answered }} unanswered count as skipped){% endif %}</button></form>
+    {% endif %}
+  </nav>
+</section>

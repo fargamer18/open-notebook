@@ -1,0 +1,59 @@
+<section class="panel quiz-new" aria-labelledby="quiz-new-title">
+  <h2 id="quiz-new-title">Create a quiz</h2>
+  <p class="muted">Questions are written only from the material you select and checked against the passages they cite. General knowledge is not used.</p>
+  {% if error %}
+  <div class="notice-panel notice-error panel" role="alert" id="quiz-form-error">
+    <p><strong>{{ error }}</strong></p>
+    {% if setup_url %}<p><a class="btn btn-primary btn-sm" href="{{ setup_url }}">Set up local AI</a></p>{% endif %}
+  </div>
+  {% endif %}
+  <form method="post" action="{{ sbase }}/quizzes" class="quiz-form">
+    <fieldset>
+      <legend>Sources</legend>
+      {% for src in sources %}
+        <label class="check"><input type="checkbox" name="sources" value="{{ src.id }}" {% if src.id in form.sources %}checked{% endif %}> {{ src.original_filename }}{% if src.page_count %} <span class="muted">· {{ src.page_count }} page{{ "" if src.page_count == 1 else "s" }}</span>{% endif %}</label>
+      {% else %}
+        <p class="muted">No ready sources. <a href="/notebooks/{{ nb.id }}?tab=sources">Upload a PDF</a> first.</p>
+      {% endfor %}
+    </fieldset>
+    <fieldset>
+      <legend>Optional material</legend>
+      <label class="check"><input type="checkbox" name="notes" value="1" {% if form.notes %}checked{% endif %} {% if not notes_count %}disabled{% endif %}> My notes <span class="muted">({{ notes_count }})</span></label>
+      <label class="check"><input type="checkbox" name="chat" value="1" {% if form.chat %}checked{% endif %} {% if not chat_count %}disabled{% endif %}> Chat history <span class="muted">({{ chat_count }} answer{{ "" if chat_count == 1 else "s" }})</span></label>
+      <p class="hint">Off by default: only the selected sources are used.</p>
+    </fieldset>
+    <div class="field">
+      <label for="quiz-focus">Focus <span class="muted">(optional)</span></label>
+      <input id="quiz-focus" name="focus" maxlength="{{ max_focus }}" value="{{ form.focus }}" placeholder="e.g. eigenvalues and diagonalisation" autocomplete="off" aria-describedby="quiz-focus-hint">
+      <p class="hint" id="quiz-focus-hint">A topic to concentrate on. With a focus, passages are found with the embedding model; without one, questions are spread across the selected sources.</p>
+    </div>
+    <fieldset>
+      <legend>Number of questions</legend>
+      <div class="choice-row">
+      {% for n in counts %}<label class="check"><input type="radio" name="count" value="{{ n }}" {% if form.count == n %}checked{% endif %}> {{ n }}</label>{% endfor %}
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Difficulty</legend>
+      <div class="choice-row">
+      {% for d in difficulties %}<label class="check"><input type="radio" name="difficulty" value="{{ d }}" {% if form.difficulty == d %}checked{% endif %}> {{ difficulty_labels[d] }}</label>{% endfor %}
+      </div>
+      <p class="hint">Easy: terms and direct facts. Medium: relationships and interpretation. Hard: multi-step reasoning. Exam-style: concise, applied, plausible distractors. Difficulty guides the model; it is not calibrated.</p>
+    </fieldset>
+    <fieldset>
+      <legend>Question types</legend>
+      <div class="choice-row">
+      {% for t in qtypes %}<label class="check"><input type="checkbox" name="types" value="{{ t }}" {% if t in form.types %}checked{% endif %}> {{ qtype_labels[t] }}</label>{% endfor %}
+      </div>
+    </fieldset>
+    <div class="field">
+      <label for="quiz-title">Title <span class="muted">(optional)</span></label>
+      <input id="quiz-title" name="title" maxlength="{{ max_title }}" value="{{ form.title }}" placeholder="Made from the focus or the source names" autocomplete="off">
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Generate quiz</button>
+      <a class="btn btn-ghost" href="{{ sbase }}">Cancel</a>
+    </div>
+    <p class="hint">Generation uses Local AI and can take a minute or more on a CPU. You can keep using the notebook meanwhile; Chat waits until the quiz is done.</p>
+  </form>
+</section>

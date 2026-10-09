@@ -65,6 +65,9 @@ EMPTY_ANSWER = "The model returned an empty answer. Retry."
 BUSY_MESSAGE = (
     "Another answer is being generated. Wait for it to finish or stop it first."
 )
+QUIZ_BUSY_MESSAGE = (
+    "Local AI is busy generating a quiz. Wait for it to finish, or cancel it in Study."
+)
 ANSWER_MAX_TOKENS = 1024
 ANSWER_TEMPERATURE = 0.2
 STALE_LEASE_S = 900.0  # a lease never started or never released is reclaimed
@@ -75,13 +78,20 @@ def sse(event: str, data: dict[str, Any]) -> bytes:
 
 
 class GenerationGuard:
-    """At most one active generation per process, with a stop flag."""
+    """At most one active generation per process, with a stop flag.
+
+    Chat answers and quiz generation share it (one llama-server slot): an
+    answer binds its assistant message id, a quiz binds the negative quiz id
+    with ``kind="quiz"``. Long quiz runs ``touch`` the lease between requests
+    so it is not reclaimed as stale.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._active: int | None = None  # assistant message id
+        self._active: int | None = None  # assistant message id (or -quiz id)
         self._since = 0.0
         self._stop: set[int] = set()
+        self._kind = "chat"
 
     def try_acquire(self) -> bool:
         with self._lock:
@@ -89,12 +99,22 @@ class GenerationGuard:
                 if time.monotonic() - self._since < STALE_LEASE_S:
                     return False
                 log.warning("Reclaiming stale generation lease %s", self._active)
-            self._active, self._since = 0, time.monotonic()
+            self._active, self._since, self._kind = 0, time.monotonic(), "chat"
             return True
 
-    def bind(self, message_id: int) -> None:
+    def bind(self, message_id: int, kind: str = "chat") -> None:
         with self._lock:
-            self._active = message_id
+            self._active, self._kind = message_id, kind
+
+    def touch(self, owner: int) -> None:
+        with self._lock:
+            if self._active == owner:
+                self._since = time.monotonic()
+
+    @property
+    def kind(self) -> str | None:
+        with self._lock:
+            return self._kind if self._active is not None else None
 
     def release(self, message_id: int | None = None) -> None:
         with self._lock:

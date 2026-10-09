@@ -1,0 +1,52 @@
+{# Quiz evidence and answer marks. All text is escaped (autoescape); links
+   are built by the app from stored ids. #}
+{% macro evidence_list(question, nb_id, attempt_id) -%}
+<div class="quiz-evidence">
+  <h4 class="quiz-sub">Evidence</h4>
+  <ul class="ev-list">
+  {% for e in question.evidence %}
+    <li class="ev-item ev-{{ e.kind }}">
+      <p class="ev-cite"><span class="cite">[{{ e.tag }}]</span>
+        {% if e.kind == "source" %}{{ e.label }} · page {{ e.page_no }}
+        {% elif e.kind == "note" %}Note: {{ e.label }}
+        {% else %}Chat: {{ e.label }}{% endif %}
+        {% if not e.exists %}<span class="pill pill-failed">{{ "Source deleted" if e.kind == "source" else ("Note deleted" if e.kind == "note" else "Chat deleted") }}</span>{% endif %}
+      </p>
+      <blockquote class="ev-text">{{ e.excerpt }}</blockquote>
+      {% if e.kind == "source" %}
+        {% if e.exists and e.chunk_exists %}
+          <a class="btn btn-sm" href="/notebooks/{{ nb_id }}/sources/{{ e.source_id }}/read?chunk={{ e.chunk_id }}&amp;attempt={{ attempt_id }}">Open in PDF</a>
+        {% elif e.exists %}
+          <a class="btn btn-sm" href="/notebooks/{{ nb_id }}/sources/{{ e.source_id }}/read?page={{ e.page_no }}&amp;attempt={{ attempt_id }}">Open page {{ e.page_no }} in PDF</a>
+        {% else %}
+          <button class="btn btn-sm" type="button" disabled>Open in PDF</button> <span class="muted">The snapshot above was saved with the quiz.</span>
+        {% endif %}
+      {% elif e.kind == "note" and e.exists %}
+        <a class="btn btn-sm btn-ghost" href="/notebooks/{{ nb_id }}/notes/{{ e.note_id }}">Open note</a>
+      {% elif e.kind == "chat" and e.exists %}
+        <a class="btn btn-sm btn-ghost" href="/notebooks/{{ nb_id }}/chat/{{ e.conversation_id }}#msg-{{ e.message_id }}">Open chat</a>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+</div>
+{%- endmacro %}
+
+{% macro verdict(item) -%}
+{% if item.is_correct %}<span class="verdict verdict-ok"><span aria-hidden="true">✓</span> Correct</span>
+{% elif item.answered %}<span class="verdict verdict-bad"><span aria-hidden="true">✗</span> Incorrect</span>
+{% else %}<span class="verdict verdict-skip"><span aria-hidden="true">–</span> Skipped</span>{% endif %}
+{%- endmacro %}
+
+{% macro answer_key(question, item) -%}
+<ul class="opt-review">
+{% for o in question.options %}
+  {% set picked = item.selected and o.position in item.selected %}
+  <li class="opt{% if o.is_correct %} opt-correct{% endif %}{% if picked and not o.is_correct %} opt-wrong{% endif %}">
+    <span class="opt-letter">{{ o.letter }}</span> <span class="opt-text">{{ o.text }}</span>
+    {% if o.is_correct %}<span class="opt-tag">✓ correct answer</span>{% endif %}
+    {% if picked %}<span class="opt-tag">{{ "your answer" }}</span>{% endif %}
+  </li>
+{% endfor %}
+</ul>
+{%- endmacro %}

@@ -34,6 +34,7 @@ from litenotebook.config import (
     ConfigError,
     load_settings,
 )
+from litenotebook.db import available_migrations
 from litenotebook.platform_utils.filesystem import (
     DataDirInUseError,
     InstanceLock,
@@ -55,6 +56,8 @@ from litenotebook.platform_utils.system import (
 
 SRC = Path(__file__).parents[1] / "src" / "litenotebook"
 BASE = "http://127.0.0.1:5056"
+
+CURRENT_SCHEMA = len(available_migrations())
 
 
 # --- application directories (simulated per OS) -------------------------------------
@@ -821,7 +824,7 @@ def test_portable_fixture_archive_is_deterministic_and_valid(tmp_path):
         == hashlib.sha256(b.read_bytes()).digest()
     )
     s = load_settings({"LITENOTEBOOK_DATA_DIR": str(tmp_path / "d")})
-    report = verify_archive(a, Limits.from_settings(s), current_schema=8)
+    report = verify_archive(a, Limits.from_settings(s), current_schema=CURRENT_SCHEMA)
     assert report.notebooks[0].meta["name"] == "Portable Ünïcode notes"
     with zipfile.ZipFile(a) as zf:
         for name in zf.namelist():
@@ -846,7 +849,9 @@ def test_archive_case_collisions_still_rejected(tmp_path, conn, settings):
         tmp_path / "case.zip", [*entries, (pdf.upper(), b"%PDF-")], fix_checksums=False
     )
     with pytest.raises(ArchiveError, match="Duplicate entry|Unexpected entry"):
-        verify_archive(bad, Limits.from_settings(settings), current_schema=8)
+        verify_archive(
+            bad, Limits.from_settings(settings), current_schema=CURRENT_SCHEMA
+        )
 
 
 def test_startup_latency_is_reasonable(tmp_path):

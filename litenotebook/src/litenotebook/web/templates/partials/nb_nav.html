@@ -6,6 +6,7 @@
   <a href="{{ nb_base }}?tab=sources" {% if tab == "sources" %}aria-current="page"{% endif %}>Sources</a>
   <a href="{{ nb_base }}/chat" {% if tab == "chat" %}aria-current="page"{% endif %}>Chat</a>
   <a href="{{ nb_base }}/notes" {% if tab == "notes" %}aria-current="page"{% endif %}>Notes</a>
+  <a href="{{ nb_base }}/study" {% if tab == "study" %}aria-current="page"{% endif %}>Study</a>
   <a href="{{ nb_base }}/memory" {% if tab == "memory" %}aria-current="page"{% endif %}>Memory</a>
   <a href="{{ nb_base }}/search" {% if tab == "search" %}aria-current="page"{% endif %}>Search</a>
   {% set reading = reader_src if reader_src is defined and reader_src else (last_read if last_read is defined else none) %}
