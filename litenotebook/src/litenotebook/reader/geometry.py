@@ -58,7 +58,9 @@ class PageGeometry:
 def page_geometry(path: Path, page_no: int) -> PageGeometry:
     import pymupdf
 
-    with pymupdf.open(path, filetype="pdf") as doc:
+    from litenotebook.ingest.pdflock import PDF_LOCK
+
+    with PDF_LOCK, pymupdf.open(path, filetype="pdf") as doc:
         page = doc[page_no - 1]
         rect = page.rect  # rotation applied
         width, height = rect.width or 1.0, rect.height or 1.0

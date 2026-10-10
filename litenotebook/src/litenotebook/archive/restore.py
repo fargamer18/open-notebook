@@ -249,6 +249,10 @@ def apply_pending_restore(data_dir: Path) -> AppliedRestore | None:
     if data_dir.exists():
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         safety = data_dir.with_name(f"{data_dir.name}{SAFETY_SUFFIX}{stamp}")
+        n = 1
+        while safety.exists() or safety.is_symlink():  # never reuse an earlier one
+            n += 1
+            safety = data_dir.with_name(f"{data_dir.name}{SAFETY_SUFFIX}{stamp}-{n}")
         rename_dir(data_dir, safety)
     try:
         rename_dir(staging, data_dir)

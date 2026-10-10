@@ -1,4 +1,4 @@
-# Local AI (Phase 12)
+# Local AI (optional components)
 
 LiteNotebook's AI is a set of optional components, each installed, tested
 and switched off on its own:
@@ -7,16 +7,25 @@ and switched off on its own:
 |---|---|---|---|
 | Generation | llama.cpp `llama-server` + a GGUF model, or any OpenAI-compatible server | Chat | not set up (the pre-Phase-12 LLM settings keep working) |
 | Embeddings | all-MiniLM-L6-v2 in its own worker process | hybrid search, chat retrieval | detected if already in the Hugging Face cache |
-| Speech | *reserved* — a future optional text-to-speech component | (audio overviews, later) | — |
+| Speech | sherpa-onnx engine + Piper voices (see below) | Audio Overviews | not installed |
 
 ## Where things come from
 
 * `src/litenotebook/ai/catalog/*.json` — pinned, versioned catalogs:
-  llama.cpp **b11146** (Linux/Windows, CPU/CUDA 12 assets with SHA-256 and
-  sizes), three Qwen3 GGUFs at a fixed Hugging Face revision, MiniLM at a
-  fixed revision. Generated from the GitHub / Hugging Face APIs, never typed
-  by hand. Only HTTPS on `github.com` / `huggingface.co` (and their CDNs as
+  - llama.cpp **b11146** (Linux/Windows, CPU/CUDA 12 assets with SHA-256 and
+    sizes);
+  - three Qwen3 GGUFs at a fixed Hugging Face revision;
+  - MiniLM at commit `1110a243…`.
+
+  They are generated from the GitHub / Hugging Face APIs, never typed by
+  hand. Only HTTPS on `github.com` / `huggingface.co` (and their CDNs as
   redirect targets) is accepted.
+* Since 0.9.1, the redirect check runs **before each connection**: an httpx
+  request hook refuses any host outside the publishers' list, so a bad
+  redirect is never even contacted.
+* Also since 0.9.1, MiniLM is downloaded **and loaded** at the pinned commit
+  (never `main`), and all ten of its files have SHA-256 checksums
+  (`tests/test_download_audit.py`).
 * Downloads (`ai/download.py`): disk-space preflight, `.part` file, HTTP
   Range resume (a 206 for the wrong offset restarts), retries with backoff,
   size + SHA-256 check, atomic rename. Never during normal use — only from
@@ -69,8 +78,13 @@ starts on a page view.
 
 ## Release status
 
-Linux: verified on real hardware (see the Phase 12 report). Windows:
-implemented and simulated only — see `windows-test-plan.md`.
+- **Linux:** verified on real hardware.
+- **Windows:** Prepared only (implemented and simulated); see
+  [windows.md](windows.md) and `windows-test-plan.md`.
+- Every component state (none, generation only, embeddings only, both,
+  broken speech, a removed model file, a removed voice) still opens the full
+  UI without downloads or AI processes (`tests/test_component_states.py`).
+- Trusted upstreams and the threat model: [security.md](security.md).
 
 
 ## Speech (Phase 14, optional)

@@ -298,9 +298,10 @@ def _load_items(
     exclude: set[int] | frozenset[int],
 ) -> list[MemoryItem]:
     items: list[MemoryItem] = []
+    note_rows = _note_rows(conn, notebook_id, [m for k, m in anchors if k == "note"])
     for (kind, mid), (proximity, hops, path) in anchors.items():
         if kind == "note":
-            note = _note_item(conn, notebook_id, mid, proximity, hops, path)
+            note = _note_item(note_rows.get(mid), mid, proximity, hops, path)
             if note is not None:
                 items.append(note)
             continue
@@ -496,19 +497,31 @@ def node_id_for_key(conn: sqlite3.Connection, notebook_id: int, key: str) -> int
     return int(row[0]) if row else None
 
 
+def _note_rows(
+    conn: sqlite3.Connection, notebook_id: int, note_ids: list[int]
+) -> dict[int, sqlite3.Row]:
+    """Memory node + note for many notes at once (no query per note)."""
+    found: dict[int, sqlite3.Row] = {}
+    for start in range(0, len(note_ids), 500):
+        batch = note_ids[start : start + 500]
+        marks = ",".join("?" * len(batch))
+        for row in conn.execute(
+            "SELECT m.id, m.key, m.created_at, n.id AS note_id, n.title, n.content "
+            "FROM memory_nodes m JOIN notes n ON n.id = m.note_id "
+            f"WHERE m.notebook_id = ? AND m.key IN ({marks})",
+            (notebook_id, *(f"note:{i}" for i in batch)),
+        ):
+            found[int(row["note_id"])] = row
+    return found
+
+
 def _note_item(
-    conn: sqlite3.Connection,
-    notebook_id: int,
+    row: sqlite3.Row | None,
     note_id: int,
     proximity: float,
     hops: int,
     path: str,
 ) -> MemoryItem | None:
-    row = conn.execute(
-        "SELECT m.id, m.key, m.created_at, n.title, n.content FROM memory_nodes m "
-        "JOIN notes n ON n.id = m.note_id WHERE m.notebook_id = ? AND m.key = ?",
-        (notebook_id, f"note:{note_id}"),
-    ).fetchone()
     if row is None:
         return None
     return MemoryItem(

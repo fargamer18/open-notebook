@@ -122,7 +122,9 @@ class Retriever:
                 (match, notebook_id, limit),
             ).fetchall()
         except sqlite3.OperationalError as e:  # defense in depth; fts_query is safe
-            log.warning("FTS5 query failed (%s); lexical results skipped", e)
+            log.warning(
+                "FTS5 query failed (%s); lexical results skipped", type(e).__name__
+            )
             return []
         return [(r["id"], r["score"]) for r in rows]
 

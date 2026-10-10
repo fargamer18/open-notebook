@@ -51,6 +51,8 @@ def is_source_checkout(root: Path = PROJECT_ROOT) -> bool:
 
 # Embeddings: fixed by the architecture. Qwen is for generation only.
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# The exact upstream commit; downloads and loading both use it (never "main").
+EMBED_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 EMBED_DIM = 384
 EMBED_MAX_TOKENS = 256  # all-MiniLM-L6-v2 max_seq_length; longer input is truncated
 

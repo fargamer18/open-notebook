@@ -1,19 +1,28 @@
-# LiteNotebook desktop builds (Linux AppImage/tarball, Windows installer).
+# LiteNotebook desktop builds: Linux (Ubuntu 22.04 / glibc 2.35 baseline)
+# and Windows (Windows Server 2022), with tests, packaged-app verification,
+# checksums and artifact upload. It never publishes a release.
 #
-# INACTIVE: GitHub only runs workflows from the repository's
-# .github/workflows/ folder, and this repository is still the inherited Open
-# Notebook one (whose CI must not change). Once LiteNotebook has its own
-# repository with litenotebook/ as its root, move this file to
-# .github/workflows/build.yml and adjust `working-directory`.
+# INACTIVE HERE. GitHub only runs workflows from .github/workflows/, and this
+# repository is still the inherited Open Notebook one, whose own workflows
+# must not change.
 #
-# The Linux job builds on Ubuntu 22.04 so the result runs on distributions
-# with glibc 2.35 or newer. Windows artifacts are BUILT here; running them
-# on Windows (docs/windows-test-plan.md) is a separate, manual verification.
+#   Move/copy this to .github/workflows when LiteNotebook becomes its own repo
+#   (as .github/workflows/litenotebook-build.yml), and change
+#   `working-directory` below from `litenotebook` to `.` if litenotebook/ is
+#   the new repository's root.
+#
+# Status words used in docs/windows.md: a green Windows job means Windows is
+# "Built" and "Automated tests passed" (source tests + the packaged smoke test
+# + silent install/uninstall). "Manually verified" still needs a person on a
+# real Windows desktop (docs/windows-test-plan.md): browser behaviour,
+# console windows, SmartScreen, Start menu.
 name: litenotebook-build
 on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+permissions:
+  contents: read
 jobs:
   build:
     strategy:
@@ -21,9 +30,14 @@ jobs:
       matrix:
         os: [ubuntu-22.04, windows-2022]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      LN_BUILD_RUNNER: github-actions ${{ matrix.os }}
+      PYTHONUTF8: "1"
     defaults:
       run:
         working-directory: litenotebook
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -32,17 +46,68 @@ jobs:
       - name: Inno Setup (Windows)
         if: runner.os == 'Windows'
         run: choco install innosetup --version=6.4.3 -y --no-progress
-      - name: Dependencies
-        run: uv sync --group packaging --group dev
+      - name: Dependencies (locked)
+        run: uv sync --frozen --group packaging --group dev --python 3.12
+      - name: Lint and types
+        run: |
+          uv run --frozen ruff check .
+          uv run --frozen mypy --strict src
       - name: Tests (source mode)
-        run: uv run pytest -q
+        run: uv run --frozen pytest -q -p no:cacheprovider
       - name: Build
-        run: uv run --group packaging python tools/build.py
-      - name: Packaged smoke test
-        run: uv run python tools/packaged_smoke.py dist/litenotebook
+        run: uv run --frozen --group packaging python tools/build.py
+      - name: Verify checksums
+        working-directory: litenotebook/dist/litenotebook
+        run: |
+          uv run --frozen python - <<'EOF'
+          import hashlib, pathlib
+          for line in pathlib.Path("SHA256SUMS").read_text().splitlines():
+              digest, name = line.split("  ", 1)
+              data = pathlib.Path(name).read_bytes()
+              assert hashlib.sha256(data).hexdigest() == digest, name
+              print("OK", name)
+          EOF
+      - name: glibc baseline (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 - <<'EOF'
+          import json
+          r = json.load(open("dist/litenotebook/build-report.json"))
+          need = r["glibc"]["app"]["min_glibc"]
+          print("core app needs glibc", need, r["glibc"])
+          assert tuple(map(int, need.split("."))) <= (2, 35), need
+          EOF
+      - name: Packaged smoke test (core only)
+        run: >-
+          uv run --frozen python tools/packaged_smoke.py dist/litenotebook
+          --json smoke-core.json --export-to exports
+      - name: Packaged smoke test (with the embedding runtime)
+        run: |
+          RUNTIME=$(ls dist/litenotebook/LiteNotebook-embedding-runtime-*)
+          uv run --frozen python tools/packaged_smoke.py dist/litenotebook \
+            --runtime-archive "$RUNTIME" --json smoke-runtime.json
+      - name: Silent install, smoke test, uninstall keeps data (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/litenotebook/*-Setup.exe | Select-Object -First 1
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\LiteNotebook"
+          & $setup.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER | Out-Null
+          if (-not (Test-Path (Join-Path $dir "LiteNotebook.exe"))) { throw "not installed" }
+          uv run --frozen python tools/packaged_smoke.py --app-folder "$dir" --json smoke-installed.json
+          if ($LASTEXITCODE -ne 0) { throw "installed app smoke test failed" }
+          $data = Join-Path $env:LOCALAPPDATA "LiteNotebook"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          Set-Content (Join-Path $data "keep-me.txt") "user data"
+          & (Join-Path $dir "unins000.exe") /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+          Start-Sleep -Seconds 5
+          if (Test-Path (Join-Path $dir "LiteNotebook.exe")) { throw "program files left" }
+          if (-not (Test-Path (Join-Path $data "keep-me.txt"))) { throw "user data removed" }
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: litenotebook-${{ matrix.os }}
+          retention-days: 14
           path: |
             litenotebook/dist/litenotebook/*.tar.gz
             litenotebook/dist/litenotebook/*.zip
@@ -50,3 +115,5 @@ jobs:
             litenotebook/dist/litenotebook/*-Setup.exe
             litenotebook/dist/litenotebook/SHA256SUMS
             litenotebook/dist/litenotebook/build-report.json
+            litenotebook/smoke-*.json
+            litenotebook/exports/*.zip

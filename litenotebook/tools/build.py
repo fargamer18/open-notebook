@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import struct
 import subprocess
@@ -94,6 +95,104 @@ def preflight() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     if f'version = "{__version__}"' not in pyproject:
         raise SystemExit("pyproject.toml version and litenotebook.__version__ differ")
+
+
+# --- build metadata -------------------------------------------------------------
+
+
+def git_commit() -> str:
+    """Commit of the source tree (+dirty when LiteNotebook files changed).
+    ``LN_GIT_COMMIT`` overrides it (container builds without .git)."""
+    forced = os.environ.get("LN_GIT_COMMIT", "").strip()
+    if forced:
+        return forced
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--", "."],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return f"{head}+dirty" if dirty else head
+
+
+def runner_info() -> dict[str, str]:
+    """Where the build ran — OS and versions only, no host or user names."""
+    info = {
+        "os": platform.system(),
+        "kernel": platform.release(),
+        "machine": platform.machine(),
+    }
+    if sys.platform.startswith("linux"):
+        libc, version = platform.libc_ver()
+        info["libc"] = f"{libc} {version}".strip()
+        try:
+            for line in Path("/etc/os-release").read_text("utf-8").splitlines():
+                if line.startswith("PRETTY_NAME="):
+                    info["distribution"] = line.split("=", 1)[1].strip('"')
+        except OSError:
+            pass
+    if IS_WINDOWS:
+        info["windows"] = platform.win32_ver()[0] + " " + platform.win32_ver()[1]
+    for key in (
+        "GITHUB_ACTIONS",
+        "RUNNER_OS",
+        "ImageOS",
+        "ImageVersion",
+        "LN_BUILD_RUNNER",
+    ):
+        if os.environ.get(key):
+            info[key.lower()] = os.environ[key]
+    return info
+
+
+_GLIBC = re.compile(rb"GLIBC_2\.(\d+)(?:\.(\d+))?")
+_GLIBCXX = re.compile(rb"GLIBCXX_3\.4\.(\d+)")
+
+
+def glibc_requirement(folder: Path) -> dict[str, object]:
+    """Newest GLIBC / GLIBCXX symbol versions referenced by any ELF file in
+    the folder: the minimum C library a target system needs."""
+    worst = (2, 0, 0)
+    worst_files: list[str] = []
+    cxx = 0
+    for path in folder.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            with open(path, "rb") as f:
+                if f.read(4) != b"\x7fELF":
+                    continue
+                data = f.read()
+        except OSError:
+            continue
+        versions = [(2, int(a), int(b or 0)) for a, b in _GLIBC.findall(data)]
+        if versions:
+            top = max(versions)
+            rel = path.relative_to(folder).as_posix()
+            if top > worst:
+                worst, worst_files = top, [rel]
+            elif top == worst:
+                worst_files.append(rel)
+        cxx = max([cxx, *(int(v) for v in _GLIBCXX.findall(data))])
+    text = f"{worst[0]}.{worst[1]}" + (f".{worst[2]}" if worst[2] else "")
+    return {
+        "min_glibc": text,
+        "needed_by": sorted(worst_files)[:8],
+        "max_glibcxx": f"3.4.{cxx}" if cxx else None,
+    }
 
 
 # --- icons ------------------------------------------------------------------------
@@ -271,10 +370,18 @@ def main() -> int:
     tag = platform_tag()
     BUILD.mkdir(parents=True, exist_ok=True)
     DIST.mkdir(parents=True, exist_ok=True)
+    commit = git_commit()
     report: dict[str, object] = {
+        "app": "LiteNotebook",
         "version": __version__,
         "platform": tag,
+        "architecture": tag.rsplit("-", 1)[1],
+        "git_commit": commit,
         "python": platform.python_version(),
+        "python_implementation": platform.python_implementation(),
+        "pyinstaller": PYINSTALLER_VERSION,
+        "runner": runner_info(),
+        "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     icons = make_icons(BUILD / "icons")
     from licenses import write_inventory  # tools/licenses.py
@@ -328,7 +435,9 @@ def main() -> int:
         "app": "LiteNotebook",
         "version": __version__,
         "platform": tag,
-        "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "architecture": tag.rsplit("-", 1)[1],
+        "git_commit": commit,
+        "built_at": report["built_at"],
         "python": platform.python_version(),
         "pyinstaller": PYINSTALLER_VERSION,
         "embedding_runtime": runtime_entry,
@@ -358,7 +467,16 @@ def main() -> int:
         if setup is not None:
             report["installer"] = {"file": setup.name, "size": setup.stat().st_size}
             artifacts.append(setup)
-    sums = "".join(f"{sha256(p)}  {p.name}\n" for p in artifacts)
+    if not IS_WINDOWS:
+        report["glibc"] = {"app": glibc_requirement(app_folder)}
+        if runtime_folder is not None:
+            report["glibc"]["embedding_runtime"] = glibc_requirement(runtime_folder)  # type: ignore[index]
+    digests = {p.name: sha256(p) for p in artifacts}
+    report["artifacts"] = [
+        {"file": p.name, "size": p.stat().st_size, "sha256": digests[p.name]}
+        for p in artifacts
+    ]
+    sums = "".join(f"{digests[p.name]}  {p.name}\n" for p in artifacts)
     (DIST / "SHA256SUMS").write_text(sums, encoding="utf-8")
     report["licenses"] = {"packages": len(inventory)}
     report["build_seconds"] = round(time.perf_counter() - started)

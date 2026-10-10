@@ -1,7 +1,8 @@
 """Smoke-test a BUILT LiteNotebook package (Linux or Windows; stdlib only).
 
     python tools/packaged_smoke.py dist/litenotebook [--runtime-archive FILE]
-                                   [--keep] [--json OUT]
+                                   [--keep] [--json OUT] [--export-to DIR]
+    python tools/packaged_smoke.py --app-folder "C:\\...\\Programs\\LiteNotebook"
 
 Runs the packaged executable — not the source tree — against a temporary data
 folder whose path contains spaces and non-ASCII characters, with the browser
@@ -13,8 +14,16 @@ replaced by a recorder (the BROWSER variable), and checks:
 * notebook, note and fast search; a PDF upload is indexed when the
   semantic search runtime (+ MiniLM in the Hugging Face cache) is present,
   otherwise it fails with the "runtime is not installed" message
-* notebook export and import (backup)
-* Quit LiteNotebook stops the process; no LiteNotebook process is left
+* nothing listens beyond loopback (the machine's LAN address is refused)
+* archives of formats 1, 2 and 3 (created on Linux) import; the imported
+  quiz and audio transcript open and the imported WAV plays (Range request)
+* notebook export and import (backup); ``--export-to`` keeps the export for
+  importing on another platform
+* deleting the uploaded source removes its file (no open-file errors)
+* with the runtime: the worker stops after its idle timeout
+* Settings → Local AI and Setup start no download
+* Quit LiteNotebook stops the process; no LiteNotebook process is left;
+  a restart finds the same data
 
 It never touches the user's own data folder.
 """
@@ -47,6 +56,11 @@ def check(ok: bool, label: str) -> None:
 
 
 def find_app(dist: Path) -> tuple[Path, Path, dict]:
+    if (dist / "litenotebook-build.json").is_file():  # an installed app folder
+        folder = dist.resolve()
+        exe = folder / ("LiteNotebook.exe" if IS_WINDOWS else "litenotebook")
+        manifest = json.loads((folder / "litenotebook-build.json").read_text("utf-8"))
+        return folder, exe, manifest
     for folder in sorted(dist.resolve().glob("LiteNotebook-*-*")):
         if folder.is_dir() and (folder / "litenotebook-build.json").is_file():
             exe = folder / ("LiteNotebook.exe" if IS_WINDOWS else "litenotebook")
@@ -146,27 +160,89 @@ def wait_for(predicate, timeout: float, step: float = 0.1):  # type: ignore[no-u
     return None
 
 
-def app_processes(*folders: Path) -> list[int]:
-    """Processes running from these folders: the app and an embedding runtime
-    installed in the data folder (Linux only)."""
+def _windows_processes() -> list[tuple[int, str]]:
+    script = (
+        "Get-CimInstance Win32_Process | ForEach-Object "
+        '{ "$($_.ProcessId)`t$($_.ExecutablePath)" }'
+    )
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    ).stdout
+    rows = []
+    for line in out.splitlines():
+        pid, _, exe = line.partition("\t")
+        if pid.strip().isdigit() and exe.strip():
+            rows.append((int(pid), exe.strip()))
+    return rows
+
+
+def app_processes(*folders: Path, name: str = "") -> list[int]:
+    """Processes running from these folders (the app, an embedding runtime
+    installed in the data folder), or whose executable contains ``name``."""
+    roots = tuple(str(f.resolve()).lower() for f in folders)
+
+    def match(exe: str) -> bool:
+        e = exe.lower()
+        return bool((roots and e.startswith(roots)) or (name and name in e))
+
+    if IS_WINDOWS:
+        return [pid for pid, exe in _windows_processes() if match(exe)]
     if not Path("/proc").is_dir():
         return []
     found = []
-    roots = tuple(str(f.resolve()) for f in folders)
     for d in os.listdir("/proc"):
         if d.isdigit():
             try:
                 exe = os.readlink(f"/proc/{d}/exe")
             except OSError:
                 continue
-            if exe.startswith(roots):
+            if match(exe):
                 found.append(int(d))
     return found
 
 
+def lan_address() -> str | None:
+    """This machine's non-loopback address (no packet is sent)."""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        try:
+            s.connect(("192.0.2.1", 9))  # TEST-NET-1: routing lookup only
+            addr = s.getsockname()[0]
+        except OSError:
+            return None
+    return None if addr.startswith("127.") else addr
+
+
+def refused(host: str, port: int) -> bool:
+    import socket
+
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            return False
+    except OSError:
+        return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("dist", type=Path)
+    parser.add_argument("dist", type=Path, nargs="?")
+    parser.add_argument(
+        "--app-folder", type=Path, help="test an installed app folder instead"
+    )
+    parser.add_argument(
+        "--export-to", type=Path, help="keep the exported notebook archive here"
+    )
+    parser.add_argument(
+        "--fixtures",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "tests" / "fixtures",
+        help="archives created on Linux to import (formats 1-3)",
+    )
     parser.add_argument(
         "--runtime-archive",
         type=Path,
@@ -175,7 +251,10 @@ def main() -> int:
     parser.add_argument("--keep", action="store_true", help="keep the temp folder")
     parser.add_argument("--json", type=Path, help="write timings/results here")
     args = parser.parse_args()
-    folder, exe, manifest = find_app(args.dist)
+    target = args.app_folder or args.dist
+    if target is None:
+        parser.error("give the dist folder or --app-folder")
+    folder, exe, manifest = find_app(target)
     print(f"Testing {folder.name} ({manifest.get('version')})")
     tmp = Path(tempfile.mkdtemp(prefix="ln-packaged-"))
     home = tmp / "Normal User José"  # spaces + non-ASCII in every path
@@ -194,6 +273,7 @@ def main() -> int:
         LITENOTEBOOK_LOG_DIR=str(logs),
         BROWSER=browser_cmd,
         LITENOTEBOOK_PORT="5091",
+        LITENOTEBOOK_EMBED_WORKER_IDLE_SECONDS="6",
     )
     for key in ("LITENOTEBOOK_MODE", "LITENOTEBOOK_EMBED_WORKER"):
         env.pop(key, None)
@@ -220,6 +300,12 @@ def main() -> int:
             return 1
         base = opened[0]
         check(base.startswith("http://127.0.0.1:"), "loopback URL only")
+        port = int(base.rsplit(":", 1)[1])
+        lan = lan_address()
+        if lan:
+            check(refused(lan, port), f"not reachable on the LAN address {lan}")
+        else:
+            print("SKIP no LAN address to test against")
         c = Client(base)
         st, _, body = c.req("GET", "/livez")
         live = json.loads(body)
@@ -245,6 +331,13 @@ def main() -> int:
         check(
             b"packaged" in body and b"Quit LiteNotebook" in body,
             "diagnostics: packaged mode, Quit offered",
+        )
+        expected_os = b"windows" if IS_WINDOWS else b"linux"
+        check(expected_os in body.lower(), f"diagnostics names {expected_os.decode()}")
+        models = data / "models"
+        check(
+            not models.exists() or not any(models.rglob("*.gguf")),
+            "Local AI / Setup pages started no model download",
         )
         check(
             data.is_dir() and (data / "litenotebook.sqlite3").is_file(),
@@ -352,6 +445,11 @@ def main() -> int:
                 "without the runtime/model the PDF fails with a clear message "
                 f"({message[:80]})",
             )
+        if state and state[0] == "ready" and args.runtime_archive:
+            gone = wait_for(
+                lambda: not app_processes(name="litenotebook-embed-worker"), 60, 0.5
+            )
+            check(bool(gone), "embedding worker stopped after its idle timeout")
         # backup: export and import
         st, h, archive = c.req("POST", f"/notebooks/{nb}/export", {})
         check(
@@ -362,6 +460,72 @@ def main() -> int:
             "/backup/import", "file", "export.zip", archive, "application/zip"
         )
         check(st == 200 and b"Packaged smoke" in body, "notebook imported again")
+        if args.export_to:
+            args.export_to.mkdir(parents=True, exist_ok=True)
+            out = args.export_to / f"export-from-{sys.platform}.zip"
+            out.write_bytes(archive)
+            print(f"INFO export kept for cross-platform import: {out}")
+        # archives created on another platform (the committed Linux fixtures)
+        for fixture, label in (
+            ("phase12_notebook_v1.zip", "format 1"),
+            ("phase13_notebook_v2.zip", "format 2"),
+            ("phase14_notebook_v3.zip", "format 3 + audio"),
+        ):
+            path = args.fixtures / fixture
+            if not path.is_file():
+                print(f"SKIP {label}: {path} not found")
+                continue
+            st, _, body = c.upload(
+                "/backup/import", "file", fixture, path.read_bytes(), "application/zip"
+            )
+            check(st == 200 and b"Import complete" in body, f"import {label} archive")
+
+        def one(sql: str) -> tuple | None:
+            import sqlite3
+
+            db = sqlite3.connect(
+                f"file:{(data / 'litenotebook.sqlite3').as_posix()}?mode=ro", uri=True
+            )
+            try:
+                return db.execute(sql).fetchone()
+            finally:
+                db.close()
+
+        quiz = one("SELECT notebook_id, id FROM quizzes LIMIT 1")
+        if quiz:
+            st, _, _ = c.req("GET", f"/notebooks/{quiz[0]}/study/quizzes/{quiz[1]}")
+            check(st == 200, "imported quiz opens")
+        audio = one(
+            "SELECT o.notebook_id, o.id, a.id FROM audio_overviews o "
+            "JOIN audio_assets a ON a.overview_id = o.id LIMIT 1"
+        )
+        if audio:
+            nb_a, oid, aid = audio
+            st, _, text = c.req(
+                "GET", f"/notebooks/{nb_a}/study/audio/{oid}/transcript.txt"
+            )
+            check(st == 200 and len(text) > 20, "imported audio transcript opens")
+            request = urllib.request.Request(
+                f"{base}/notebooks/{nb_a}/study/audio/{oid}/audio/{aid}",
+                headers={"Range": "bytes=0-99"},
+            )
+            with urllib.request.urlopen(request, timeout=30) as r:
+                check(
+                    r.status == 206 and r.read(4) == b"RIFF",
+                    "imported WAV plays (Range request)",
+                )
+        # deleting the uploaded source removes its stored file
+        sid_row = one(f"SELECT id FROM sources WHERE notebook_id = {nb}")
+        if sid_row:
+            sid = sid_row[0]
+            stored = data / "notebooks" / str(nb) / "sources" / f"{sid}.pdf"
+            st, _, _ = c.req(
+                "POST", f"/notebooks/{nb}/sources/{sid}/delete", {"confirm": str(sid)}
+            )
+            check(
+                st in (200, 303) and not stored.exists(),
+                "source deleted and its file removed",
+            )
         # quit
         t3 = time.perf_counter()
         st, _, _ = c.req("POST", "/app/quit", {})
@@ -375,6 +539,41 @@ def main() -> int:
         time.sleep(1.0)
         left = app_processes(folder, data)
         check(not left, f"no LiteNotebook process left {left}")
+        # restart: same data, then quit again
+        record.unlink(missing_ok=True)
+        again = subprocess.Popen(
+            [str(exe), "--no-browser"],
+            env=env,
+            cwd=str(tmp),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+
+            def up() -> str | None:
+                # the port may differ (the old one can still be in TIME_WAIT):
+                # read the live URL from the instance lock, as a 2nd launch does
+                try:
+                    info = json.loads((data / ".instance.lock").read_text("utf-8"))
+                    url = info.get("url") if info.get("pid") == again.pid else None
+                    if url and Client(url).req("GET", "/livez")[0] == 200:
+                        return str(url)
+                except (OSError, ValueError):
+                    pass
+                return None
+
+            url2 = wait_for(up, 60, 0.3)
+            check(bool(url2), f"restarts on the same data ({url2})")
+            if url2:
+                st, _, body = Client(url2).req(
+                    "GET", f"/notebooks/{nb}/search?q=violet"
+                )
+                check(b"Harbour" in body, "data still there after a restart")
+                Client(url2).req("POST", "/app/quit", {})
+            again.wait(timeout=30)
+        finally:
+            if again.poll() is None:
+                again.terminate()
         log_text = (logs / "litenotebook.log").read_text("utf-8", "replace")
         check("Traceback" not in log_text, "no tracebacks in the log")
         check("Quillport trams are violet" not in log_text, "no note text in the log")

@@ -17,6 +17,8 @@ from typing import Literal
 
 import pymupdf
 
+from litenotebook.ingest.pdflock import PDF_LOCK
+
 MIN_TEXT_CHARS = 20  # below this a page counts as having no text layer
 PDF_MAGIC = b"%PDF-"
 MAGIC_WINDOW = 1024  # PDF readers accept the header within the first 1 KiB
@@ -64,13 +66,17 @@ def _ocr_page(page: pymupdf.Page) -> str:
     exe = _tesseract()
     if exe is None:
         return ""
-    pix = page.get_pixmap(matrix=pymupdf.Matrix(OCR_ZOOM, OCR_ZOOM), alpha=False)
     # A temporary directory rather than an open temp file: Windows will not let
     # tesseract open a file this process still holds open. The image is
     # written and closed before tesseract reads it; the directory is removed.
     with tempfile.TemporaryDirectory(prefix="litenotebook-ocr-") as tmp:
         image = Path(tmp) / "page.png"
-        pix.save(str(image))
+        with PDF_LOCK:
+            pix = page.get_pixmap(
+                matrix=pymupdf.Matrix(OCR_ZOOM, OCR_ZOOM), alpha=False
+            )
+            pix.save(str(image))
+            del pix
         result = subprocess.run(  # noqa: S603 - argument list, no shell
             [exe, str(image), "stdout", "-l", "eng", "--psm", "6"],
             capture_output=True,
@@ -93,26 +99,37 @@ def _open(path: Path, name: str) -> pymupdf.Document:
     """Open and validate a PDF. Error messages name ``name``, never the path."""
     if not has_pdf_header(path):
         raise PdfError(f"{name} is not a PDF (no %PDF- header)")
-    try:
-        doc = pymupdf.open(path, filetype="pdf")
-    except Exception as e:  # PyMuPDF raises several exception types
-        raise PdfError(f"{name} is damaged or not a valid PDF") from e
-    if not doc.is_pdf:
-        doc.close()
-        raise PdfError(f"{name} is not a PDF")
-    if doc.needs_pass:
-        doc.close()
-        raise PdfError(f"{name} is password-protected")
-    if doc.page_count < 1:
-        doc.close()
-        raise PdfError(f"{name} has no pages")
+    with PDF_LOCK:
+        try:
+            doc = pymupdf.open(path, filetype="pdf")
+        except Exception as e:  # PyMuPDF raises several exception types
+            raise PdfError(f"{name} is damaged or not a valid PDF") from e
+        problem = None
+        if not doc.is_pdf:
+            problem = f"{name} is not a PDF"
+        elif doc.needs_pass:
+            problem = f"{name} is password-protected"
+        elif doc.page_count < 1:
+            problem = f"{name} has no pages"
+        if problem:
+            doc.close()
+            raise PdfError(problem)
     return doc
+
+
+def _close(doc: pymupdf.Document) -> None:
+    with PDF_LOCK:
+        doc.close()
 
 
 def inspect_pdf(path: Path, *, name: str | None = None) -> int:
     """Validate that ``path`` really is a readable PDF; return its page count."""
-    with _open(path, name or path.name) as doc:
-        return int(doc.page_count)
+    doc = _open(path, name or path.name)
+    try:
+        with PDF_LOCK:
+            return int(doc.page_count)
+    finally:
+        _close(doc)
 
 
 def extract_pages(
@@ -126,12 +143,17 @@ def extract_pages(
 
     ``on_page(done, total)`` is called after each page.
     """
-    with _open(path, name or path.name) as doc:
+    doc = _open(path, name or path.name)
+    try:
         use_ocr = ocr and tesseract_available()
-        total = int(doc.page_count)
+        with PDF_LOCK:
+            total = int(doc.page_count)
         pages: list[PageText] = []
-        for index, page in enumerate(doc):
-            text = normalize_page_text(page.get_text("text"))
+        for index in range(total):
+            with PDF_LOCK:  # per page: the Reader can render in between
+                page = doc[index]
+                raw = page.get_text("text")
+            text = normalize_page_text(raw)
             method: PageMethod = "text"
             if len(text) < MIN_TEXT_CHARS:
                 ocr_text = normalize_page_text(_ocr_page(page)) if use_ocr else ""
@@ -142,4 +164,8 @@ def extract_pages(
             pages.append(PageText(page_no=index + 1, text=text, method=method))
             if on_page is not None:
                 on_page(index + 1, total)
+            with PDF_LOCK:
+                del page
+    finally:
+        _close(doc)
     return pages

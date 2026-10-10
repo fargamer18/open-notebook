@@ -43,6 +43,7 @@ from litenotebook.study.validate import (
     clean_text,
     has_html,
     number_values,
+    split_sentences,
     support_text,
 )
 
@@ -159,7 +160,7 @@ class Evidence:
         injected = " ".join(
             s
             for item in items
-            for s in re.split(r"(?<=[.!?])\s+|\n+", item.text)
+            for s in split_sentences(item.text)
             if _INJECTION.search(s)
         )
         # words that appear only in instruction-like sentences of a document

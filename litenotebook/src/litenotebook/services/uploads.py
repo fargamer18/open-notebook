@@ -14,6 +14,7 @@ only as display metadata, and the content is validated as a PDF later.
 from __future__ import annotations
 
 import contextlib
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,13 +25,18 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 
 from litenotebook.config import Settings
-from litenotebook.platform_utils.filesystem import create_exclusive
+from litenotebook.platform_utils.filesystem import (
+    DISK_FULL_MESSAGE,
+    create_exclusive,
+    is_disk_full,
+)
 
 FILE_FIELD = "file"
 MAX_FIELDS = 10
 MAX_FIELD_BYTES = 1024
 FORM_OVERHEAD_BYTES = 64 * 1024  # multipart headers/boundaries/small fields
 WRITE_BUFFER_BYTES = 1 << 20  # flush file data to disk in ≤1 MiB writes
+UPLOAD_FREE_RESERVE = 64 * 1024 * 1024  # keep this much free after an upload
 
 
 class UploadError(ValueError):
@@ -177,6 +183,10 @@ async def receive_upload(
 
     tmp_dir = settings.upload_tmp_dir if tmp_dir is None else tmp_dir
     await run_in_threadpool(tmp_dir.mkdir, parents=True, exist_ok=True)
+    if declared is not None:  # refuse early instead of filling the disk
+        free = await run_in_threadpool(lambda: shutil.disk_usage(tmp_dir).free)
+        if free < int(declared) + UPLOAD_FREE_RESERVE:
+            raise UploadError(DISK_FULL_MESSAGE, 507)
     tmp_path = tmp_dir / f"{uuid.uuid4().hex}.part"
     receiver = _Receiver(max_bytes, kind)
     parser = MultipartParser(boundary, receiver.callbacks(), max_size=limit)  # type: ignore[arg-type]
@@ -204,6 +214,8 @@ async def receive_upload(
             tmp_path.unlink(missing_ok=True)
         if isinstance(e, UploadError):
             raise
+        if is_disk_full(e):
+            raise UploadError(DISK_FULL_MESSAGE, 507) from e
         if isinstance(e, ValueError):  # malformed multipart body
             raise UploadError("The upload was malformed; try again", 400) from e
         raise

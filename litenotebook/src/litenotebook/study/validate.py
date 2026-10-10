@@ -147,13 +147,32 @@ _LEADING_REF = re.compile(
 _INJECTION = re.compile(
     r"\b(?:ignore|disregard|forget|override)\b[^.!?\n]{0,60}\b(?:instruction|"
     r"instructions|prompt|prompts|rules|directions|guidelines)\b"
-    r"|\b(?:the )?(?:correct|right|true) answer (?:is|should be|must be|will be)\b"
+    r"|\b(?:the )?(?:correct|right|true) answers?\b[^.!?\n]{0,40}?"
+    r"\b(?:is|are|should be|must be|will be)\b"
     r"|\b(?:you|assistant|model|ai|llm)\b[^.!?\n]{0,30}\b(?:must|should|will|shall)"
     r"\b[^.!?\n]{0,30}\b(?:answer|respond|reply|output|say|write|mark|choose)\b"
-    r"|\bsystem prompt\b|\bnew instructions?\b|\bdeveloper mode\b",
+    r"|\b(?:always|only)\s+(?:answer|respond|reply|say|output)\b"
+    r"|\b(?:hosts?|speakers?|narrators?|presenters?)\b[^.!?\n]{0,30}"
+    r"\b(?:must|should|shall|will)\b[^.!?\n]{0,30}\b(?:tell|say|announce|read|"
+    r"mention|promote|recommend)\b"
+    r"|\buse (?:information|content|data|text|facts) from\b[^.!?\n]{0,40}\bnotebook"
+    r"|\b(?:reveal|show|print|repeat|output)\b[^.!?\n]{0,30}\b(?:your|the)\s+"
+    r"(?:instructions|prompt|rules)\b"
+    r"|\bsystem (?:prompt|notice|message|override)\b|\bnew instructions?\b"
+    r"|\bdeveloper mode\b",
     re.IGNORECASE,
 )
-_SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
+# Sentence boundaries. A single newline inside PDF text is a line wrap, not a
+# boundary (otherwise "Ignore previous\ninstructions." escapes _INJECTION);
+# blank lines (paragraphs) are boundaries.
+_SENTENCE = re.compile(r"(?<=[.!?])\s+|\n\s*\n")
+
+
+def split_sentences(text: str) -> list[str]:
+    """Sentences of document text, with line wraps joined."""
+    return [" ".join(part.split()) for part in _SENTENCE.split(text) if part.strip()]
+
+
 # Question words that carry no subject matter (on top of the concept stopwords).
 QUIZ_STOPWORDS = frozenset(
     """
@@ -348,8 +367,8 @@ def support_text(items: Sequence[EvidenceItem]) -> str:
     """The cited evidence minus instruction-like sentences."""
     kept = []
     for item in items:
-        for sentence in _SENTENCE.split(item.text):
-            if sentence.strip() and not _INJECTION.search(sentence):
+        for sentence in split_sentences(item.text):
+            if not _INJECTION.search(sentence):
                 kept.append(sentence)
     return " ".join(kept)
 

@@ -9,7 +9,7 @@ import types
 import pytest
 
 from conftest import FakeEmbedder, make_pdf
-from litenotebook.config import EMBED_DIM, EMBED_MODEL
+from litenotebook.config import EMBED_DIM, EMBED_MODEL, EMBED_REVISION
 from litenotebook.embed import embedder as emb
 from litenotebook.embed.embedder import (
     EmbeddingModelUnavailableError,
@@ -86,7 +86,10 @@ def test_model_lookup_is_local_only(monkeypatch, tmp_path):
 
     monkeypatch.setattr(huggingface_hub, "snapshot_download", fake_snapshot_download)
     assert local_model_dir() == snapshot
-    assert calls == [(EMBED_MODEL, {"local_files_only": True})]
+    # local-only, and the pinned commit rather than whatever "main" points to
+    assert calls == [
+        (EMBED_MODEL, {"revision": EMBED_REVISION, "local_files_only": True})
+    ]
 
 
 def test_missing_model_raises_actionable_error(monkeypatch):

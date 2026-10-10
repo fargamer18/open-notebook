@@ -1,15 +1,15 @@
-# Desktop packaging and distribution (Phase 15)
+# Desktop packaging and distribution
 
 LiteNotebook ships as a normal desktop application that opens in the
 default browser. Users need neither Python nor the command line.
 
 | Platform | Artifacts | Status |
 |---|---|---|
-| Linux x86_64 | `LiteNotebook-<v>-x86_64.AppImage`, `LiteNotebook-<v>-linux-x86_64.tar.gz` | **built and runtime-verified on this machine** (Arch, glibc 2.44) |
-| Windows x64 | `LiteNotebook-<v>-Setup.exe` (Inno Setup), `LiteNotebook-<v>-windows-x86_64.zip` | **configuration prepared, not built or run yet**: needs a Windows machine or the Windows CI runner |
+| Linux x86_64 | `LiteNotebook-<v>-x86_64.AppImage`, `LiteNotebook-<v>-linux-x86_64.tar.gz` | **release build: Ubuntu 22.04 container (needs glibc ≥ 2.35)**, verified on Arch and in Ubuntu 22.04; development builds on Arch need glibc ≥ 2.38 |
+| Windows x64 | `LiteNotebook-<v>-Setup.exe` (Inno Setup), `LiteNotebook-<v>-windows-x86_64.zip` | **Prepared** only: not Built, not tested, not verified ([windows.md](windows.md)) |
 | Both | `LiteNotebook-embedding-runtime-<v>-<platform>.tar.gz` / `.zip` (optional) | Linux built and verified; Windows prepared |
 
-Version: `litenotebook.__version__` (currently **0.9.0**, a pre-release).
+Version: `litenotebook.__version__` (currently **0.9.1**, a pre-release).
 `pyproject.toml` must match it; a test and the build both enforce this.
 
 ## Release blockers (0.9.x is not a public v1 release)
@@ -35,7 +35,35 @@ public v1 release:
 uv sync --group packaging                 # pinned PyInstaller 6.22.3 (+ hooks 2026.7)
 uv run --group packaging python tools/build.py [--skip-worker] [--skip-appimage]
 uv run python tools/packaged_smoke.py dist/litenotebook [--runtime-archive FILE]
+
+packaging/linux/build-in-ubuntu-2204.sh   # Linux RELEASE build (podman/docker, Ubuntu 22.04)
+python tools/release_stress.py lifecycle dist/litenotebook --runtime-archive FILE
 ```
+
+**Linux release builds** come from `packaging/linux/build-in-ubuntu-2204.sh`
+or the CI job:
+- the Ubuntu 22.04 image is pinned by digest, uv by version and SHA-256, and
+  dependencies by `uv.lock` (`--frozen`);
+- the source tree is copied into a work folder, so the repository is never
+  written;
+- measured on 0.9.x: the core app and the runtime need **glibc 2.35** and
+  **GLIBCXX 3.4.30** (the newest symbol versions in the bundled
+  `libgcc_s`/`libstdc++`).
+
+**Every build writes `build-report.json`:**
+- app, version, platform, architecture, git commit (`+dirty` if LiteNotebook
+  files changed);
+- Python version and implementation, PyInstaller version;
+- the runner: OS, kernel, libc, distribution, CI runner name. No host names,
+  user names or absolute paths.
+
+**Every build also writes:**
+- `glibc` (Linux): the minimum glibc / GLIBCXX and the files that need it;
+- `artifacts`: each file with its size and SHA-256, also written to
+  `SHA256SUMS`;
+- `litenotebook-build.json` inside the app folder: version, platform,
+  architecture, git commit, build time, and the expected runtime archive's
+  name, size and SHA-256.
 
 - Output goes to `dist/litenotebook/` and intermediate files to
   `build/package/`. Both are ignored by git; built binaries are never
@@ -73,7 +101,7 @@ unpacking a few hundred MB to a temp folder on every launch.
 ## Layout and components
 
 ```
-LiteNotebook-0.9.0-linux-x86_64/          (Windows: installed to %LOCALAPPDATA%\Programs\LiteNotebook)
+LiteNotebook-0.9.1-linux-x86_64/          (Windows: installed to %LOCALAPPDATA%\Programs\LiteNotebook)
   litenotebook            (LiteNotebook.exe)   web app + launcher; NO torch
   _internal/              Python 3.12, libraries, templates, static files, migrations, catalogs
   litenotebook-build.json version, platform, build time, expected embedding runtime (name/size/SHA-256)
@@ -146,10 +174,14 @@ ship.
 The packaged worker produces **bit-identical embeddings** to source mode
 (max |Δ| = 0.0 on a test pair).
 
-**glibc:** the bundled libraries need glibc ≤ 2.27, except the
-`libstdc++`/`libgcc_s` copied from the build host. A build made on this
-Arch machine therefore needs **glibc ≥ 2.38** (Ubuntu 24.04, Fedora 39 or
-newer). Build on Ubuntu 22.04 (the CI workflow) for glibc ≥ 2.35.
+**glibc:** most bundled libraries need glibc ≤ 2.27. The exceptions are
+the `libstdc++`/`libgcc_s` copied from the build machine:
+
+- Arch build: **glibc ≥ 2.38**;
+- Ubuntu 22.04 build: **glibc ≥ 2.35** (measured by `tools/build.py`, which
+  scans every bundled ELF file).
+
+Release artifacts must come from the Ubuntu 22.04 build.
 
 ## Launch model (`litenotebook/desktop.py`)
 
@@ -242,7 +274,7 @@ runner.
 The installer cannot be built or run on Linux. It has **not** been compiled
 or run yet.
 
-## Windows verification gap (all still to do on real Windows)
+## Windows verification gap (all still to do on real Windows; status words in windows.md)
 
 - [ ] Installer installs, Start menu and desktop shortcuts work; uninstall keeps `%LOCALAPPDATA%\LiteNotebook`
 - [ ] First launch: no console window; browser opens; setup wizard; hardware detected

@@ -446,3 +446,26 @@ def test_build_manifest_lists_no_bundled_optional_components():
     spec = (ROOT / "packaging" / "pyinstaller" / "litenotebook.spec").read_text("utf-8")
     for heavy in ("torch", "sentence_transformers", "transformers", "sherpa_onnx"):
         assert f'"{heavy}"' in spec  # excluded from the core app
+
+
+def test_license_inventory_has_bundled_optional_and_dev_sections(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from licenses import write_inventory
+
+    out = tmp_path / "inv.md"
+    rows = write_inventory(out)
+    text = out.read_text(encoding="utf-8")
+    for heading in (
+        "1. Bundled",
+        "2. Bundled",
+        "3. Optional, downloaded",
+        "4. Development",
+    ):
+        assert f"## {heading}" in text
+    names = {r[0].lower() for r in rows}
+    assert "pymupdf" in names and "torch" in names
+    bundled, _, rest = text.partition("## 3. Optional")
+    optional, _, dev = rest.partition("## 4. Development")
+    assert "AGPL" in bundled and "llama.cpp" in optional and "sherpa-onnx" in optional
+    assert "| pytest |" in dev and "| PyMuPDF |" not in dev
+    assert "| pytest |" not in bundled

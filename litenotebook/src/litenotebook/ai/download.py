@@ -136,6 +136,11 @@ class Downloader:
         )
         self.require_https = require_https
         self.allowed_hosts = allowed_hosts  # tests: e.g. {"127.0.0.1"}
+        # Checked before every request, redirects included, so the client
+        # never even connects to a host outside the catalog's publishers.
+        hooks = dict(self.client.event_hooks)
+        hooks["request"] = [*hooks.get("request", []), self._check_request]
+        self.client.event_hooks = hooks
         self.retries = retries
         self.reserve = reserve_bytes
         self.backoff = backoff_s
@@ -147,6 +152,10 @@ class Downloader:
                 u.host in self.allowed_hosts
             )
         return host_allowed(str(u), redirect=redirect)
+
+    def _check_request(self, request: httpx.Request) -> None:
+        if not self._allowed(request.url, redirect=True):
+            raise DownloadError("The download redirected to an unexpected site")
 
     def fetch(
         self,

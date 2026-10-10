@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 from litenotebook.config import Settings
 from litenotebook.db import connect
 from litenotebook.notebooks import get_notebook, get_summary
+from litenotebook.platform_utils.filesystem import DISK_FULL_MESSAGE, is_disk_full
 from litenotebook.services.ingestion import IngestionWorker
 from litenotebook.services.uploads import ReceivedUpload, UploadError, receive_upload
 from litenotebook.sources import (
@@ -136,6 +137,10 @@ def _register(settings: Settings, notebook_id: int, upload: ReceivedUpload) -> i
         raise UploadError(str(e), 409) from e
     except IngestError as e:
         raise UploadError(str(e), 422) from e
+    except Exception as e:
+        if is_disk_full(e):
+            raise UploadError(DISK_FULL_MESSAGE, 507) from e
+        raise
     finally:
         upload.discard()  # no-op once moved into place
         conn.close()

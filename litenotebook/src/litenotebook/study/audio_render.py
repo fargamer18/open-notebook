@@ -251,9 +251,14 @@ def run_synthesis(job: SynthJob) -> None:
             error="Cancelled. The transcript is kept.",
         )
     except (SpeechError, OSError, ValueError, wave.Error) as e:
-        message = (
-            str(e) if isinstance(e, SpeechError) else "The audio could not be written"
-        )
+        from litenotebook.platform_utils.filesystem import is_disk_full
+
+        if isinstance(e, SpeechError):
+            message = str(e)
+        elif is_disk_full(e):
+            message = "Not enough disk space to write the audio"
+        else:
+            message = "The audio could not be written"
         store.end_asset(
             conn,
             job.overview_id,

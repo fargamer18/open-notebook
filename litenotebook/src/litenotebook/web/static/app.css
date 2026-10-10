@@ -88,9 +88,10 @@ kbd {
 
 /* --- shell ---------------------------------------------------------------- */
 
+:root { --topbar-h: 44px; }
 .topbar {
   display: flex; align-items: center; gap: 1.5rem;
-  height: 44px; padding: 0 1.25rem;
+  height: var(--topbar-h); padding: 0 1.25rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 10;
@@ -465,7 +466,7 @@ progress::-moz-progress-bar { background: var(--accent); }
 .mem-stats dt { color: var(--faint); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .mem-stats dd { margin: 0; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 .mem-search { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; }
-.mem-filters { display: flex; gap: 0.25rem; }
+.mem-filters { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .mem-filters a { color: var(--muted); padding: 0.2rem 0.6rem; border-radius: var(--radius); font-size: 0.85rem; }
 .mem-filters a[aria-current="page"] { color: var(--text); background: var(--surface-2); }
 .mem-summary { padding: 0.6rem 1.1rem 0; margin: 0; font-size: 0.85rem; }
@@ -592,8 +593,8 @@ mark { background: var(--accent-bg); color: var(--accent-strong); border-radius:
   --side: 400px;
   display: grid; grid-template-columns: minmax(0, 1fr) 6px var(--side); gap: 0; align-items: start;
   grid-template-rows: minmax(0, 1fr);  /* a definite row so both panes scroll inside it */
-  /* topbar 44px + container padding + one header row: the page never scrolls */
-  height: calc(100vh - 44px - 1.1rem - var(--reader-head, 2.6rem));
+  /* topbar + container padding + one header row: the page never scrolls */
+  height: calc(100vh - var(--topbar-h) - 1.1rem - var(--reader-head, 2.6rem));
 }
 .reader-head .crumbs { margin: 0; }
 .reader-main { min-width: 0; height: 100%; display: flex; flex-direction: column; position: relative; }
@@ -836,6 +837,18 @@ mark { background: var(--accent-bg); color: var(--accent-strong); border-radius:
   .src-row { grid-template-columns: minmax(0, 1fr) auto; }
   .src-state { grid-column: 1 / -1; grid-row: 2; }
   .src-stats { justify-content: flex-start; }
+}
+
+@media (max-width: 480px) {
+  /* phone width: the main links get their own row instead of pushing the
+     shortcut buttons off the screen */
+  :root { --topbar-h: 76px; }
+  .topbar { flex-wrap: wrap; align-content: center; gap: 0.2rem 0.5rem; padding: 0.25rem 0.5rem; }
+  .nav { order: 3; width: 100%; }
+  .nav a { padding-inline: 0.5rem; }
+  .topbar .health { display: none; }  /* the same status is in Settings */
+  .quiz-finish { margin-left: 0; }
+  .quiz-finish .btn { white-space: normal; height: auto; min-height: var(--control-h-sm); text-align: left; }
 }
 
 /* --- Local AI setup (Phase 12) ------------------------------------------- */

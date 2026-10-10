@@ -19,7 +19,12 @@ from typing import TYPE_CHECKING, Protocol
 import numpy as np
 import numpy.typing as npt
 
-from litenotebook.config import EMBED_DIM, EMBED_MAX_TOKENS, EMBED_MODEL
+from litenotebook.config import (
+    EMBED_DIM,
+    EMBED_MAX_TOKENS,
+    EMBED_MODEL,
+    EMBED_REVISION,
+)
 
 if TYPE_CHECKING:
     from tokenizers import Tokenizer
@@ -75,7 +80,11 @@ def local_model_dir() -> Path:
     from huggingface_hub.errors import LocalEntryNotFoundError
 
     try:
-        path = Path(snapshot_download(EMBED_MODEL, local_files_only=True))
+        path = Path(
+            snapshot_download(
+                EMBED_MODEL, revision=EMBED_REVISION, local_files_only=True
+            )
+        )
     except (LocalEntryNotFoundError, OSError) as e:
         raise EmbeddingModelUnavailableError() from e
     missing = [name for name in REQUIRED_MODEL_FILES if not (path / name).is_file()]

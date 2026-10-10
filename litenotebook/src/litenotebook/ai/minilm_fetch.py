@@ -32,7 +32,8 @@ def main() -> int:
     for index, f in enumerate(entry.files, 1):
         emit(stage="downloading", file=f.path, index=index, total=total, size=f.size)
         try:
-            hf_hub_download(entry.repository, f.path, revision="main")
+            # The pinned commit, never "main": what is checked is what loads.
+            hf_hub_download(entry.repository, f.path, revision=entry.revision)
         except Exception as e:  # network or hub errors: report and stop
             name = type(e).__name__
             offline = "Connect" in name or "Offline" in name or "Timeout" in name

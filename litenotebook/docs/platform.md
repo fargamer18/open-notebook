@@ -5,9 +5,13 @@ that genuinely differs between the two lives in `src/litenotebook/platform_utils
 the rest of the code uses `pathlib` and the standard library and is checked by
 `tests/test_platform.py` to stay free of OS-specific calls.
 
-> Status: the code is written and tested to be portable, and Windows rules are
-> *simulated* in tests on Linux. It has **not yet been run on real Windows** —
-> see [windows-test-plan.md](windows-test-plan.md).
+> Status (0.9.1):
+>
+> - **Linux:** Built, Automated tests passed, Manually verified.
+> - **Windows:** **Prepared** only. Windows rules are *simulated* in tests
+>   on Linux; the app is not yet Built, Automated-tested or Manually
+>   verified on real Windows. See [windows.md](windows.md) for the status
+>   words and [windows-test-plan.md](windows-test-plan.md).
 
 ## Where data lives
 

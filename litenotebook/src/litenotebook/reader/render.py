@@ -39,6 +39,14 @@ class ReaderSource:
     page_count: int
 
 
+class RenderCacheUnavailable(Exception):  # noqa: N818 - carries the result
+    """The page rendered but could not be cached; ``png`` holds the image."""
+
+    def __init__(self, png: bytes) -> None:
+        super().__init__("The page cache folder is not writable")
+        self.png = png
+
+
 def nearest_scale(value: float) -> float:
     return min(SCALES, key=lambda s: (abs(s - value), s))
 
@@ -55,7 +63,9 @@ def open_source(
     if not page_count:
         import pymupdf
 
-        with pymupdf.open(path, filetype="pdf") as doc:
+        from litenotebook.ingest.pdflock import PDF_LOCK
+
+        with PDF_LOCK, pymupdf.open(path, filetype="pdf") as doc:
             page_count = int(doc.page_count)
     return ReaderSource(source, path, int(page_count))
 
@@ -91,25 +101,33 @@ def render_page(
         return target, True
     import pymupdf
 
-    with pymupdf.open(reader.path, filetype="pdf") as doc:
+    from litenotebook.ingest.pdflock import PDF_LOCK
+
+    with PDF_LOCK, pymupdf.open(reader.path, filetype="pdf") as doc:
         page = doc[page_no - 1]
         longest = max(page.rect.width, page.rect.height) or 1.0
         effective = min(scale, MAX_PIXELS_SIDE / longest)
         pix = page.get_pixmap(matrix=pymupdf.Matrix(effective, effective), alpha=False)
         data = pix.tobytes("png")
-    target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
     try:
-        tmp.write_bytes(data)
+        target.parent.mkdir(parents=True, exist_ok=True)
         try:
-            replace_file(tmp, target)
-        except PermissionError:
-            # Windows: another request is serving the same page right now and
-            # holds it open; that render is identical, so keep it.
-            if not target.is_file():
-                raise
-    finally:
-        tmp.unlink(missing_ok=True)
+            tmp.write_bytes(data)
+            try:
+                replace_file(tmp, target)
+            except PermissionError:
+                # Windows: another request is serving the same page right now
+                # and holds it open; that render is identical, so keep it.
+                if not target.is_file():
+                    raise
+        finally:
+            with contextlib.suppress(OSError):
+                tmp.unlink(missing_ok=True)
+    except OSError as e:
+        # The cache is only an optimisation: an unwritable or full cache
+        # folder still lets the Reader show the page.
+        raise RenderCacheUnavailable(data) from e
     return target, False
 
 

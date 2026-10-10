@@ -99,12 +99,40 @@ def existing_instance(settings: Settings) -> str | None:
     return ""  # in use, but by a command or an older version: no page to open
 
 
+def ensure_writable(folder: Path) -> None:
+    """Fail early, with something the user can act on, if the data folder
+    cannot be created or written."""
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        probe = folder / f".write-test-{os.getpid()}"
+        probe.write_bytes(b"")
+        probe.unlink()
+    except OSError as e:
+        from litenotebook.platform_utils.filesystem import is_disk_full
+
+        reason = (
+            "the disk is full" if is_disk_full(e) else (e.strerror or type(e).__name__)
+        )
+        raise DesktopError(
+            f"LiteNotebook cannot write to its data folder ({folder}): {reason}. "
+            "Check that the folder exists and your user account may write to it "
+            "(and that the drive is connected and not full), or start "
+            "LiteNotebook with another folder (--data-dir or LITENOTEBOOK_DATA_DIR)."
+        ) from e
+
+
 def _startup_error_page(
     settings: Settings, message: str, log_file: Path | None
 ) -> Path:
     folder = settings.log_path
-    folder.mkdir(parents=True, exist_ok=True)
-    page = folder / "startup-error.html"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        page = folder / "startup-error.html"
+        page.touch()
+    except OSError:  # the log folder is the problem: use the temp folder
+        import tempfile
+
+        page = Path(tempfile.gettempdir()) / "litenotebook-startup-error.html"
     where = html.escape(str(log_file)) if log_file else "the log folder"
     page.write_text(
         "<!doctype html><meta charset='utf-8'><title>LiteNotebook could not start"
@@ -155,7 +183,10 @@ def run(
     log_file: Path | None = None
     started = time.perf_counter()
     try:
-        log_file = configure_file_logging(settings, verbose=args.verbose)
+        try:
+            log_file = configure_file_logging(settings, verbose=args.verbose)
+        except OSError:  # an unwritable log folder must not stop the app
+            log_file = None
         from litenotebook.packaging import is_frozen
 
         log.info(
@@ -165,6 +196,7 @@ def run(
             os_name(),
             settings.data_dir,
         )
+        ensure_writable(settings.data_dir)
         url = existing_instance(settings)
         if url:
             if is_litenotebook(url):

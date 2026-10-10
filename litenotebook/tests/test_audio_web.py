@@ -627,3 +627,35 @@ def test_export_page_shows_audio_size(client, setup, app_settings):
     wait_overview(app_settings, oid)
     text = client.get(f"/notebooks/{nb_id}/export").text
     assert "Audio Overviews" in text and "of WAV files" in text and "Quizzes" in text
+
+
+def test_disk_full_during_synthesis_fails_safely(
+    client, setup, app_settings, monkeypatch
+):
+    import errno
+    import wave
+
+    nb_id, _, oid = setup
+    install_fake_engine(app_settings)
+    install_fake_voices(app_settings)
+    real = wave.Wave_write.writeframes
+    calls = {"n": 0}
+
+    def writeframes(self, data):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] > 2:
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real(self, data)
+
+    monkeypatch.setattr(wave.Wave_write, "writeframes", writeframes)
+    synth(client, nb_id, oid)
+    wait_overview(app_settings, oid)
+    c = connect(app_settings.db_path)
+    try:
+        asset = store.list_assets(c, oid)[0]
+        assert store.sections(c, oid)
+    finally:
+        c.close()
+    assert asset.status == "failed" and "Not enough disk space" in asset.error
+    folder = store.overview_dir(app_settings, nb_id, oid)
+    assert not list(folder.glob("*.wav")) and not list(folder.glob(".*"))

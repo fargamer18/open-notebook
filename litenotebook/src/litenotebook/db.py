@@ -31,13 +31,52 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = NORMAL")
+    # Deleted rows are overwritten instead of lingering in free pages.
+    conn.execute("PRAGMA secure_delete = ON")
     return conn
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
     conn = connect(db_path)
     migrate(conn)
+    secure_fts_delete(conn)
     return conn
+
+
+FTS_SECURE_DELETE_MIN = (3, 42, 0)
+
+
+def secure_fts_delete(conn: sqlite3.Connection) -> list[str]:
+    """Turn on FTS5 ``secure-delete`` for every full-text table (once).
+
+    Without it FTS5 keeps deleted terms in old index segments until a merge,
+    so words of a deleted note or source could still be read from the file.
+    The option needs SQLite 3.42+; afterwards older SQLite versions cannot
+    read those FTS tables until a ``rebuild``. On older SQLite this is
+    skipped (documented in docs/security.md). Returns the tables changed.
+    """
+    if sqlite3.sqlite_version_info < FTS_SECURE_DELETE_MIN:
+        return []
+    tables = [
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND sql LIKE 'CREATE VIRTUAL TABLE%USING fts5%'"
+        )
+    ]
+    changed = []
+    for table in tables:
+        row = conn.execute(
+            f"SELECT v FROM \"{table}_config\" WHERE k = 'secure-delete'"
+        ).fetchone()
+        if row is None or str(row[0]) != "1":
+            conn.execute(
+                f'INSERT INTO "{table}"("{table}", rank) VALUES (\'secure-delete\', 1)'
+            )
+            changed.append(table)
+    if changed:
+        conn.commit()
+    return changed
 
 
 def available_migrations() -> list[tuple[int, Path]]:
@@ -117,10 +156,23 @@ def backup_before_migration(
     folder = Path(file).parent / "backups"
     folder.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    target_path = folder / f"before-schema-{target}-from-{current}-{stamp}.sqlite3"
-    dest = sqlite3.connect(target_path)
+    stem = f"before-schema-{target}-from-{current}-{stamp}"
+    target_path = folder / f"{stem}.sqlite3"
+    n = 1
+    while target_path.exists():  # never overwrite an earlier safety copy
+        n += 1
+        target_path = folder / f"{stem}-{n}.sqlite3"
+    # Written under a temporary name and renamed when complete, so a crash or
+    # a full disk never leaves a half copy that looks like a valid backup.
+    partial = target_path.with_name(f".{target_path.name}.partial")
     try:
-        conn.backup(dest)
-    finally:
-        dest.close()
+        dest = sqlite3.connect(partial)
+        try:
+            conn.backup(dest)
+        finally:
+            dest.close()
+        partial.rename(target_path)
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
     return target_path

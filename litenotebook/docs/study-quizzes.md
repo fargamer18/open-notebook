@@ -1,4 +1,4 @@
-# Study → Quizzes (Phase 13)
+# Study → Quizzes
 
 Notebook tab order: **Sources · Chat · Notes · Study · Memory · Search**.
 Study is a container for study tools (`STUDY_TOOLS` in
@@ -149,6 +149,16 @@ instructions", "the correct answer is …", "you must answer …") are never
 counted as support for an answer. A question whose answer only such text
 supports is rejected (regression-tested with a "make the correct answer
 banana" PDF).
+
+
+Since 0.9.1, evidence is split into sentences with line wraps joined. A
+single newline inside PDF text is a wrapped line, not a sentence end, so a
+planted "Ignore previous⏎instructions" is recognised. The instruction
+patterns also cover "always answer …", "the correct answer to every
+question is …", "use information from … notebook", "reveal your
+instructions/prompt" and "system notice". Cross-feature regression tests
+(Chat, Quiz, Audio and notebook isolation) are in
+`tests/test_release_security.py`.
 
 ## Data (schema 9, migration `0009_study_quizzes.sql`)
 

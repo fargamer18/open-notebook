@@ -42,7 +42,12 @@ from litenotebook.db import connect, open_db
 from litenotebook.memory.graph import backfill
 from litenotebook.notebooks import NotebookNotFoundError
 from litenotebook.notes import NoteNotFoundError
-from litenotebook.platform_utils.filesystem import InstanceLock, remove_tree
+from litenotebook.platform_utils.filesystem import (
+    DISK_FULL_MESSAGE,
+    InstanceLock,
+    is_disk_full,
+    remove_tree,
+)
 from litenotebook.reader.annotations import AnnotationNotFoundError
 from litenotebook.services.chat import GenerationGuard
 from litenotebook.services.embedding import (
@@ -222,6 +227,13 @@ def create_app(
     ):
         app.add_exception_handler(missing, missing_item)
 
+    @app.exception_handler(OverflowError)
+    async def id_out_of_range(request: Request, exc: OverflowError) -> Response:
+        # An id larger than SQLite's 64-bit integers cannot name anything.
+        if not wants_page(request):
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        return error_page(request, 404, "Not found")
+
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
         if not wants_page(request):  # API/HTMX callers keep FastAPI's JSON
@@ -238,6 +250,11 @@ def create_app(
 
     @app.exception_handler(Exception)
     async def unexpected(request: Request, exc: Exception) -> Response:
+        if is_disk_full(exc):
+            log.error("Disk full during %s %s", request.method, request.url.path)
+            if not wants_page(request):
+                return JSONResponse({"error": DISK_FULL_MESSAGE}, status_code=507)
+            return error_page(request, 507, DISK_FULL_MESSAGE)
         # Details go to the local server log only, never to the page.
         log.exception("Unhandled error on %s %s", request.method, request.url.path)
         if not wants_page(request):
@@ -291,6 +308,7 @@ ERROR_PAGES = {
     404: ("Not found", "That page or item does not exist (it may have been deleted)."),
     405: ("Not allowed", "That action is not available here."),
     422: ("Invalid request", "The address or form contained an invalid value."),
+    507: ("Not enough disk space", "There is not enough free disk space."),
     500: (
         "Something went wrong",
         "An unexpected error occurred. Details are in the local server log.",

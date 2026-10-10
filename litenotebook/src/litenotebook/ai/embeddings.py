@@ -45,7 +45,7 @@ def cached_files(e: EmbeddingEntry | None = None) -> dict[str, Path | None]:
     for f in e.files:
         found = None
         with contextlib.suppress(Exception):
-            hit = try_to_load_from_cache(e.repository, f.path)
+            hit = try_to_load_from_cache(e.repository, f.path, revision=e.revision)
             found = Path(hit) if isinstance(hit, str) else None
         out[f.path] = found
     return out

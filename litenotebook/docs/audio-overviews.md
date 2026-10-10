@@ -1,4 +1,4 @@
-# Study → Audio Overviews (Phase 14)
+# Study → Audio Overviews
 
 A podcast-style overview of the material you select: a two-person discussion,
 a single narrator, study revision or a deep dive. Every factual line keeps
@@ -93,6 +93,13 @@ no transcript is saved.
 
 A hard cap on lexical checks cannot prove every sentence true. The evidence
 is stored and linked from every citation so the user can check it.
+
+
+Instruction-like document text is detected the same way as for quizzes (see
+study-quizzes.md, "Prompt injection"). Since 0.9.1, sentences wrapped across
+PDF lines are detected too; before that, a wrapped planted instruction could
+be narrated. A full disk during synthesis fails the audio file with "Not
+enough disk space"; the transcript is kept and no partial WAV remains.
 
 ## Data (schema 10, `0010_audio_overviews.sql`)
 

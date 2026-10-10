@@ -32,6 +32,7 @@ from litenotebook.reader.annotations import (
 from litenotebook.reader.render import (
     PageNotFoundError,
     ReaderError,
+    RenderCacheUnavailable,
     check_page,
     open_source,
     render_page,
@@ -168,6 +169,12 @@ def page_image(
         return _error(str(e), 404)
     except ReaderError as e:
         return _error(str(e), 404)
+    except RenderCacheUnavailable as e:
+        return Response(
+            e.png,
+            media_type="image/png",
+            headers={"Cache-Control": "no-store", "X-Render-Cache": "unavailable"},
+        )
     return FileResponse(
         path,
         media_type="image/png",
@@ -209,7 +216,9 @@ def page_text(
 def annotations_json(
     conn: Db, notebook_id: int, source_id: int, page: int | None = None
 ) -> JSONResponse:
-    get_summary(conn, notebook_id)
+    from litenotebook.sources import get_source
+
+    get_source(conn, notebook_id, source_id)  # 404 outside this notebook
     items = list_annotations(conn, notebook_id, source_id, page)
     return JSONResponse({"annotations": [a.as_dict() for a in items]})
 

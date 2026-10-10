@@ -165,6 +165,32 @@ this is verified until the boxes below are ticked on a real Windows machine.
 - [ ] Export / import a notebook with audio; import Phase 12 and Phase 13
       archives.
 
+## Status words
+
+Record each result as one of: **Prepared** (code exists, simulated on
+Linux), **Built** (package produced on Windows), **Automated tests passed**
+(suite + packaged smoke + silent install/uninstall on Windows), **Manually
+verified** (this plan completed by a person). As of 0.9.1, Windows is
+**Prepared** only.
+
+## Release verification (Phase 16) — run on Windows 11 or the CI runner
+
+- [ ] `uv sync --frozen --group packaging --group dev`; `uv run pytest -q` passes on Windows
+- [ ] `uv run --group packaging python tools/build.py` builds the zip, installer and runtime zip; `SHA256SUMS` verifies
+- [ ] `uv run python tools/packaged_smoke.py dist\litenotebook --export-to exports` passes
+      (loopback-only check, Unicode/space data path, formats 1–3 import incl. audio playback,
+      source delete with no open-file errors, restart persistence, Quit, no leftover process)
+- [ ] the same with `--runtime-archive dist\litenotebook\LiteNotebook-embedding-runtime-*.zip`
+      (worker starts with no window, embeds, stops after the idle timeout)
+- [ ] silent install → `tools/packaged_smoke.py --app-folder "%LOCALAPPDATA%\Programs\LiteNotebook"` → uninstall keeps `%LOCALAPPDATA%\LiteNotebook`
+- [ ] Linux-created archive imports on Windows (the smoke test imports the committed fixtures);
+      the Windows export in `exports\` imports on Linux (`litenotebook` → Backup → Import)
+- [ ] Diagnostics shows "packaged" and Windows; Settings → Local AI and Setup start no download
+- [ ] Task Manager: kill LiteNotebook.exe while the worker / llama-server runs → children gone (Job Object)
+- [ ] Two LiteNotebook launches → one server, the second opens the same page
+- [ ] No console window ever appears (app, worker, llama-server, speech)
+- [ ] Existing quiz take/review works and an imported WAV plays in the browser
+
 ## Desktop package (Phase 15)
 
 Run the BUILT package (from the Windows CI workflow or `tools/build.py` on

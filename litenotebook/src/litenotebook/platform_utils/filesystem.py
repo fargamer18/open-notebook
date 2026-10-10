@@ -48,6 +48,30 @@ COPY_BUFFER_BYTES = 1 << 20  # streaming copies never hold more than 1 MiB
 _RETRIES = 5
 
 
+DISK_FULL_MESSAGE = (
+    "Not enough disk space. Free some space on the drive that holds the "
+    "LiteNotebook data folder and try again; nothing was changed."
+)
+_DISK_FULL_ERRNOS = {28, 122}  # ENOSPC, EDQUOT (Linux)
+_DISK_FULL_WINERRORS = {39, 112}  # ERROR_HANDLE_DISK_FULL, ERROR_DISK_FULL
+
+
+def is_disk_full(exc: BaseException) -> bool:
+    """Is this the OS (or SQLite) saying the disk/quota is full?"""
+    import sqlite3
+
+    while exc is not None:
+        if isinstance(exc, OSError) and (
+            exc.errno in _DISK_FULL_ERRNOS
+            or getattr(exc, "winerror", None) in _DISK_FULL_WINERRORS
+        ):
+            return True
+        if isinstance(exc, sqlite3.OperationalError) and "disk is full" in str(exc):
+            return True
+        exc = exc.__cause__ or exc.__context__  # type: ignore[assignment]
+    return False
+
+
 def fsync_dir(directory: Path) -> None:
     if IS_WINDOWS:
         return
