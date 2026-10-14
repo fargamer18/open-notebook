@@ -467,31 +467,46 @@ def test_internal_storage_names_are_case_safe(settings):
 def test_pdf_handles_are_closed_after_every_operation(
     conn, settings, notebook, tmp_path, monkeypatch, store
 ):
-    import pymupdf
+    import pypdfium2.raw as pdfium_c
 
     from conftest import FakeEmbedder, make_pdf
     from litenotebook.ingest.pipeline import delete_source, ingest_pdf
+    from litenotebook.pdf import pdfium_engine
     from litenotebook.reader.annotations import chunk_target, open_source
     from litenotebook.reader.geometry import page_geometry
     from litenotebook.reader.render import render_page
 
-    opened = []
-    real_open = pymupdf.open
+    opened: list[pdfium_engine.PdfiumDocument] = []
+    real_init = pdfium_engine.PdfiumDocument.__init__
 
-    def tracking(*a, **k):
-        doc = real_open(*a, **k)
-        opened.append(doc)
-        return doc
+    def tracking(self, *a, **k):  # type: ignore[no-untyped-def]
+        real_init(self, *a, **k)
+        opened.append(self)
 
-    for module in (
-        "pymupdf",
-        "litenotebook.reader.render",
-        "litenotebook.reader.geometry",
-        "litenotebook.ingest.pdf",
-    ):
-        mod = sys.modules[module]
-        if hasattr(mod, "open") and module == "pymupdf":
-            monkeypatch.setattr(mod, "open", tracking)
+    monkeypatch.setattr(pdfium_engine.PdfiumDocument, "__init__", tracking)
+    native: dict[str, int] = {}
+    pairs = {
+        "FPDF_LoadDocument": "doc",
+        "FPDF_CloseDocument": "doc",
+        "FPDF_LoadPage": "page",
+        "FPDF_ClosePage": "page",
+        "FPDFText_LoadPage": "text",
+        "FPDFText_ClosePage": "text",
+        "FPDFBitmap_Create": "bitmap",
+        "FPDFBitmap_CreateEx": "bitmap",
+        "FPDFBitmap_Destroy": "bitmap",
+    }
+
+    def counting(name, real):  # type: ignore[no-untyped-def]
+        def call(*a, **k):  # type: ignore[no-untyped-def]
+            step = -1 if ("Close" in name or "Destroy" in name) else 1
+            native[pairs[name]] = native.get(pairs[name], 0) + step
+            return real(*a, **k)
+
+        return call
+
+    for name in pairs:
+        monkeypatch.setattr(pdfium_c, name, counting(name, getattr(pdfium_c, name)))
     ingest_pdf(
         conn,
         settings,
@@ -505,7 +520,9 @@ def test_pdf_handles_are_closed_after_every_operation(
     page_geometry(reader.path, 2)
     chunk = conn.execute("SELECT id FROM chunks LIMIT 1").fetchone()[0]
     chunk_target(conn, settings, notebook.id, chunk)
-    assert opened and all(doc.is_closed for doc in opened), "a PDF was left open"
+    assert opened and all(doc._doc is None for doc in opened), "a PDF was left open"
+    assert native.get("page", 0) == 0 and native.get("text", 0) == 0
+    assert native.get("bitmap", 0) == 0 and native.get("doc", 0) == 0, native
     delete_source(
         conn, settings, notebook.id, 1, store
     )  # works only if nothing holds it
@@ -527,12 +544,13 @@ def test_ocr_temp_files_are_closed_before_the_subprocess(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pdf, "_tesseract", lambda: "tesseract")
     monkeypatch.setattr(pdf.subprocess, "run", fake_run)
-    import pymupdf
+    from litenotebook.pdf import open_pdf
+    from pdfgen import Document
 
-    doc = pymupdf.open()
-    page = doc.new_page()
-    assert pdf._ocr_page(page) == "ocr text"
-    doc.close()
+    blank = Document()
+    blank.new_page()
+    with open_pdf(blank.save(tmp_path / "blank.pdf")) as doc:
+        assert pdf._ocr_page(doc, 0) == "ocr text"
     assert seen["bytes"] > 0 and seen["encoding"] == "utf-8"
     assert not seen["dir"].exists()  # the temp directory is removed afterwards
 

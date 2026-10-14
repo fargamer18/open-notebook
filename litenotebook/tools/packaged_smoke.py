@@ -284,6 +284,19 @@ def main() -> int:
         except OSError:
             return []
 
+    # PDF engine: PDFium (with its licence texts); PyMuPDF must not be bundled
+    names = [f.name.lower() for f in folder.rglob("*")]
+    mupdf = sorted({n for n in names if "mupdf" in n or n in ("fitz", "fitz.py")})
+    check(not mupdf, f"no PyMuPDF/MuPDF files in the package {mupdf[:5]}")
+    check(
+        any(n.startswith(("libpdfium", "pdfium.dll")) for n in names),
+        "PDFium library bundled",
+    )
+    check(
+        (folder / "licenses" / "pypdfium2").is_dir(),
+        "PDFium licence texts shipped (licenses/pypdfium2)",
+    )
+
     started = time.perf_counter()
     proc = subprocess.Popen(
         [str(exe)],
@@ -433,6 +446,14 @@ def main() -> int:
                     f"/notebooks/{nb}/sources/{sid.group(1).decode()}/pages/1/render",
                 )
                 check(st == 200 and png[:4] == b"\x89PNG", "Reader renders page 1")
+                st, _, text = c.req(
+                    "GET",
+                    f"/notebooks/{nb}/sources/{sid.group(1).decode()}/pages/1/text",
+                )
+                check(
+                    st == 200 and b'"t":"Zorbania"' in text.replace(b" ", b""),
+                    "Reader text layer has word boxes (PDFium geometry)",
+                )
         else:
             message = state[1] if state else ""
             RESULTS["pdf_error"] = message

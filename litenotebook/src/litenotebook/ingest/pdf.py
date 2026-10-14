@@ -1,4 +1,4 @@
-"""Page-by-page PDF text extraction with PyMuPDF.
+"""Page-by-page PDF text extraction through the PDF engine boundary.
 
 Pages keep their 1-based PDF page number. Pages with no usable text layer can
 optionally be OCR'd with Tesseract (ported from LocalBook's ocr_index.py, but
@@ -13,22 +13,21 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import pymupdf
+from litenotebook.pdf import PdfError as PdfError
+from litenotebook.pdf import open_pdf
 
-from litenotebook.ingest.pdflock import PDF_LOCK
+if TYPE_CHECKING:
+    from litenotebook.pdf.pdfium_engine import PdfiumDocument
 
 MIN_TEXT_CHARS = 20  # below this a page counts as having no text layer
 PDF_MAGIC = b"%PDF-"
 MAGIC_WINDOW = 1024  # PDF readers accept the header within the first 1 KiB
 OCR_ZOOM = 2.0
+OCR_MAX_SIDE = 4000  # pixels; same cap as Reader pages
 
 PageMethod = Literal["text", "ocr", "empty"]
-
-
-class PdfError(ValueError):
-    pass
 
 
 @dataclass(frozen=True)
@@ -60,7 +59,7 @@ def tesseract_available() -> bool:
     return _tesseract() is not None
 
 
-def _ocr_page(page: pymupdf.Page) -> str:
+def _ocr_page(doc: PdfiumDocument, index: int) -> str:
     from litenotebook.platform_utils.processes import creation_flags
 
     exe = _tesseract()
@@ -71,12 +70,9 @@ def _ocr_page(page: pymupdf.Page) -> str:
     # written and closed before tesseract reads it; the directory is removed.
     with tempfile.TemporaryDirectory(prefix="litenotebook-ocr-") as tmp:
         image = Path(tmp) / "page.png"
-        with PDF_LOCK:
-            pix = page.get_pixmap(
-                matrix=pymupdf.Matrix(OCR_ZOOM, OCR_ZOOM), alpha=False
-            )
-            pix.save(str(image))
-            del pix
+        size = doc.page_size(index)
+        scale = min(OCR_ZOOM, OCR_MAX_SIDE / (max(size.width, size.height) or 1.0))
+        image.write_bytes(doc.render(index, scale).png)  # holds PDF_LOCK
         result = subprocess.run(  # noqa: S603 - argument list, no shell
             [exe, str(image), "stdout", "-l", "eng", "--psm", "6"],
             capture_output=True,
@@ -95,41 +91,17 @@ def has_pdf_header(path: Path) -> bool:
         return PDF_MAGIC in f.read(MAGIC_WINDOW)
 
 
-def _open(path: Path, name: str) -> pymupdf.Document:
+def _open(path: Path, name: str) -> PdfiumDocument:
     """Open and validate a PDF. Error messages name ``name``, never the path."""
     if not has_pdf_header(path):
         raise PdfError(f"{name} is not a PDF (no %PDF- header)")
-    with PDF_LOCK:
-        try:
-            doc = pymupdf.open(path, filetype="pdf")
-        except Exception as e:  # PyMuPDF raises several exception types
-            raise PdfError(f"{name} is damaged or not a valid PDF") from e
-        problem = None
-        if not doc.is_pdf:
-            problem = f"{name} is not a PDF"
-        elif doc.needs_pass:
-            problem = f"{name} is password-protected"
-        elif doc.page_count < 1:
-            problem = f"{name} has no pages"
-        if problem:
-            doc.close()
-            raise PdfError(problem)
-    return doc
-
-
-def _close(doc: pymupdf.Document) -> None:
-    with PDF_LOCK:
-        doc.close()
+    return open_pdf(path, name)
 
 
 def inspect_pdf(path: Path, *, name: str | None = None) -> int:
     """Validate that ``path`` really is a readable PDF; return its page count."""
-    doc = _open(path, name or path.name)
-    try:
-        with PDF_LOCK:
-            return int(doc.page_count)
-    finally:
-        _close(doc)
+    with _open(path, name or path.name) as doc:
+        return doc.page_count
 
 
 def extract_pages(
@@ -143,20 +115,16 @@ def extract_pages(
 
     ``on_page(done, total)`` is called after each page.
     """
-    doc = _open(path, name or path.name)
-    try:
+    with _open(path, name or path.name) as doc:
         use_ocr = ocr and tesseract_available()
-        with PDF_LOCK:
-            total = int(doc.page_count)
+        total = doc.page_count
         pages: list[PageText] = []
         for index in range(total):
-            with PDF_LOCK:  # per page: the Reader can render in between
-                page = doc[index]
-                raw = page.get_text("text")
-            text = normalize_page_text(raw)
+            # per page: the Reader can render in between
+            text = normalize_page_text(doc.page_text(index))
             method: PageMethod = "text"
             if len(text) < MIN_TEXT_CHARS:
-                ocr_text = normalize_page_text(_ocr_page(page)) if use_ocr else ""
+                ocr_text = normalize_page_text(_ocr_page(doc, index)) if use_ocr else ""
                 if len(ocr_text) > len(text):
                     text, method = ocr_text, "ocr"
                 elif not text:
@@ -164,8 +132,4 @@ def extract_pages(
             pages.append(PageText(page_no=index + 1, text=text, method=method))
             if on_page is not None:
                 on_page(index + 1, total)
-            with PDF_LOCK:
-                del page
-    finally:
-        _close(doc)
     return pages

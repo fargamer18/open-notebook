@@ -5,7 +5,7 @@ that genuinely differs between the two lives in `src/litenotebook/platform_utils
 the rest of the code uses `pathlib` and the standard library and is checked by
 `tests/test_platform.py` to stay free of OS-specific calls.
 
-> Status (0.9.1):
+> Status (0.9.2):
 >
 > - **Linux:** Built, Automated tests passed, Manually verified.
 > - **Windows:** **Prepared** only. Windows rules are *simulated* in tests

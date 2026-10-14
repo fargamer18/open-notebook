@@ -1,12 +1,61 @@
-# PDF engine licensing decision (release blocker)
+# PDF engine licensing decision
 
 > **Not legal advice.** This document collects license facts from upstream
 > sources and technical measurements so that the project owner (with legal
 > counsel where needed) can make a decision. It does not say any option is
 > legally sufficient.
 
-Status: **open — a decision is required before any public release.**
-Nothing has been changed yet; LiteNotebook 0.9.x still uses PyMuPDF.
+Status: **decided — option C. PyMuPDF was removed before v1** (Phase 17,
+LiteNotebook 0.9.2). Sections 1–5 below are the Phase 16 analysis that led to
+the decision, kept as the record (written while PyMuPDF was still in use).
+
+## Decision (Phase 17)
+
+PyMuPDF is removed from the distributable application and replaced with
+**PDFium through pypdfium2**. This is a technical and product decision, not
+a legal opinion.
+
+Rationale:
+
+- **Permissive distribution goal.** LiteNotebook's own code is MIT-licensed
+  and the packages should be distributable without AGPL obligations for the
+  combined application. PDFium is BSD-3-Clause; the components compiled into
+  the PDFium binary carry permissive licences whose notices ship with the
+  package (see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)).
+- **No commercial PyMuPDF license is planned**, so option B is not
+  available, and option A would change the project's licence model.
+- **Package size.** PyMuPDF was the largest single PDF component in the core
+  app (55.0 MB of the Ubuntu 22.04 build); the measured result is in
+  "Outcome" below.
+- **The required capabilities are achievable with PDFium**: upload
+  validation, page count, page text, word geometry for highlights and
+  annotations, page rendering for the Reader and OCR. Word reconstruction is
+  LiteNotebook's own code ([pdf-engine.md](pdf-engine.md)).
+
+Accepted costs: damaged PDFs that MuPDF used to repair are now rejected with
+an actionable message; text extraction is slower (word reconstruction runs in
+Python); small whitespace differences in extracted text. All are listed in
+[pdf-engine.md](pdf-engine.md#intentional-and-known-differences).
+
+### Outcome
+
+Ubuntu 22.04 release builds (glibc 2.35), 0.9.1 with PyMuPDF vs 0.9.2 with
+PDFium:
+
+| | 0.9.1 (PyMuPDF 1.28.2) | 0.9.2 (pypdfium2 5.14.0) | Change |
+|---|---|---|---|
+| Core app folder | 244 606 981 B (244.6 MB) | 196 591 830 B (196.6 MB) | −48.0 MB (−19.6 %) |
+| Core tar.gz | 93.3 MB | 71.4 MB | −21.9 MB |
+| AppImage | 86.9 MB | 66.6 MB | −20.3 MB |
+| PDF engine inside | `pymupdf/` 55.0 MB | `pypdfium2_raw/` 7.8 MB | |
+| Minimum glibc | 2.35 | 2.35 | unchanged |
+
+The packaged smoke test checks that no `pymupdf`, `fitz` or `libmupdf` file
+is in the package and that PDFium and its licence texts are; it passed in an
+Ubuntu 22.04 container and on the build host. Windows packages are prepared
+(the same specs and hooks) but **not built or verified**.
+
+Not legal advice.
 
 ## 1. Current dependency
 
@@ -108,7 +157,7 @@ from a separate scratch environment).
 
 | | pypdfium2 + PDFium | pypdf (+ a renderer) | others |
 |---|---|---|---|
-| License | pypdfium2 Apache-2.0 / BSD-3-Clause; PDFium BSD-style (Google). Some PDFium dependencies carry other permissive licenses whose notices must ship with binaries | pypdf BSD-3-Clause | pdfminer.six (MIT): text + coordinates, no rendering; poppler (GPL), Ghostscript (AGPL), MuPDF (AGPL): not permissive |
+| License | pypdfium2 package metadata: "BSD-3-Clause, Apache-2.0, dependency licenses"; PDFium BSD-3-Clause. Some PDFium dependencies carry other permissive licenses whose notices must ship with binaries | pypdf BSD-3-Clause | pdfminer.six (MIT): text + coordinates, no rendering; poppler (GPL), Ghostscript (AGPL), MuPDF (AGPL): not permissive |
 | Version checked | pypdfium2 5.14.0 (PDFium 156.0.8076.0), released 2026-10-04 | pypdf 6.20.0 | |
 | Wheels | Windows x64 (3.9 MB), Linux manylinux_2_17 x86_64 (3.8 MB), plus arm64, macOS, musl | pure Python | |
 | Text extraction | yes (`PdfTextPage.get_text_bounded/range`) | yes (lower quality on complex layouts) | |
@@ -161,7 +210,7 @@ regression testing. Risks: worse tolerance of damaged PDFs, different text
 order on complex multi-column pages (affects new chunks only), highlight
 quality on existing notebooks.
 
-## 5. Recommendation / options summary
+## 5. Recommendation / options summary (Phase 16)
 
 | | Engineering | Project license | Ongoing |
 |---|---|---|---|
@@ -174,7 +223,7 @@ commercial terms**: option C with pypdfium2 is feasible. It gives equal text
 and similar rendering speed and a smaller package. The cost is the
 word-geometry rewrite, highlight regression work and weaker handling of damaged
 PDFs. If keeping MuPDF's robustness matters more than the license model,
-choose A or B. **The choice is the project owner's; this phase does not
-change the PDF engine.**
+choose A or B. **The choice is the project owner's.** (Decided in Phase 17:
+option C; see "Decision" at the top.)
 
 Not legal advice.

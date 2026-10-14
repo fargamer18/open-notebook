@@ -1,4 +1,4 @@
-# Performance budgets and observed numbers (0.9.1)
+# Performance budgets and observed numbers (0.9.2)
 
 These are rough release budgets, not microbenchmarks. The numbers below were
 observed on the development machine:

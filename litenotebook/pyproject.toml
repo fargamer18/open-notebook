@@ -1,6 +1,6 @@
 [project]
 name = "litenotebook"
-version = "0.9.1"
+version = "0.9.2"
 description = "Lightweight, local-first notebook RAG: SQLite + FAISS + MiniLM + llama.cpp"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -12,8 +12,9 @@ dependencies = [
     "python-multipart>=0.0.20",
     # LLM client (OpenAI-compatible llama.cpp endpoint)
     "httpx>=0.28",
-    # Ingestion
-    "pymupdf>=1.26",
+    # PDF reading: PDFium (BSD-3-Clause) via pypdfium2; licences are listed in
+    # docs/THIRD_PARTY_LICENSES.md, the decision in docs/pdf-licensing-decision.md
+    "pypdfium2>=5.14,<6",
     # Embeddings + vector index (CPU only; see [tool.uv.sources])
     "numpy>=2.0",
     "faiss-cpu>=1.9",
@@ -79,5 +80,5 @@ ignore_missing_imports = true
 # SWIG-wrapped libraries without usable type information: treat as Any at
 # the boundary instead of scattering ignores through the code.
 [[tool.mypy.overrides]]
-module = ["faiss", "faiss.*", "pymupdf", "pymupdf.*"]
+module = ["faiss", "faiss.*"]
 follow_imports = "skip"

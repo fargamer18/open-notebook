@@ -24,5 +24,6 @@ Optional components (never included here; installed only when you choose)
   - MiniLM embedding model, llama.cpp + a Qwen model, local speech + voices:
     from the setup wizard or Settings → Local AI.
 
-Licenses: see THIRD_PARTY_LICENSES.txt/md. PyMuPDF (used to read PDFs) is
-AGPL-3.0 or commercially licensed by Artifex.
+Licenses: see THIRD_PARTY_LICENSES.txt/md. PDFs are read with PDFium
+(BSD-3-Clause, via pypdfium2); its licence texts and those of the libraries
+compiled into it are in the licenses/pypdfium2/ folder.

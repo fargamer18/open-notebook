@@ -197,6 +197,9 @@ def test_transcript_citations_open_the_reader_at_the_passage(
     reader = client.get(link.replace("&amp;", "&")).text
     assert f'data-focus-kind="chunk" data-focus-id="{chunk}"' in reader
     assert "Back to audio overview" in reader
+    hl = client.get(f"/notebooks/{nb_id}/sources/{sid}/chunks/{chunk}/highlight")
+    target = hl.json()  # what reader.js draws: PDFium word geometry
+    assert target["page"] == 1 and target["rects"] and target["live"]
 
 
 def test_synthesis_two_voices_chapters_player_and_downloads(

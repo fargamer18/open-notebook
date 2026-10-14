@@ -1,7 +1,7 @@
 """Server-side page rendering with a derived, deletable on-disk cache.
 
-Pages are rendered lazily with PyMuPDF (passive rendering: PDF JavaScript,
-actions and links are never executed) into
+Pages are rendered lazily through the PDF engine boundary (PDFium; passive
+rendering: PDF JavaScript, actions and links are never executed) into
 ``<data>/notebooks/<nb>/cache/pages/<source>/<page>-<scale>.png``. Paths are
 built from integer ids only; the stored PDF is never modified and documents
 are opened per request and closed again. Scales are quantised so the cache
@@ -61,12 +61,13 @@ def open_source(
         raise ReaderError("The PDF file of this source is not available")
     page_count = source.page_count
     if not page_count:
-        import pymupdf
+        from litenotebook.pdf import PdfError, open_pdf
 
-        from litenotebook.ingest.pdflock import PDF_LOCK
-
-        with PDF_LOCK, pymupdf.open(path, filetype="pdf") as doc:
-            page_count = int(doc.page_count)
+        try:
+            with open_pdf(path, source.title) as doc:
+                page_count = doc.page_count
+        except PdfError as e:
+            raise ReaderError(str(e)) from None
     return ReaderSource(source, path, int(page_count))
 
 
@@ -99,16 +100,16 @@ def render_page(
     )
     if target.is_file():
         return target, True
-    import pymupdf
+    from litenotebook.pdf import PdfError, open_pdf
 
-    from litenotebook.ingest.pdflock import PDF_LOCK
-
-    with PDF_LOCK, pymupdf.open(reader.path, filetype="pdf") as doc:
-        page = doc[page_no - 1]
-        longest = max(page.rect.width, page.rect.height) or 1.0
-        effective = min(scale, MAX_PIXELS_SIDE / longest)
-        pix = page.get_pixmap(matrix=pymupdf.Matrix(effective, effective), alpha=False)
-        data = pix.tobytes("png")
+    try:  # e.g. a damaged file the previous engine had repaired
+        with open_pdf(reader.path, reader.source.title) as doc:
+            size = doc.page_size(page_no - 1)
+            longest = max(size.width, size.height) or 1.0
+            effective = min(scale, MAX_PIXELS_SIDE / longest)
+            data = doc.render(page_no - 1, effective).png
+    except (PdfError, IndexError) as e:
+        raise ReaderError(str(e) or "This page cannot be shown") from None
     tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)

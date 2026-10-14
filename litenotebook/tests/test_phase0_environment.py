@@ -143,12 +143,8 @@ def test_core_dependencies_import():
     import jinja2  # noqa: F401
     import markdown_it  # noqa: F401
     import nh3  # noqa: F401
-    import pymupdf
+    import pypdfium2  # noqa: F401
     import sentence_transformers  # noqa: F401
-
-    doc = pymupdf.open()
-    doc.new_page().insert_text((72, 72), "hello page one")
-    assert "hello page one" in doc[0].get_text()
 
 
 def test_package_does_not_depend_on_legacy_or_open_notebook():

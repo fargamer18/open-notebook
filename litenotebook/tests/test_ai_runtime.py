@@ -173,6 +173,8 @@ def test_status_answers_and_stop_cancels_while_loading(
     started = time.monotonic()
     assert m.status()["state"] == "starting"  # not blocked by the loading start()
     assert time.monotonic() - started < 1
+    while not state_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)  # the fake server has started and is now "loading"
     m.stop()
     t.join(10)
     assert errors and errors[0] == "cancelled"

@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
-import pymupdf
 import pytest
 
 from litenotebook.config import EMBED_DIM, EMBED_MODEL, Settings, load_settings
@@ -120,23 +119,27 @@ def make_pdf(
 ) -> Path:
     """Write a PDF with one text page per entry (1-based numbers in image_only
     become scanned-style image pages with no text layer)."""
+    from pdfgen import Document, rasterise
+
     image_only = image_only or set()
-    doc = pymupdf.open()
+    doc = Document()
     for number, text in enumerate(pages, 1):
         page = doc.new_page(width=595, height=842)
-        rect = pymupdf.Rect(40, 40, 555, 802)
         if number in image_only:
-            scratch = pymupdf.open()
-            src = scratch.new_page(width=595, height=842)
-            src.insert_textbox(rect, text, fontsize=14)
-            pix = src.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False)
-            page.insert_image(page.rect, pixmap=pix)
-            scratch.close()
+            scratch = Document()
+            scratch.new_page(width=595, height=842).textbox(BOX, text, size=14)
+            scan = scratch.save(path.with_name(f".{path.name}.scan{number}.pdf"))
+            try:
+                pixels, width, height = rasterise(scan, 0, 2.0)
+            finally:
+                scan.unlink()
+            page.image(pixels, width, height)
         elif text:
-            assert page.insert_textbox(rect, text, fontsize=8) >= 0, "text overflow"
-    doc.save(path)
-    doc.close()
-    return path
+            page.textbox(BOX, text, size=8)  # OverflowError: text overflow
+    return doc.save(path)
+
+
+BOX = (40, 40, 555, 802)  # top-down points, as the old PyMuPDF fixture used
 
 
 @pytest.fixture

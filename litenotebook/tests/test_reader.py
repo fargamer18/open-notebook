@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 import httpx
-import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 
@@ -771,18 +770,16 @@ print("HEAVY", [m for m in heavy if m in sys.modules], len(calls))
 def test_pdf_with_javascript_and_links_renders_passively(
     conn, settings, notebook, tmp_path
 ):
-    doc = pymupdf.open()
-    page = doc.new_page()
-    page.insert_text((72, 72), "Click here for danger")
-    page.insert_link(
-        {
-            "kind": pymupdf.LINK_URI,
-            "from": pymupdf.Rect(72, 60, 300, 80),
-            "uri": "https://example.invalid/",
-        }
+    from pdfgen import Document
+
+    doc = Document()
+    page = doc.new_page(width=612, height=792)
+    page.text(72, 720, "Click here for danger", 11)
+    page.annots.append(
+        "<< /Type /Annot /Subtype /Link /Rect [72 712 300 732] /Border [0 0 0]"
+        " /A << /S /URI /URI (https://example.invalid/) >> >>"
     )
     doc.save(tmp_path / "js.pdf")
-    doc.close()
     from litenotebook.ingest.pipeline import register_source
 
     register_source(conn, settings, notebook, tmp_path / "js.pdf")
@@ -791,3 +788,18 @@ def test_pdf_with_javascript_and_links_renders_passively(
     assert png_size(path.read_bytes())[0] > 100
     words = page_geometry(reader.path, 1).words
     assert [w.text for w in words][:2] == ["Click", "here"]
+
+
+def test_reader_survives_a_stored_pdf_the_engine_cannot_open(web):
+    """A source ingested earlier from a file PDFium refuses (MuPDF used to
+    repair some damaged PDFs): stored text and chunks stay; the Reader opens
+    at the right page and reports what is unavailable instead of failing."""
+    c, nb, cit = web["c"], web["nb"], web["citation"]
+    web["s"].source_file(nb, 1).write_bytes(b"%PDF-1.4\nthis file is now damaged\n")
+    assert c.get(f"/notebooks/{nb}/sources/1/read").status_code == 200
+    img = c.get(f"/notebooks/{nb}/sources/1/pages/1/render?scale=1")
+    assert img.status_code == 404 and "appears damaged or unsupported" in img.text
+    text = c.get(f"/notebooks/{nb}/sources/1/pages/2/text").json()
+    assert text["has_text"] is False and text["words"] == []
+    target = c.get(f"/notebooks/{nb}/reader/citations/{cit.id}").json()
+    assert target["page"] == 2 and not target["rects"]

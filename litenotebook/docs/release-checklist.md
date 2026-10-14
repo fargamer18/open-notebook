@@ -4,10 +4,12 @@
 
 ## Blockers
 
-- [ ] **PDF engine licensing decided and applied.** Choose option A, B or C
-      from [pdf-licensing-decision.md](pdf-licensing-decision.md), then
-      update LICENSE/NOTICE files, `THIRD_PARTY_LICENSES.md` and the
-      packages.
+- [x] **PDF engine licensing decided and applied.** Option C: PyMuPDF
+      replaced with PDFium/pypdfium2 in 0.9.2 (Phase 17;
+      [pdf-licensing-decision.md](pdf-licensing-decision.md)).
+      `THIRD_PARTY_LICENSES.md` regenerated; PDFium notices ship in
+      `licenses/pypdfium2/`. Re-check before each release that no package
+      contains `pymupdf`/`libmupdf` (the packaged smoke test does).
 - [ ] **Windows Built** on Windows (CI `windows-2022` job or Windows 11).
 - [ ] **Windows automated tests passed** on Windows: source suite, packaged
       smoke (with and without the runtime), silent install/uninstall.

@@ -9,7 +9,7 @@ default browser. Users need neither Python nor the command line.
 | Windows x64 | `LiteNotebook-<v>-Setup.exe` (Inno Setup), `LiteNotebook-<v>-windows-x86_64.zip` | **Prepared** only: not Built, not tested, not verified ([windows.md](windows.md)) |
 | Both | `LiteNotebook-embedding-runtime-<v>-<platform>.tar.gz` / `.zip` (optional) | Linux built and verified; Windows prepared |
 
-Version: `litenotebook.__version__` (currently **0.9.1**, a pre-release).
+Version: `litenotebook.__version__` (currently **0.9.2**, a pre-release).
 `pyproject.toml` must match it; a test and the build both enforce this.
 
 ## Release blockers (0.9.x is not a public v1 release)
@@ -17,14 +17,10 @@ Version: `litenotebook.__version__` (currently **0.9.1**, a pre-release).
 The packaging architecture is approved. These must be resolved before any
 public v1 release:
 
-1. **PyMuPDF redistribution/licensing.** The core package bundles PyMuPDF
-   (AGPL-3.0-or-later, or Artifex commercial). Choose AGPL compliance, a
-   commercial license, or a replacement before publishing builds. See
-   *Licensing* below. Not legal advice.
-2. **Windows is prepared/simulated, NOT runtime verified.** The Inno Setup
+1. **Windows is prepared/simulated, NOT runtime verified.** The Inno Setup
    script and the Windows CI job exist, but no Windows package has been built
    or run on a real Windows machine.
-3. **Linux release baseline.** Production Linux artifacts must be built on
+2. **Linux release baseline.** Production Linux artifacts must be built on
    Ubuntu 22.04 (glibc 2.35), for example with the CI workflow. The
    Arch-built artifact needs glibc ≥ 2.38 and is a development artifact only,
    not the broad-release Linux build.
@@ -88,9 +84,9 @@ or the CI job:
 **Why PyInstaller fits:**
 
 - It is mature, with Windows and Linux support.
-- It has maintained hooks for PyMuPDF, numpy, torch and transformers.
+- It has maintained hooks for pypdfium2, numpy, torch and transformers.
 - It handles the native extensions in use: SQLite/FTS5 (CPython),
-  PyMuPDF, FAISS and tokenizers.
+  PDFium (pypdfium2), FAISS and tokenizers.
 - Builds are fast and the folder layout is predictable.
 - Its GPL license has an exception that allows distributing built
   applications.
@@ -101,7 +97,7 @@ unpacking a few hundred MB to a temp folder on every launch.
 ## Layout and components
 
 ```
-LiteNotebook-0.9.1-linux-x86_64/          (Windows: installed to %LOCALAPPDATA%\Programs\LiteNotebook)
+LiteNotebook-0.9.2-linux-x86_64/          (Windows: installed to %LOCALAPPDATA%\Programs\LiteNotebook)
   litenotebook            (LiteNotebook.exe)   web app + launcher; NO torch
   _internal/              Python 3.12, libraries, templates, static files, migrations, catalogs
   litenotebook-build.json version, platform, build time, expected embedding runtime (name/size/SHA-256)
@@ -134,13 +130,13 @@ records `"bundled_optional_components": []`.
 
 | | Unpacked | Download |
 |---|---|---|
-| Core app | 245 MB | 93 MB tar.gz / 87 MB AppImage |
+| Core app | 197 MB | 71 MB tar.gz / 67 MB AppImage |
 | Embedding runtime | 992 MB | 330 MB tar.gz |
-| Both in one package | ~1.2 GB | ~420 MB |
+| Both in one package | ~1.2 GB | ~400 MB |
 
 **Largest parts of the core app:**
 
-- PyMuPDF: 53 MB
+- PDFium (pypdfium2): 8 MB (PyMuPDF, 55 MB, was removed in 0.9.2)
 - FAISS + its libraries: 64 MB
 - numpy + OpenBLAS: 41 MB
 - libpython: 31 MB
@@ -292,20 +288,16 @@ or run yet.
 ships in the app folder. It covers the 53 Python packages plus the native
 components, and the optional components that are never bundled.
 
-**PyMuPDF (MuPDF) is AGPL-3.0-or-later, or available under a commercial
-license from Artifex.** The packaged app bundles it, so distributing the
-package publicly means one of:
+**PDF engine: PDFium (BSD-3-Clause) via pypdfium2.** PyMuPDF
+(AGPL-3.0-or-later or Artifex commercial) was removed in 0.9.2 and is
+excluded from the core spec, so it cannot be bundled even from a build
+machine that has it (decision: docs/pdf-licensing-decision.md). The licence
+texts of PDFium and the libraries compiled into it (FreeType, libjpeg-turbo,
+OpenJPEG, libpng, Little CMS, zlib, ICU, Abseil, AGG, fast_float, simdutf,
+LLVM libc, pdfium-binaries) are copied from the pypdfium2 wheel into
+`licenses/pypdfium2/` in the app folder by `tools/build.py`.
 
-- (a) complying with the AGPL for the distributed application, which means
-  offering the complete corresponding source of LiteNotebook under
-  AGPL-compatible terms (the AGPL's network clause also applies); or
-- (b) obtaining a commercial PyMuPDF license; or
-- (c) replacing PyMuPDF.
-
-The repository is MIT-licensed, inherited from Open Notebook. MIT code can
-be distributed as part of an AGPL whole, but that whole is then under the
-AGPL's terms. Personal use on your own machine is a different situation
-from public distribution. **Decide this before any public release.**
+The repository is MIT-licensed, inherited from Open Notebook.
 
 **Other notable components:**
 

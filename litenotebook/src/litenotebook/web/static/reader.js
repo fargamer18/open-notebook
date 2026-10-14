@@ -1,6 +1,6 @@
 /* LiteNotebook PDF reader.
  * Pages are server-rendered PNGs; a transparent, positioned text layer (from
- * PyMuPDF word boxes) makes text selectable; highlights are overlays in
+ * the PDF engine's word boxes) makes text selectable; highlights are overlays in
  * page-relative percentages. All text goes through textContent — never
  * innerHTML. Nothing here touches the embedding model.
  */

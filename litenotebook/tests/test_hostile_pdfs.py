@@ -3,7 +3,8 @@
 One bad source must never take the app down: it is either rejected at
 upload, or marked failed with a message, while other sources keep working.
 Document JavaScript, launch actions and links are never executed or followed
-(PyMuPDF only parses and renders; LiteNotebook never calls any action API).
+(PDFium only parses and renders; LiteNotebook never initialises forms or
+calls any action API).
 """
 
 from __future__ import annotations
@@ -13,22 +14,22 @@ import subprocess
 import threading
 from pathlib import Path
 
-import pymupdf
 import pytest
 
 from conftest import make_pdf
 from litenotebook.ingest.pdf import PdfError, extract_pages, inspect_pdf
-from litenotebook.ingest.pdflock import PDF_LOCK
 from litenotebook.ingest.pipeline import (
     IngestError,
     UnsupportedFileError,
     process_source,
     register_source,
 )
+from litenotebook.pdf import PDF_LOCK
 from litenotebook.reader.geometry import page_geometry
 from litenotebook.reader.render import MAX_PIXELS_SIDE, open_source, render_page
 from litenotebook.sources import get_source
 from litenotebook.unified_search import search_sources_lexical
+from pdfgen import Document
 
 
 def _png_size(data: bytes) -> tuple[int, int]:
@@ -40,14 +41,11 @@ def _png_size(data: bytes) -> tuple[int, int]:
 
 
 def _with_action(path: Path, action: str) -> Path:
-    doc = pymupdf.open()
-    doc.new_page().insert_text((72, 72), "Quarterly harbour report")
-    xref = doc.get_new_xref()
-    doc.update_object(xref, action)
-    doc.xref_set_key(doc.pdf_catalog(), "OpenAction", f"{xref} 0 R")
-    doc.save(path)
-    doc.close()
-    return path
+    doc = Document()
+    doc.new_page(width=612, height=792).text(72, 720, "Quarterly harbour report", 11)
+    ref = doc.add_object(action)
+    doc.catalog_extra = f"/OpenAction {{ref:{ref}}}"
+    return doc.save(path)
 
 
 @pytest.fixture
@@ -104,16 +102,9 @@ def test_document_actions_are_never_executed(
 def test_password_protected_pdf_is_rejected_with_a_clear_message(
     conn, settings, notebook, tmp_path
 ):
-    doc = pymupdf.open()
-    doc.new_page().insert_text((72, 72), "secret")
-    path = tmp_path / "locked.pdf"
-    doc.save(
-        path,
-        encryption=pymupdf.PDF_ENCRYPT_AES_256,
-        user_pw="user",
-        owner_pw="owner",
-    )
-    doc.close()
+    doc = Document()
+    doc.new_page().text(72, 720, "secret", 11)
+    path = doc.save(tmp_path / "locked.pdf", user_password="user")
     with pytest.raises((UnsupportedFileError, IngestError, PdfError), match="password"):
         register_source(conn, settings, notebook, path)
     assert conn.execute("SELECT count(*) FROM sources").fetchone()[0] == 0
@@ -142,11 +133,9 @@ def test_truncated_pdf_is_repaired_or_rejected_never_crashes(
 def test_huge_page_dimensions_render_within_the_pixel_cap(
     conn, settings, notebook, embedder, store, tmp_path
 ):
-    doc = pymupdf.open()
-    doc.new_page(width=14400, height=14400).insert_text((72, 72), "Huge poster page")
-    path = tmp_path / "huge.pdf"
-    doc.save(path)
-    doc.close()
+    doc = Document()
+    doc.new_page(width=14400, height=14400).text(72, 14328, "Huge poster page", 11)
+    path = doc.save(tmp_path / "huge.pdf")
     src = register_source(conn, settings, notebook, path)
     process_source(conn, settings, src.id, embedder, store)
     reader = open_source(conn, settings, notebook.id, src.id)
@@ -175,14 +164,10 @@ def test_unusual_unicode_is_stored_searchable_and_escaped(
 def test_many_pages_ingest_in_bounded_steps(
     conn, settings, notebook, embedder, store, tmp_path
 ):
-    doc = pymupdf.open()
+    doc = Document()
     for i in range(600):
-        doc.new_page().insert_text(
-            (72, 72), f"Page {i} of the long ledger, entry {i * 7}."
-        )
-    path = tmp_path / "many.pdf"
-    doc.save(path)
-    doc.close()
+        doc.new_page().text(72, 770, f"Page {i} of the long ledger, entry {i * 7}.", 11)
+    path = doc.save(tmp_path / "many.pdf")
     assert inspect_pdf(path) == 600
     src = register_source(conn, settings, notebook, path)
     report = process_source(conn, settings, src.id, embedder, store)
@@ -234,27 +219,44 @@ def test_one_bad_source_does_not_affect_others(
     assert search_sources_lexical(conn, notebook.id, "Velt", 5)
 
 
-def test_pymupdf_is_never_called_concurrently(tmp_path, monkeypatch):
-    """PyMuPDF is not thread-safe: Reader renders and ingestion share a lock."""
+def test_pdfium_is_never_called_concurrently(tmp_path, monkeypatch):
+    """PDFium is not thread-safe: Reader renders and ingestion share a lock."""
+    import pypdfium2.raw as pdfium_c
+
     path = make_pdf(tmp_path / "x.pdf", [f"page {i} text body" for i in range(12)])
     active = 0
     worst = 0
+    calls = 0
     guard = threading.Lock()
-    real_get_text = pymupdf.Page.get_text
 
-    def tracked(self, *a, **k):  # type: ignore[no-untyped-def]
-        nonlocal active, worst
-        with guard:
-            active += 1
-            worst = max(worst, active)
-        try:
-            assert PDF_LOCK._is_owned()  # type: ignore[attr-defined]
-            return real_get_text(self, *a, **k)
-        finally:
+    def tracked(real):  # type: ignore[no-untyped-def]
+        def call(*a, **k):  # type: ignore[no-untyped-def]
+            nonlocal active, worst, calls
             with guard:
-                active -= 1
+                active += 1
+                calls += 1
+                worst = max(worst, active)
+            try:
+                assert PDF_LOCK._is_owned()  # type: ignore[attr-defined]
+                return real(*a, **k)
+            finally:
+                with guard:
+                    active -= 1
 
-    monkeypatch.setattr(pymupdf.Page, "get_text", tracked)
+        return call
+
+    for name in (
+        "FPDF_LoadDocument",
+        "FPDF_CloseDocument",
+        "FPDF_LoadPage",
+        "FPDF_ClosePage",
+        "FPDFText_LoadPage",
+        "FPDFText_ClosePage",
+        "FPDFText_GetUnicode",
+        "FPDFText_GetLooseCharBox",
+        "FPDF_RenderPageBitmap",
+    ):
+        monkeypatch.setattr(pdfium_c, name, tracked(getattr(pdfium_c, name)))
     errors: list[BaseException] = []
 
     def work(fn) -> None:  # type: ignore[no-untyped-def]
@@ -268,10 +270,114 @@ def test_pymupdf_is_never_called_concurrently(tmp_path, monkeypatch):
         threading.Thread(target=work, args=(lambda: extract_pages(path),)),
         threading.Thread(target=work, args=(lambda: page_geometry(path, 3),)),
         threading.Thread(target=work, args=(lambda: page_geometry(path, 7),)),
+        threading.Thread(target=work, args=(lambda: _render(path, 5),)),
     ]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
     assert errors == []
-    assert worst == 1
+    assert calls > 100 and worst == 1
+
+
+def _render(path: Path, page_no: int) -> None:
+    from litenotebook.pdf import open_pdf
+
+    with open_pdf(path) as doc:
+        assert doc.render(page_no - 1, 1.0).width > 100
+
+
+def _hostile_variant(path: Path, kind: str) -> Path:
+    doc = Document()
+    page = doc.new_page(width=612, height=792)
+    page.text(72, 720, "Quarterly harbour report", 11)
+    js = "<< /S /JavaScript /JS (app.launchURL\\('https://evil.invalid/'\\)) >>"
+    if kind == "names-javascript":
+        action = doc.add_object(js)
+        doc.catalog_extra = (
+            f"/Names << /JavaScript << /Names [(boot) {{ref:{action}}}] >> >>"
+        )
+    elif kind == "page-open-action":
+        page.extra_dict = f"/AA << /O {js} >>"
+    elif kind == "embedded-file":
+        payload = doc.add_object(
+            b"<< /Type /EmbeddedFile /Length 19 >>\n"
+            b"stream\n#!/bin/sh\nrm -rf ~\nendstream"
+        )
+        spec = doc.add_object(
+            f"<< /Type /Filespec /F (run.sh) /EF << /F {{ref:{payload}}} >> >>"
+        )
+        doc.catalog_extra = (
+            f"/Names << /EmbeddedFiles << /Names [(run.sh) {{ref:{spec}}}] >> >>"
+        )
+        page.annots.append(
+            f"<< /Type /Annot /Subtype /FileAttachment /Rect [72 600 90 620]"
+            f" /FS {{ref:{spec}}} >>"
+        )
+    elif kind == "widget-javascript":
+        page.annots.append(
+            "<< /Type /Annot /Subtype /Widget /FT /Btn /T (go) /Rect [72 500 200 530]"
+            f" /A {js} /AA << /E {js} >> >>"
+        )
+    return doc.save(path)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["names-javascript", "page-open-action", "embedded-file", "widget-javascript"],
+)
+def test_scripts_attachments_and_triggers_stay_inert(
+    conn, settings, notebook, embedder, store, tmp_path, no_side_effects, kind
+):
+    pdf = _hostile_variant(tmp_path / f"{kind}.pdf", kind)
+    src = register_source(conn, settings, notebook, pdf)
+    process_source(conn, settings, src.id, embedder, store)
+    assert get_source(conn, notebook.id, src.id).status == "ready"
+    reader = open_source(conn, settings, notebook.id, src.id)
+    path, _ = render_page(settings, reader, 1, 1.0)
+    assert _png_size(path.read_bytes())[0] > 100
+    assert page_geometry(reader.path, 1).words[0].text == "Quarterly"
+    data = settings.data_dir
+    assert not list(data.rglob("run.sh"))  # attachments are never extracted
+    assert no_side_effects == []
+
+
+def test_source_deletion_while_reader_requests_are_running(
+    conn, settings, notebook, embedder, store, tmp_path
+):
+    from litenotebook.ingest.pipeline import delete_source
+    from litenotebook.reader.render import ReaderError
+
+    pdf = make_pdf(tmp_path / "d.pdf", [f"page {i} of the ledger" for i in range(8)])
+    src = register_source(conn, settings, notebook, pdf)
+    process_source(conn, settings, src.id, embedder, store)
+    reader = open_source(conn, settings, notebook.id, src.id)
+    stop = threading.Event()
+    unexpected: list[BaseException] = []
+    done = [0]
+
+    def readers() -> None:
+        n = 0
+        while not stop.is_set():
+            n += 1
+            try:
+                render_page(settings, reader, 1 + n % 8, 1.0 + (n % 3) / 2)
+                page_geometry(reader.path, 1 + n % 8)
+                done[0] += 1
+            except (ReaderError, OSError):
+                pass  # the file or its cache went away: an ordinary 404
+            except BaseException as e:  # pragma: no cover - reported below
+                unexpected.append(e)
+
+    threads = [threading.Thread(target=readers) for _ in range(2)]
+    for t in threads:
+        t.start()
+    while done[0] < 6:
+        threading.Event().wait(0.01)
+    delete_source(conn, settings, notebook.id, src.id, store)
+    stop.set()
+    for t in threads:
+        t.join(10)
+    assert unexpected == []
+    assert not settings.source_file(notebook.id, src.id).exists()
+    assert conn.execute("SELECT count(*) FROM chunks").fetchone()[0] == 0

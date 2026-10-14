@@ -11,7 +11,7 @@ Use a test account or a disposable data folder — never your only copy of data.
 ## Install / environment (running from source)
 
 - [ ] Install Python 3.12 (python.org installer) and `uv`; `uv sync` succeeds
-      (CPU-only torch, faiss-cpu, PyMuPDF wheels install).
+      (CPU-only torch, faiss-cpu, pypdfium2 wheels install).
 - [ ] `uv run python -m litenotebook.cli diagnostics platform` shows Windows,
       architecture, RAM, disk, SQLite with `fts5=True`, and no API key.
 - [ ] `uv run pytest -q` passes (model/LLM tests skipped; `posix_only` skipped).
@@ -170,7 +170,7 @@ this is verified until the boxes below are ticked on a real Windows machine.
 Record each result as one of: **Prepared** (code exists, simulated on
 Linux), **Built** (package produced on Windows), **Automated tests passed**
 (suite + packaged smoke + silent install/uninstall on Windows), **Manually
-verified** (this plan completed by a person). As of 0.9.1, Windows is
+verified** (this plan completed by a person). As of 0.9.2, Windows is
 **Prepared** only.
 
 ## Release verification (Phase 16) — run on Windows 11 or the CI runner

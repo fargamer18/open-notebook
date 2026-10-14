@@ -6,16 +6,18 @@ with source / page citations, take notes, practise with quizzes and listen
 to audio overviews. Everything runs on your own computer. No account, no
 cloud service and no internet connection are needed for daily use.
 
-> **Status: 0.9.1 pre-release — not a stable v1.** Open release blockers:
+> **Status: 0.9.2 pre-release — not a stable v1.** Open release blockers:
 >
-> 1. **PDF engine licensing.** PyMuPDF (AGPL-3.0 or commercial) is bundled.
->    A decision is required before public distribution; see
->    [docs/pdf-licensing-decision.md](docs/pdf-licensing-decision.md).
-> 2. **Windows is Prepared only.** It is not yet Built, Automated-tested or
+> 1. **Windows is Prepared only.** It is not yet Built, Automated-tested or
 >    Manually verified on real Windows; see [docs/windows.md](docs/windows.md).
-> 3. **Linux release builds** must come from the Ubuntu 22.04 (glibc 2.35)
+> 2. **Linux release builds** must come from the Ubuntu 22.04 (glibc 2.35)
 >    build ([docs/linux.md](docs/linux.md)). Builds made on newer
 >    distributions are development artifacts.
+>
+> PDFs are read with PDFium (pypdfium2); PyMuPDF was removed in 0.9.2, so the
+> former PDF-licensing blocker is closed — see
+> [docs/pdf-licensing-decision.md](docs/pdf-licensing-decision.md) and
+> [docs/pdf-engine.md](docs/pdf-engine.md).
 
 ## Platforms
 

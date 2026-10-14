@@ -35,28 +35,13 @@ TIMESTAMP_COLUMNS = {
 }
 
 
-def _deterministic_pdf(path: Path, pages: list[str]) -> Path:
-    import pymupdf
-
-    doc = pymupdf.open()
-    for text in pages:
-        page = doc.new_page(width=595, height=842)
-        page.insert_textbox(pymupdf.Rect(40, 40, 555, 802), text, fontsize=8)
-    doc.set_metadata({})
-    doc.save(path, no_new_id=True, garbage=3, deflate=True)
-    doc.close()
-    return path
-
-
 def build(out: Path) -> Path:
+    import archive_fixture
     import conftest
     from archive_fixture import build_rich_notebook
     from litenotebook.archive.export import export_notebook
     from litenotebook.config import load_settings
     from litenotebook.db import open_db
-
-    conftest.make_pdf = lambda path, pages, **_kw: _deterministic_pdf(path, pages)
-    import archive_fixture
 
     archive_fixture.make_pdf = conftest.make_pdf
     with tempfile.TemporaryDirectory(prefix="ln-portable-") as tmp:

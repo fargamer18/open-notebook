@@ -122,7 +122,7 @@ def test_register_rejects_non_pdf_content(conn, settings, notebook, tmp_path, pa
 def test_register_rejects_damaged_pdf(conn, settings, notebook, tmp_path):
     broken = tmp_path / "broken.pdf"
     broken.write_bytes(b"%PDF-1.7\n" + b"garbage" * 100)
-    with pytest.raises(IngestError, match="damaged or not a valid PDF|no pages"):
+    with pytest.raises(IngestError, match="appears damaged or unsupported|no pages"):
         register_source(conn, settings, notebook, broken)
     assert list_sources(conn, notebook.id) == []
 

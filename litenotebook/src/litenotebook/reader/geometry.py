@@ -1,7 +1,8 @@
 """Page text geometry and deterministic chunk → page-region matching.
 
-Words come from PyMuPDF with their boxes mapped through the page rotation and
-normalised to 0..1 of the rendered page. Matching a stored chunk works on a
+Words come from the PDF engine boundary (``litenotebook.pdf``), already
+normalised to 0..1 of the displayed page (crop box, rotation applied,
+top-left origin; see ``litenotebook/pdf/models.py``). Matching a stored chunk works on a
 normalised character stream (letters/digits only, case-folded), so line breaks,
 whitespace, punctuation and hyphenation across lines do not matter. When the
 same passage occurs more than once on a page, the occurrence nearest to the
@@ -56,27 +57,21 @@ class PageGeometry:
 
 
 def page_geometry(path: Path, page_no: int) -> PageGeometry:
-    import pymupdf
+    """Words of one page. A PDF the engine cannot open (or a page it does not
+    have) has no words: callers then fall back to "highlight unavailable"
+    on the right page instead of guessing."""
+    from litenotebook.pdf import PdfError, open_pdf
 
-    from litenotebook.ingest.pdflock import PDF_LOCK
-
-    with PDF_LOCK, pymupdf.open(path, filetype="pdf") as doc:
-        page = doc[page_no - 1]
-        rect = page.rect  # rotation applied
-        width, height = rect.width or 1.0, rect.height or 1.0
-        matrix = page.rotation_matrix
-        words = []
-        for x0, y0, x1, y1, text, block, line, _ in page.get_text("words", sort=True):
-            box = pymupdf.Rect(x0, y0, x1, y1) * matrix
-            box.normalize()
-            nx0 = min(max(box.x0 / width, 0.0), 1.0)
-            ny0 = min(max(box.y0 / height, 0.0), 1.0)
-            nx1 = min(max(box.x1 / width, 0.0), 1.0)
-            ny1 = min(max(box.y1 / height, 0.0), 1.0)
-            if nx1 <= nx0 or ny1 <= ny0 or not text.strip():
-                continue
-            words.append(Word(text, nx0, ny0, nx1, ny1, int(block), int(line)))
-    return PageGeometry(page_no, float(width), float(height), words)
+    try:
+        with open_pdf(path) as doc:
+            size = doc.page_size(page_no - 1)
+            words = [
+                Word(w.text, w.x0, w.y0, w.x1, w.y1, w.block, w.line)
+                for w in doc.page_words(page_no - 1)
+            ]
+    except (PdfError, IndexError):
+        return PageGeometry(page_no, 1.0, 1.0, [])
+    return PageGeometry(page_no, size.width or 1.0, size.height or 1.0, words)
 
 
 def _norm(text: str) -> str:

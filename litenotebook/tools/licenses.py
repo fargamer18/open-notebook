@@ -34,7 +34,7 @@ CORE_ROOTS = [
     "jinja2",
     "python-multipart",
     "httpx",
-    "pymupdf",
+    "pypdfium2",
     "numpy",
     "faiss-cpu",
     "markdown-it-py",
@@ -53,6 +53,53 @@ WORKER_ROOTS = [
 DEV_ROOTS = ["pytest", "ruff", "mypy", "pyinstaller", "pyinstaller-hooks-contrib"]
 _NAME = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
 
+# Compiled into the PDFium binary, as listed by the Linux x64 pypdfium2 wheel
+# (BUILD_LICENSES/<file>). Licences are as stated by those files; the full
+# texts ship in the package under licenses/pypdfium2/. The Windows wheel
+# carries its own list, which the build copies the same way.
+PDFIUM_COMPONENTS = [
+    (f"{name} (compiled into PDFium)", "bundled (core)", f"{lic} ({file})", url)
+    for name, lic, file, url in [
+        ("Abseil", "Apache-2.0", "abseil.txt", "https://abseil.io/"),
+        (
+            "Anti-Grain Geometry 2.3",
+            "AGG 2.3 permissive notice",
+            "agg23.txt",
+            "https://agg.sourceforge.net/antigrain.com/",
+        ),
+        (
+            "fast_float",
+            "MIT",
+            "fast_float.txt",
+            "https://github.com/fastfloat/fast_float",
+        ),
+        ("FreeType", "FreeType License (FTL)", "freetype.txt", "https://freetype.org/"),
+        ("ICU", "Unicode License v3", "icu.txt", "https://icu.unicode.org/"),
+        ("Little CMS", "MIT", "lcms.txt", "https://www.littlecms.com/"),
+        (
+            "libjpeg-turbo",
+            "IJG License and BSD-3-Clause",
+            "libjpeg_turbo.md",
+            "https://libjpeg-turbo.org/",
+        ),
+        ("OpenJPEG", "BSD-2-Clause", "libopenjpeg.txt", "https://www.openjpeg.org/"),
+        (
+            "libpng",
+            "PNG Reference Library License v2",
+            "libpng.txt",
+            "http://www.libpng.org/pub/png/libpng.html",
+        ),
+        (
+            "LLVM libc",
+            "Apache-2.0 WITH LLVM-exception",
+            "llvm-libc.txt",
+            "https://libc.llvm.org/",
+        ),
+        ("simdutf", "MIT", "simdutf.txt", "https://github.com/simdutf/simdutf"),
+        ("zlib", "Zlib", "zlib.txt", "https://zlib.net/"),
+    ]
+]
+
 NON_PYTHON = [
     (
         "CPython runtime",
@@ -62,11 +109,18 @@ NON_PYTHON = [
     ),
     ("SQLite (in CPython)", "bundled (core)", "Public domain", "https://sqlite.org/"),
     (
-        "MuPDF (inside PyMuPDF)",
+        "PDFium (native library inside pypdfium2)",
         "bundled (core)",
-        "AGPL-3.0-or-later, or Artifex commercial",
-        "https://mupdf.com/",
+        "BSD-3-Clause (licenses/pypdfium2/.../pdfium.txt)",
+        "https://pdfium.googlesource.com/pdfium/",
     ),
+    (
+        "pdfium-binaries (build of PDFium used by pypdfium2)",
+        "bundled (core)",
+        "MIT (pdfium-binaries.txt)",
+        "https://github.com/bblanchon/pdfium-binaries",
+    ),
+    *PDFIUM_COMPONENTS,
     (
         "FAISS (inside faiss-cpu)",
         "bundled (core)",
@@ -252,9 +306,10 @@ def write_inventory(out: Path) -> list[tuple[str, str, str, str]]:
         "License texts are not repeated here: each package ships its own license",
         "file inside the bundled distribution, and its source is linked.",
         "",
-        "> **PyMuPDF / MuPDF is AGPL-3.0-or-later (or a commercial license from",
-        "> Artifex)** and is bundled in the core app. This is an open release",
-        "> blocker — see docs/pdf-licensing-decision.md.",
+        "PDFs are read with PDFium through pypdfium2. PyMuPDF (AGPL-3.0 or",
+        "commercial) was removed in Phase 17 and is not bundled or required; see",
+        "docs/pdf-licensing-decision.md. PDFium's licence and those of the",
+        "libraries compiled into it ship in the package under licenses/pypdfium2/.",
         "",
         "## 1. Bundled — Python packages",
         "",

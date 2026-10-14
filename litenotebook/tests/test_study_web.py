@@ -241,6 +241,9 @@ def test_reader_jump_and_deleted_source(client, app_settings, setup):
     assert 'data-page="1"' in reader.text
     assert f'data-focus-kind="chunk" data-focus-id="{chunk}"' in reader.text
     assert f"/study/attempts/{aid}/review" in reader.text
+    target = client.get(f"/notebooks/{nb_id}/sources/{sid}/chunks/{chunk}/highlight")
+    hl = target.json()  # what reader.js draws: PDFium word geometry
+    assert hl["page"] == 1 and hl["rects"] and hl["live"]
     c = db(app_settings)
     try:
         delete_source(c, app_settings, nb_id, sid, FaissStore(c, app_settings))

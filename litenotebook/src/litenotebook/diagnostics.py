@@ -50,6 +50,12 @@ def _version(dist: str) -> str | None:
         return None
 
 
+def _pdf_engine() -> dict[str, str]:
+    from litenotebook.pdf import engine_versions
+
+    return engine_versions()
+
+
 def _sqlite_features() -> dict[str, Any]:
     conn = sqlite3.connect(":memory:")
     try:
@@ -171,7 +177,7 @@ def collect(
         },
         "database": {"sqlite": _sqlite_features(), **(counts or {"exists": False})},
         "libraries": {
-            "pymupdf": _version("pymupdf"),
+            "pdf_engine": _pdf_engine(),
             "faiss": _version("faiss-cpu") or _version("faiss"),
             "faiss_importable": importlib.util.find_spec("faiss") is not None,
             "numpy": _version("numpy"),

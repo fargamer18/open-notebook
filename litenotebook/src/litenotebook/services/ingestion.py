@@ -9,7 +9,7 @@ Lifecycle inside the web app:
    ``process_source`` with its own SQLite connection. Only one source is ever
    processed at a time, so there are no concurrent writes to a FAISS index and
    MiniLM runs in a single place.
-3. MiniLM (and torch/faiss/pymupdf) are imported and loaded lazily by the first
+3. MiniLM (and torch/faiss/pypdfium2) are imported and loaded lazily by the first
    job, then kept for later jobs; rendering pages never loads them.
 4. On startup the app fails any source a previous run left pending/processing
    (``sources.recover_interrupted``); nothing is re-run automatically. Retrying a

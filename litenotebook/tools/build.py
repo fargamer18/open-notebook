@@ -28,7 +28,6 @@ import os
 import platform
 import re
 import shutil
-import struct
 import subprocess
 import sys
 import tarfile
@@ -199,36 +198,46 @@ def glibc_requirement(folder: Path) -> dict[str, object]:
 
 
 def make_icons(out: Path) -> dict[str, Path]:
-    """PNG sizes and a Windows .ico from the original SVG (via PyMuPDF)."""
-    import pymupdf
-
-    out.mkdir(parents=True, exist_ok=True)
+    """The app icon as PNG sizes and a Windows .ico, pre-rendered from the SVG
+    into packaging/icons/ (a PDF engine cannot render SVG, and the build
+    must not need another graphics library). The recorded SVG checksum
+    makes a stale icon set fail the build instead of shipping silently."""
+    icons = ROOT / "packaging" / "icons"
     svg = ROOT / "src" / "litenotebook" / "web" / "static" / "icon.svg"
-    page = pymupdf.open(svg)[0]
-    pngs: dict[int, bytes] = {}
+    recorded = (icons / "icon.svg.sha256").read_text("utf-8").split()[0]
+    if hashlib.sha256(svg.read_bytes()).hexdigest() != recorded:
+        raise SystemExit(
+            "icon.svg changed: re-render packaging/icons/litenotebook-<size>.png "
+            f"for sizes {ICON_SIZES} and litenotebook.ico, then update "
+            "packaging/icons/icon.svg.sha256"
+        )
+    out.mkdir(parents=True, exist_ok=True)
     for size in ICON_SIZES:
-        zoom = size / page.rect.width
-        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=True)
-        data = pix.tobytes("png")
-        (out / f"litenotebook-{size}.png").write_bytes(data)
-        pngs[size] = data
-    ico_sizes = [s for s in ICON_SIZES if s <= 256]
-    header = struct.pack("<HHH", 0, 1, len(ico_sizes))
-    offset = 6 + 16 * len(ico_sizes)
-    entries, blobs = b"", b""
-    for size in ico_sizes:
-        data = pngs[size]
-        dim = 0 if size == 256 else size
-        entries += struct.pack("<BBBBHHII", dim, dim, 0, 0, 1, 32, len(data), offset)
-        blobs += data
-        offset += len(data)
-    (out / "litenotebook.ico").write_bytes(header + entries + blobs)
+        shutil.copy(icons / f"litenotebook-{size}.png", out)
+    shutil.copy(icons / "litenotebook.ico", out)
     shutil.copy(svg, out / "litenotebook.svg")
     return {
         "ico": out / "litenotebook.ico",
         "png": out / "litenotebook-256.png",
         "svg": out / "litenotebook.svg",
     }
+
+
+def copy_notice_files(target: Path) -> None:
+    """Licence texts that must travel with bundled native code: PDFium and
+    the libraries compiled into it (shipped inside the pypdfium2 wheel)."""
+    from importlib import metadata
+
+    dist = metadata.distribution("pypdfium2")
+    files = [f for f in dist.files or [] if "/licenses/" in f"/{f}"]
+    if not files:
+        raise SystemExit("pypdfium2 licence files not found")
+    for item in files:
+        source = Path(str(dist.locate_file(item)))
+        rel = str(item).split("/licenses/", 1)[1]
+        dest = target / "pypdfium2" / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(source, dest)
 
 
 # --- PyInstaller ------------------------------------------------------------------
@@ -429,6 +438,7 @@ def main() -> int:
         BUILD / "THIRD_PARTY_LICENSES.md", app_folder / "THIRD_PARTY_LICENSES.md"
     )
     shutil.copy(ROOT / "packaging" / "README-PACKAGE.txt", app_folder / "README.txt")
+    copy_notice_files(app_folder / "licenses")
     if (ROOT.parent / "LICENSE").is_file():
         shutil.copy(ROOT.parent / "LICENSE", app_folder / "LICENSE.txt")
     manifest = {

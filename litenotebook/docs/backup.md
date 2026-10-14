@@ -14,7 +14,7 @@ the original PDFs/WAVs. They are portable between Linux and Windows.
 
 ## Formats
 
-| `export_format_version` | Written by | Imports in 0.9.1 |
+| `export_format_version` | Written by | Imports in 0.9.2 |
 |---|---|---|
 | 1 | Phase 10–12 | ✅ |
 | 2 | Phase 13 (adds quizzes) | ✅ |

@@ -1,0 +1,3 @@
+# The repository root ignores *.spec for the legacy app; LiteNotebook's
+# PyInstaller specs are source files that tools/build.py needs.
+!packaging/pyinstaller/*.spec

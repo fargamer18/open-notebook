@@ -2,7 +2,7 @@
 
 Every route is scoped by the notebook (and source) ids in the URL. Nothing
 here starts the embedding worker or calls the LLM; PDFs are rendered
-passively by PyMuPDF and never modified.
+passively by PDFium and never modified.
 """
 
 from __future__ import annotations

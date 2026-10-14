@@ -5,9 +5,10 @@ pinned download catalogs. An inventory for review, **not legal advice**.
 License texts are not repeated here: each package ships its own license
 file inside the bundled distribution, and its source is linked.
 
-> **PyMuPDF / MuPDF is AGPL-3.0-or-later (or a commercial license from
-> Artifex)** and is bundled in the core app. This is an open release
-> blocker — see docs/pdf-licensing-decision.md.
+PDFs are read with PDFium through pypdfium2. PyMuPDF (AGPL-3.0 or
+commercial) was removed in Phase 17 and is not bundled or required; see
+docs/pdf-licensing-decision.md. PDFium's licence and those of the
+libraries compiled into it ship in the package under licenses/pypdfium2/.
 
 ## 1. Bundled — Python packages
 
@@ -47,7 +48,7 @@ download that contains PyTorch).
 | pydantic | 2.13.5 | core | MIT | https://github.com/pydantic/pydantic |
 | pydantic_core | 2.46.5 | core | MIT | https://github.com/pydantic/pydantic/tree/main/pydantic-core |
 | Pygments | 2.21.0 | embedding runtime | BSD-2-Clause | https://github.com/pygments/pygments |
-| pymupdf | 1.28.2 | core | Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License | https://github.com/pymupdf/pymupdf |
+| pypdfium2 | 5.14.0 | core | BSD-3-Clause, Apache-2.0, dependency licenses | https://github.com/pypdfium2-team/pypdfium2 |
 | python-multipart | 0.0.32 | core | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | PyYAML | 6.0.3 | core + embedding runtime | MIT License | https://github.com/yaml/pyyaml |
 | regex | 2026.9.29 | embedding runtime | Apache-2.0 AND CNRI-Python | https://github.com/mrabarnett/mrab-regex |
@@ -76,7 +77,20 @@ download that contains PyTorch).
 |---|---|---|---|
 | CPython runtime | bundled (core, runtime) | PSF-2.0 | https://www.python.org/ |
 | SQLite (in CPython) | bundled (core) | Public domain | https://sqlite.org/ |
-| MuPDF (inside PyMuPDF) | bundled (core) | AGPL-3.0-or-later, or Artifex commercial | https://mupdf.com/ |
+| PDFium (native library inside pypdfium2) | bundled (core) | BSD-3-Clause (licenses/pypdfium2/.../pdfium.txt) | https://pdfium.googlesource.com/pdfium/ |
+| pdfium-binaries (build of PDFium used by pypdfium2) | bundled (core) | MIT (pdfium-binaries.txt) | https://github.com/bblanchon/pdfium-binaries |
+| Abseil (compiled into PDFium) | bundled (core) | Apache-2.0 (abseil.txt) | https://abseil.io/ |
+| Anti-Grain Geometry 2.3 (compiled into PDFium) | bundled (core) | AGG 2.3 permissive notice (agg23.txt) | https://agg.sourceforge.net/antigrain.com/ |
+| fast_float (compiled into PDFium) | bundled (core) | MIT (fast_float.txt) | https://github.com/fastfloat/fast_float |
+| FreeType (compiled into PDFium) | bundled (core) | FreeType License (FTL) (freetype.txt) | https://freetype.org/ |
+| ICU (compiled into PDFium) | bundled (core) | Unicode License v3 (icu.txt) | https://icu.unicode.org/ |
+| Little CMS (compiled into PDFium) | bundled (core) | MIT (lcms.txt) | https://www.littlecms.com/ |
+| libjpeg-turbo (compiled into PDFium) | bundled (core) | IJG License and BSD-3-Clause (libjpeg_turbo.md) | https://libjpeg-turbo.org/ |
+| OpenJPEG (compiled into PDFium) | bundled (core) | BSD-2-Clause (libopenjpeg.txt) | https://www.openjpeg.org/ |
+| libpng (compiled into PDFium) | bundled (core) | PNG Reference Library License v2 (libpng.txt) | http://www.libpng.org/pub/png/libpng.html |
+| LLVM libc (compiled into PDFium) | bundled (core) | Apache-2.0 WITH LLVM-exception (llvm-libc.txt) | https://libc.llvm.org/ |
+| simdutf (compiled into PDFium) | bundled (core) | MIT (simdutf.txt) | https://github.com/simdutf/simdutf |
+| zlib (compiled into PDFium) | bundled (core) | Zlib (zlib.txt) | https://zlib.net/ |
 | FAISS (inside faiss-cpu) | bundled (core) | MIT | https://github.com/facebookresearch/faiss |
 | OpenBLAS / libgfortran (numpy, faiss, scipy wheels) | bundled | BSD-3-Clause / GPL-3.0 with GCC runtime exception | https://www.openblas.net/ |
 | libstdc++ / libgcc_s (Linux) | bundled | GPL-3.0 with GCC runtime library exception | https://gcc.gnu.org/ |

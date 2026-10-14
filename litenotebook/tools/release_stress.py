@@ -240,15 +240,14 @@ def serve(
 
 
 def make_big_pdf(path: Path, pages: int) -> Path:
-    import pymupdf
-
+    from pdfgen import Document
     from quiz_fixtures import PDF_A
 
     words = (
         "harbour delta glacier ledger quorum lattice meridian ember solace "
         "matrix vector pivot echelon basis kernel rank"
     ).split()
-    doc = pymupdf.open()
+    doc = Document()
     for i in range(pages):
         page = doc.new_page(width=595, height=842)
         if i < len(PDF_A):
@@ -264,10 +263,8 @@ def make_big_pdf(path: Path, pages: int) -> Path:
                     f"of volume {i} in detail for the archive."
                 )
             text = "\n\n".join(paragraphs)
-        page.insert_textbox(pymupdf.Rect(40, 40, 555, 802), text, fontsize=9)
-    doc.save(path)
-    doc.close()
-    return path
+        page.textbox((40, 40, 555, 802), text, size=9)
+    return doc.save(path)
 
 
 def seed_database(data: Path, tmp: Path) -> dict[str, int]:

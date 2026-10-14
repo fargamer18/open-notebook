@@ -463,9 +463,12 @@ def test_license_inventory_has_bundled_optional_and_dev_sections(tmp_path):
     ):
         assert f"## {heading}" in text
     names = {r[0].lower() for r in rows}
-    assert "pymupdf" in names and "torch" in names
+    assert "pypdfium2" in names and "torch" in names and "pymupdf" not in names
     bundled, _, rest = text.partition("## 3. Optional")
     optional, _, dev = rest.partition("## 4. Development")
-    assert "AGPL" in bundled and "llama.cpp" in optional and "sherpa-onnx" in optional
+    assert "PDFium" in bundled
+    rows = [line for line in bundled.splitlines() if line.startswith("|")]
+    assert rows and not [r for r in rows if "AGPL" in r or "mupdf" in r.lower()]
+    assert "llama.cpp" in optional and "sherpa-onnx" in optional
     assert "| pytest |" in dev and "| PyMuPDF |" not in dev
     assert "| pytest |" not in bundled
