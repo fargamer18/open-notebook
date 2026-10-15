@@ -6,13 +6,14 @@ with source / page citations, take notes, practise with quizzes and listen
 to audio overviews. Everything runs on your own computer. No account, no
 cloud service and no internet connection are needed for daily use.
 
-> **Status: 0.9.3 pre-release — not a stable v1.** Open release blockers:
+> **Status: 0.9.3 pre-release — not a stable v1.** The open release blocker
+> is **Windows: Prepared only.** It is not yet Built, Automated-tested or
+> Manually verified on real Windows; see [docs/windows.md](docs/windows.md)
+> and [docs/release-checklist.md](docs/release-checklist.md).
 >
-> 1. **Windows is Prepared only.** It is not yet Built, Automated-tested or
->    Manually verified on real Windows; see [docs/windows.md](docs/windows.md).
-> 2. **Linux release builds** must come from the Ubuntu 22.04 (glibc 2.35)
->    build ([docs/linux.md](docs/linux.md)). Builds made on newer
->    distributions are development artifacts.
+> Linux release builds come from Ubuntu 22.04 (glibc 2.35) and are verified
+> ([docs/linux.md](docs/linux.md)). Builds made on newer distributions are
+> development artifacts.
 >
 > PDFs are read with PDFium (pypdfium2); PyMuPDF was removed in 0.9.2, so the
 > former PDF-licensing blocker is closed — see
@@ -23,9 +24,9 @@ cloud service and no internet connection are needed for daily use.
 
 | | Linux x86_64 | Windows 11 / 10 x64 |
 |---|---|---|
-| Status | **Built and verified on Linux** (source mode and packaged app) | **Prepared**: code, installer script and CI job exist; nothing run on Windows yet |
-| Package | AppImage, tar.gz (+ optional embedding runtime) | Inno Setup installer, zip (+ optional runtime component) |
-| Minimum | glibc 2.35 (Ubuntu 22.04, Debian 12, Fedora 36 or newer) for the Ubuntu-built release | — |
+| Status | **Built and verified on Linux** (source mode and packaged app; tested on Ubuntu 22.04 and Arch) | **Prepared**: code, installer script and CI job exist; nothing run on Windows yet |
+| Package | AppImage (needs FUSE 2, or `--appimage-extract-and-run`), tar.gz (+ optional embedding runtime) | Inno Setup installer (unsigned), zip (+ optional runtime component) |
+| Minimum | glibc 2.35 for the Ubuntu-built release; other glibc 2.35+ distributions expected, not individually tested | — |
 
 macOS is not a target.
 
@@ -83,12 +84,19 @@ See [INSTALL.md](INSTALL.md). In short:
 LiteNotebook opens in your default browser at `http://127.0.0.1:<port>`.
 It listens on your own computer only.
 
-## Your data
+## Your data and privacy
 
-- Notebooks live in your user folder: `~/.local/share/LiteNotebook` on
-  Linux, `%LOCALAPPDATA%\LiteNotebook` on Windows.
-- Logs are kept separately. They contain no document text, notes, prompts or
-  keys.
+- **Local-first:** notebooks live in your user folder
+  (`~/.local/share/LiteNotebook` on Linux, `%LOCALAPPDATA%\LiteNotebook` on
+  Windows). The app listens on `127.0.0.1` only and makes no network request
+  in daily use: no account, no telemetry, no update check.
+- **Downloads only when you choose them:** optional components come from
+  their publishers over HTTPS, pinned by version and SHA-256.
+- **Logs** are kept separately. They contain no document text, notes,
+  prompts, search text or keys, and your home folder is masked.
+- **Deletion** removes the files, text, vectors and caches (SQLite
+  `secure_delete` is on).
+- **Backups:** notebook export/import, full backup and verified restore.
 - See [docs/backup.md](docs/backup.md) and [docs/security.md](docs/security.md).
 
 ## Limitations (0.9.x)
@@ -128,7 +136,13 @@ uv sync                     # CPU-only torch; no CUDA packages
 uv run pytest -q
 uv run ruff check . && uv run mypy --strict src
 uv run litenotebook serve --open
+uv run python tools/browser_smoke.py   # release browser smoke (Chromium/Chrome/Edge)
 ```
+
+Release tools: `tools/build.py` (packages), `tools/packaged_smoke.py`
+(a built package), `tools/browser_smoke.py` (critical pages in a real
+browser, source or package), `tools/release_stress.py` (stress, offline,
+lifecycle); see [docs/packaging.md](docs/packaging.md).
 
 Configuration is through environment variables (`LITENOTEBOOK_DATA_DIR`,
 `LITENOTEBOOK_PORT`, `LITENOTEBOOK_LLM_BASE_URL`, …); see

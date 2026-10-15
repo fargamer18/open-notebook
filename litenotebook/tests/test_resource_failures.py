@@ -226,6 +226,29 @@ def test_unwritable_data_folder_gives_an_actionable_start_error(tmp_path, monkey
     assert "--data-dir" in shown[0]
 
 
+def test_unwritable_log_folder_does_not_stop_the_app(tmp_path, monkeypatch):
+    import litenotebook.desktop as desktop
+
+    blocked = tmp_path / "logs-is-a-file"  # mkdir fails here on every OS
+    blocked.write_text("not a folder", encoding="utf-8")
+    served: list[Path] = []
+    shown: list[str] = []
+    monkeypatch.setattr(
+        desktop, "_serve", lambda s, no_browser, started: served.append(s.data_dir) or 0
+    )
+    monkeypatch.setattr(
+        desktop, "show_error_dialog", lambda t, m: shown.append(m) or True
+    )
+    settings = load_settings(
+        {
+            "LITENOTEBOOK_DATA_DIR": str(tmp_path / "data"),
+            "LITENOTEBOOK_LOG_DIR": str(blocked),
+        }
+    )
+    assert desktop.run(["--no-browser"], settings=settings) == 0
+    assert served == [tmp_path / "data"] and not shown
+
+
 def test_missing_source_file_gives_a_clear_reader_error(web, tmp_path):
     c, settings = web
     import sqlite3

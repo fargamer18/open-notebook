@@ -216,6 +216,7 @@ def serve(
     port: int,
     extra: list[str] | None = None,
     env_extra: dict | None = None,
+    new_session: bool = False,
 ) -> subprocess.Popen:
     env = {
         **os.environ,
@@ -232,7 +233,11 @@ def serve(
         str(port),
     ]
     return subprocess.Popen(
-        cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        cmd,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        start_new_session=new_session,
     )
 
 
@@ -616,6 +621,12 @@ def cmd_offline(args: argparse.Namespace) -> int:
     tmp = Path(tempfile.mkdtemp(prefix="ln-offline-"))
     data = tmp / "data"
     trace = tmp / "connect.trace"
+    # existing material first (chats, notes, annotation, quiz, audio transcript,
+    # graph memory) so the offline pages below open real stored content
+    sys.path.insert(0, str(ROOT / "tools"))
+    from browser_smoke import seed
+
+    seeded = seed(data, tmp)
     fake, llm = start_fake_model()
     port = free_port()
     base = f"http://127.0.0.1:{port}"
@@ -624,6 +635,7 @@ def cmd_offline(args: argparse.Namespace) -> int:
         llm,
         port,
         extra=["strace", "-f", "-qq", "-e", "trace=connect", "-o", str(trace)],
+        new_session=True,  # stop the server itself, not only strace (see below)
     )
     ok = []
     try:
@@ -632,47 +644,76 @@ def cmd_offline(args: argparse.Namespace) -> int:
         from conftest import make_pdf
 
         c.req("POST", "/notebooks", {"name": "Offline"})
+        off = f"/notebooks/{seeded['nb'] + 1}"
+        g = f"/notebooks/{seeded['nb']}"
         pdf = make_pdf(tmp / "o.pdf", ["The Velt river rises in the Orrin mountains."])
-        c.req("POST", "/notebooks/1/sources", files=("file", "o.pdf", pdf.read_bytes()))
+        c.req("POST", f"{off}/sources", files=("file", "o.pdf", pdf.read_bytes()))
         time.sleep(25)  # ingestion with the local MiniLM worker (if installed)
-        c.req("POST", "/notebooks/1/notes", {"title": "N", "content": "violet trams"})
+        c.req("POST", f"{off}/notes", {"title": "N", "content": "violet trams"})
+        quill = f"m:{seeded['quillport']}"
+        new_src = max(seeded["atlas"], seeded["algebra"]) + 1
         for path in (
             "/",
             "/setup",
             "/settings",
             "/settings/ai",
             "/settings/diagnostics",
-            "/notebooks/1",
-            "/notebooks/1/notes",
-            "/notebooks/1/study",
-            "/notebooks/1/search?q=violet",
-            "/notebooks/1/search?q=Velt&engine=hybrid",
-            "/notebooks/1/sources/1/read",
-            "/notebooks/1/sources/1/pages/1/render",
+            off,
+            f"{off}/notes",
+            f"{off}/study",
+            f"{off}/search?q=violet",
+            f"{off}/search?q=Velt&engine=hybrid",
+            f"{off}/sources/{new_src}/read",
+            f"{off}/sources/{new_src}/pages/1/render",
+            f"{g}/chat/{seeded['geo_conv']}",
+            f"{g}/notes/{seeded['trip_note']}",
+            f"{g}/sources/{seeded['atlas']}/read?citation={seeded['citation']}",
+            f"{g}/study/quizzes/{seeded['quiz']}",
+            f"{g}/study/attempts/{seeded['attempt']}/review",
+            f"{g}/study/audio/{seeded['overview']}",
+            f"{g}/memory",
+            f"{g}/memory/graph",
+            f"{g}/memory/graph/view.json",
+            f"{g}/memory/graph/local.json?node={quill}&depth=2",
+            "/static/graph.js",
             "/backup",
         ):
             st, _, _ = c.req("GET", path)
             ok.append((path, st))
         st, _, _ = c.req(
             "POST",
-            "/notebooks/1/chat/send",
+            f"{off}/chat/send",
             {"question": "Where does the Velt rise?", "conversation_id": ""},
         )
         ok.append(("chat (local fake model)", st))
-        st, body, _ = c.req("POST", "/notebooks/1/export", {})
+        st, body, _ = c.req("POST", f"{off}/export", {})
         ok.append(("export", st))
     finally:
-        proc.send_signal(signal.SIGINT)
+        # SIGINT to strace alone detaches it and leaves the traced server
+        # running, so signal the whole group (strace and the server)
+        os.killpg(proc.pid, signal.SIGINT)
         try:
             proc.wait(timeout=60)
         except subprocess.TimeoutExpired:
             proc.kill()
+        left = False
+        for _ in range(100):
+            try:
+                os.killpg(proc.pid, 0)
+            except ProcessLookupError:
+                break
+            left = True
+            time.sleep(0.2)
+        else:
+            os.killpg(proc.pid, signal.SIGKILL)
+        REPORT["server_stopped_cleanly"] = not left or _group_gone(proc.pid)
         fake.shutdown()
     import sqlite3
 
     db = sqlite3.connect(f"file:{data / 'litenotebook.sqlite3'}?mode=ro", uri=True)
     REPORT["source_status"] = db.execute(
-        "SELECT status, coalesce(error, '') FROM sources WHERE id = 1"
+        "SELECT status, coalesce(error, '') FROM sources WHERE id = "
+        "(SELECT max(id) FROM sources)"
     ).fetchone()
     db.close()
     lines = trace.read_text(errors="replace").splitlines() if trace.exists() else []
@@ -692,7 +733,16 @@ def cmd_offline(args: argparse.Namespace) -> int:
     )
     Path(args.out).write_text(json.dumps(REPORT, indent=1), encoding="utf-8")
     shutil.rmtree(tmp, ignore_errors=True)
-    return 0 if not external and all(s == 200 for _, s in ok) else 1
+    clean = bool(REPORT.get("server_stopped_cleanly"))
+    return 0 if clean and not external and all(s == 200 for _, s in ok) else 1
+
+
+def _group_gone(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return True
+    return False
 
 
 # --- lifecycle (built package) ---
@@ -756,15 +806,24 @@ def cmd_lifecycle(args: argparse.Namespace) -> int:
     results: dict[str, object] = {}
     try:
         times = []
-        for _ in range(8):
+        actions = []
+        for i in range(8):
             t0 = time.perf_counter()
             p = launch()
             url = url_of(p)
             times.append(round(time.perf_counter() - t0, 2))
-            Client(url).req("POST", "/app/quit", {})
+            c = Client(url)  # a small action each time: create and open a notebook
+            st, _, _ = c.req("POST", "/notebooks", {"name": f"Cycle {i}"})
+            actions.append((st, c.req("GET", "/")[0]))
+            c.req("POST", "/app/quit", {})
             p.wait(timeout=30)
         time.sleep(1)
-        results["repeated_start_quit"] = {"runs": 8, "ready_s": times, "left": ours()}
+        results["repeated_start_quit"] = {
+            "runs": 8,
+            "ready_s": times,
+            "actions": actions,
+            "left": ours(),
+        }
         # port collision: something else listens on the configured port
         blocker = socket.socket()
         blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # TIME_WAIT
@@ -866,6 +925,19 @@ def cmd_lifecycle(args: argparse.Namespace) -> int:
                         x for x in left_worker if Path(f"/proc/{x}").exists()
                     ],
                     "left": ours(),
+                }
+                # restart on the same data: the stale lock is recovered and the
+                # notebook and its sources open
+                p = launch()
+                c = Client(url_of(p))
+                home = c.req("GET", "/")[1]
+                sources = c.req("GET", "/notebooks/1")[1]
+                c.req("POST", "/app/quit", {})
+                p.wait(timeout=30)
+                results["restart_after_sigkill"] = {
+                    "notebook_listed": b"Life" in home,
+                    "sources_listed": b"l.pdf" in sources and b"l2.pdf" in sources,
+                    "exit": p.returncode,
                 }
             else:
                 c.req("POST", "/app/quit", {})

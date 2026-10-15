@@ -31,6 +31,7 @@ public v1 release:
 uv sync --group packaging                 # pinned PyInstaller 6.22.3 (+ hooks 2026.7)
 uv run --group packaging python tools/build.py [--skip-worker] [--skip-appimage]
 uv run python tools/packaged_smoke.py dist/litenotebook [--runtime-archive FILE]
+uv run python tools/browser_smoke.py --app PATH/TO/litenotebook[.exe]   # real browser
 
 packaging/linux/build-in-ubuntu-2204.sh   # Linux RELEASE build (podman/docker, Ubuntu 22.04)
 python tools/release_stress.py lifecycle dist/litenotebook --runtime-archive FILE
@@ -305,5 +306,7 @@ The repository is MIT-licensed, inherited from Open Notebook.
   transformers and sentence-transformers (Apache-2.0).
 - The PyInstaller bootloader (GPL with a distribution exception).
 - libstdc++/libgomp (GPL with the GCC runtime exception).
-- Speech (sherpa-onnx Apache-2.0, espeak-ng GPL-3.0) and llama.cpp (MIT)
-  are not bundled.
+- Speech and llama.cpp (MIT) are not bundled. Speech is several separately
+  licensed parts (sherpa-onnx Apache-2.0, ONNX Runtime MIT, espeak-ng and
+  espeak-ng-data GPL-3.0-or-later, Piper voice models per their model cards);
+  see `docs/THIRD_PARTY_LICENSES.md` section 3.

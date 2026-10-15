@@ -8,7 +8,7 @@ collapsed into one "supported" checkbox.
 | Status | Meaning | Windows today |
 |---|---|---|
 | **Prepared** | Code paths, installer script and CI job exist; Windows behaviour is simulated in tests on Linux | ✅ yes |
-| **Built** | The Windows package was produced by the release build on Windows (CI `windows-2022` or a Windows 11 machine) | ❌ not yet: no Windows runner was available in Phase 16, and this repository's GitHub Actions cannot run the LiteNotebook workflow until it moves to its own repository |
+| **Built** | The Windows package was produced by the release build on Windows (CI `windows-2022` or a Windows 11 machine) | ❌ not yet: no Windows machine, VM or runner was available in Phases 16–19, and this repository's GitHub Actions cannot run the LiteNotebook workflow until it is pushed to a repository that runs it (not authorised so far) |
 | **Automated tests passed** | On real Windows: the source test suite, the packaged smoke test (with and without the embedding runtime) and silent install / uninstall all pass (`ci/litenotebook-build.yml`) | ❌ not yet |
 | **Manually verified** | A person ran [windows-test-plan.md](windows-test-plan.md) on a Windows desktop (browser, console windows, SmartScreen, Start menu, uninstall) | ❌ not yet |
 
@@ -34,7 +34,8 @@ fakes) count only as **Prepared**.
    LiteNotebook repository and run it (or run the same steps on Windows 11:
    `uv sync --frozen --group packaging --group dev`, `uv run pytest`,
    `uv run --group packaging python tools/build.py`, then
-   `tools/packaged_smoke.py`). This gives **Built** and **Automated tests passed**.
+   `tools/packaged_smoke.py` and `tools/browser_smoke.py` (it finds Edge or
+   Chrome). This gives **Built** and **Automated tests passed**.
 2. On a Windows desktop, follow [windows-test-plan.md](windows-test-plan.md),
    including:
    - a user profile with a space and a non-ASCII character;

@@ -103,6 +103,13 @@ download that contains PyTorch).
 Installed only when the user chooses them in the setup wizard or
 Settings → Local AI, from the pinned, checksum-verified catalog entries.
 
+The speech component is not under one licence. The sherpa-onnx engine
+download contains sherpa-onnx's own Apache-2.0 code together with
+third-party code under other licences (listed separately below, including
+GPL-3.0-or-later espeak-ng), and each voice download contains a Piper voice
+model plus GPL-3.0-or-later espeak-ng-data. The licence files inside each
+download are authoritative. Not legal advice.
+
 | Component | Version / id | License | Source |
 |---|---|---|---|
 | llama.cpp (llama-server) | b11146 | MIT | https://github.com/ggml-org/llama.cpp |
@@ -110,11 +117,13 @@ Settings → Local AI, from the pinned, checksum-verified catalog entries.
 | Qwen3 4B | qwen3-4b-q4_k_m | Apache-2.0 | https://huggingface.co/Qwen/Qwen3-4B-GGUF |
 | Qwen3 8B | qwen3-8b-q4_k_m | Apache-2.0 | https://huggingface.co/Qwen/Qwen3-8B-GGUF |
 | MiniLM (all-MiniLM-L6-v2) | commit 1110a243fdf4 | Apache-2.0 | https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2 |
-| sherpa-onnx speech engine | 1.13.8 | Apache-2.0 | https://github.com/k2-fsa/sherpa-onnx |
-| espeak-ng / espeak-ng-data (inside the speech downloads) | as shipped | GPL-3.0 | https://github.com/espeak-ng/espeak-ng |
-| Kristin (US English) | piper-en_US-kristin-medium | Training data: public domain (per the voice's model card); voice repository: MIT | https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/kristin/medium/MODEL_CARD |
-| Norman (US English) | piper-en_US-norman-medium | Training data: public domain (per the voice's model card); voice repository: MIT | https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/norman/medium/MODEL_CARD |
-| LJ Speech (US English) | piper-en_US-ljspeech-medium | Training data: public domain (per the voice's model card); voice repository: MIT | https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD |
+| sherpa-onnx speech engine (its own code) | 1.13.8 | Apache-2.0 | https://github.com/k2-fsa/sherpa-onnx |
+| ONNX Runtime (inference library inside the speech engine download) | as shipped | MIT | https://github.com/microsoft/onnxruntime |
+| espeak-ng (phonemizer used by the engine's Piper text-to-speech front end, inside the speech engine download) | as shipped | GPL-3.0-or-later | https://github.com/espeak-ng/espeak-ng |
+| espeak-ng-data (pronunciation data inside each voice download) | as shipped | GPL-3.0-or-later | https://github.com/espeak-ng/espeak-ng |
+| Piper voice model: Kristin (US English) | piper-en_US-kristin-medium | Training data: public domain (per the voice's model card); voice repository: MIT | https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/kristin/medium/MODEL_CARD |
+| Piper voice model: Norman (US English) | piper-en_US-norman-medium | Training data: public domain (per the voice's model card); voice repository: MIT | https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/norman/medium/MODEL_CARD |
+| Piper voice model: LJ Speech (US English) | piper-en_US-ljspeech-medium | Training data: public domain (per the voice's model card); voice repository: MIT | https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD |
 
 ## 4. Development only (never shipped)
 

@@ -52,3 +52,33 @@ workspace.
 **The notes list** is not paginated. 400 notes produce a 90 KiB page, which
 is acceptable. Pagination is a possible later improvement, not a release
 blocker.
+
+## Final re-check (Phase 19, 0.9.3)
+
+Same machine and method (`tools/release_stress.py stress`, the browser smoke
+and the packaged lifecycle run). No regression in the app; one environment
+effect is explained below.
+
+| Budget | Phase 16–18 | Phase 19 |
+|---|---|---|
+| Packaged start → ready | 0.9–1.1 s | 0.88–0.98 s over 8 runs; 0.9 s in a clean Ubuntu 22.04 |
+| Source start (large notebook) | 1.4–1.7 s | 2.5–2.6 s (source tree on an NTFS/FUSE hard drive, cold cache); 1.3–1.5 s warm in the browser smoke |
+| Ordinary pages (median) | 4–20 ms | 4–17 ms (memory list 17 ms, graph page 5 ms) |
+| Long chat (120 turns) | 78 / 122 ms | 72 / 113 ms (median / p95) |
+| Keyword search | 17 ms | 20 ms |
+| Hybrid search, warm | 23 ms | 31 ms |
+| Reader page image | 8 ms cached, 61 ms first | 7 ms cached, 34 ms first |
+| Graph API / browser | 4–22 ms; settled 1.7 s | graph page 5 ms; settled 1.6 s; 0–2 ms of browser work per 2 s once settled |
+| Full backup (large notebook) | 0.43 s | 0.19 s |
+| Ingestion, 520-page PDF (1,038 chunks) | 74 s | 82 s (includes the worker's cold start, see below) |
+| Hybrid search, cold (source mode) | ~23 s | 60 s, see below |
+| Embedding worker cold start, packaged (NVMe) | — | upload → Ready of a small PDF in 5.1 s, worker start included |
+| Server memory over repeated work | +0.4 MiB over six rounds | 136.9 → 137.7 MiB over six rounds (max +0.6 MiB per round, not monotonic): no leak |
+
+**Cold hybrid search in source mode.** The library versions are identical
+to Phase 16 (`uv.lock`). On this machine the source checkout and its virtual
+environment sit on an NTFS hard drive mounted through FUSE; with a cold page
+cache `import sentence_transformers` alone took 33 s and a full MiniLM load
+25–32 s. The packaged embedding runtime on an NVMe drive starts in a few
+seconds. The UI's "~15 s" note is a typical value, not a bound: slow disks
+take longer.

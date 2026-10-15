@@ -6,7 +6,7 @@
 |---|---|
 | Prepared | ✅ |
 | Built | ✅ on Ubuntu 22.04 (container build, `packaging/linux/build-in-ubuntu-2204.sh`) and on the Arch development machine |
-| Automated tests passed | ✅ source tests (Arch); packaged smoke tests against the Ubuntu-built package (Arch host, and inside an Ubuntu 22.04 container) |
+| Automated tests passed | ✅ source tests (Arch); packaged smoke tests (± embedding runtime) inside a clean Ubuntu 22.04 container; `tools/browser_smoke.py` against the tarball, the AppImage (FUSE 2, Arch) and the app running inside Ubuntu 22.04; lifecycle and offline runs (Phase 19) |
 | Manually verified | ✅ on the development machine (Arch Linux, KDE, Firefox/Chromium) |
 
 Linux arm64 is not built.
@@ -29,9 +29,11 @@ Linux compatibility is made.**
 
 ## AppImage vs tarball
 
-- **AppImage:** one file, mounted with FUSE 2 when run. On systems without
-  `libfuse2` (e.g. a default Ubuntu 24.04), run it with
-  `--appimage-extract-and-run`, install `libfuse2t64`, or use the tarball.
+- **AppImage:** one file, mounted with FUSE 2 when run. Ubuntu 22.04 and
+  newer do not install `libfuse2` by default; without it a direct start fails
+  with "No suitable fusermount binary found". Install `libfuse2`
+  (`libfuse2t64` on 24.04), run it with `--appimage-extract-and-run` (verified
+  on a clean Ubuntu 22.04), or use the tarball.
 - **Tarball:** a plain folder. Add it to the application menu with
   `./litenotebook --install-desktop-entry` (per user, in
   `~/.local/share/applications`).

@@ -195,9 +195,10 @@ def optional_components() -> list[tuple[str, str, str, str]]:
         )
     speech = json.loads((CATALOG / "speech.json").read_text("utf-8"))
     engine = speech["engines"][0]
+    # The speech stack is several separately licensed parts; list each one.
     rows.append(
         (
-            engine["project"] + " speech engine",
+            engine["project"] + " speech engine (its own code)",
             engine["version"],
             engine["license"],
             engine["source_url"],
@@ -205,16 +206,33 @@ def optional_components() -> list[tuple[str, str, str, str]]:
     )
     rows.append(
         (
-            "espeak-ng / espeak-ng-data (inside the speech downloads)",
+            "ONNX Runtime (inference library inside the speech engine download)",
             "as shipped",
-            "GPL-3.0",
+            "MIT",
+            "https://github.com/microsoft/onnxruntime",
+        )
+    )
+    rows.append(
+        (
+            "espeak-ng (phonemizer used by the engine's Piper text-to-speech "
+            "front end, inside the speech engine download)",
+            "as shipped",
+            "GPL-3.0-or-later",
+            "https://github.com/espeak-ng/espeak-ng",
+        )
+    )
+    rows.append(
+        (
+            "espeak-ng-data (pronunciation data inside each voice download)",
+            "as shipped",
+            "GPL-3.0-or-later",
             "https://github.com/espeak-ng/espeak-ng",
         )
     )
     for v in speech.get("voices", []):
         rows.append(
             (
-                v.get("display_name") or v["id"],
+                "Piper voice model: " + (v.get("display_name") or v["id"]),
                 v["id"],
                 v.get("license", "?"),
                 v.get("model_card_url") or v.get("model_page") or "",
@@ -336,6 +354,13 @@ def write_inventory(out: Path) -> list[tuple[str, str, str, str]]:
         "",
         "Installed only when the user chooses them in the setup wizard or",
         "Settings → Local AI, from the pinned, checksum-verified catalog entries.",
+        "",
+        "The speech component is not under one licence. The sherpa-onnx engine",
+        "download contains sherpa-onnx's own Apache-2.0 code together with",
+        "third-party code under other licences (listed separately below, including",
+        "GPL-3.0-or-later espeak-ng), and each voice download contains a Piper voice",
+        "model plus GPL-3.0-or-later espeak-ng-data. The licence files inside each",
+        "download are authoritative. Not legal advice.",
         "",
         "| Component | Version / id | License | Source |",
         "|---|---|---|---|",

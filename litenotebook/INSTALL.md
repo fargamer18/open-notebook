@@ -5,12 +5,15 @@ Python, no command line and no internet connection after installation.
 AI features are optional extras you install from inside the app.
 
 Release status: see [README.md](README.md). Windows packages are **not yet
-built or verified on Windows**. The Linux instructions below are verified.
+built or verified on Windows**. The Linux instructions below are verified on
+Ubuntu 22.04 (clean container) and Arch Linux.
 
 ## Linux (x86_64)
 
-Requirements: glibc 2.35 or newer for release builds made on Ubuntu 22.04,
-for example Ubuntu 22.04+, Debian 12+, Fedora 36+ or Arch.
+Requirements: glibc 2.35 or newer (release builds are made on Ubuntu 22.04).
+Tested on Ubuntu 22.04 and Arch Linux. Other distributions with glibc 2.35+
+(for example Debian 12+ or Fedora 36+) are expected to work but are not
+individually tested.
 
 ### AppImage (single file)
 
@@ -22,8 +25,12 @@ for example Ubuntu 22.04+, Debian 12+, Fedora 36+ or Arch.
    ./LiteNotebook-0.9.3-x86_64.AppImage
    ```
 
-Your browser opens LiteNotebook. If your system has no FUSE 2 library, run
-it with `--appimage-extract-and-run`, or use the tarball.
+Your browser opens LiteNotebook. The AppImage needs the FUSE 2 library
+(`libfuse.so.2`). Ubuntu 22.04 and newer do not install it by default:
+install `libfuse2` (Ubuntu 24.04: `libfuse2t64`), or run
+`./LiteNotebook-0.9.3-x86_64.AppImage --appimage-extract-and-run`, or use the
+tarball. Without FUSE 2 a direct start fails with "No suitable fusermount
+binary found".
 
 ### Tarball
 

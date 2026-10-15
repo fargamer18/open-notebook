@@ -97,10 +97,15 @@ downloaded during normal use.
 
 Licensing at a glance (not legal advice):
 
-- sherpa-onnx itself is Apache-2.0.
-- The current Piper-compatible speech path also uses espeak-ng and its data
-  (GPL-3.0), which carry additional GPL-related licensing considerations. The
-  complete speech stack is therefore not "Apache-only".
+- sherpa-onnx's own code is Apache-2.0; the engine download also contains
+  ONNX Runtime (MIT) and espeak-ng (GPL-3.0-or-later), the phonemizer of the
+  Piper text-to-speech front end.
+- Each voice download contains a Piper voice model (training data public
+  domain per its model card; piper-voices repository MIT) and espeak-ng-data
+  (GPL-3.0-or-later).
+- The complete speech stack is therefore not "Apache-only"; each component
+  keeps its own licence, and the licence files in each download are
+  authoritative.
 - LiteNotebook does not bundle the speech engine, espeak-ng data or voices in
   its application or installer; the user downloads them from their
   publishers.

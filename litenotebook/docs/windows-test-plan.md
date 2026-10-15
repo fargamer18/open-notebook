@@ -1,12 +1,75 @@
 # Windows 11 validation checklist
 
 Phase 11 made the code portable and simulated Windows rules on Linux. **None of
-the items below has been run on Windows yet.** Mark each one only after doing it
-on a real Windows 11 machine (Phase 13 / release testing). Record the Windows
-build, Python version and `litenotebook diagnostics platform` output with the
-results.
+the items below has been run on Windows yet** (still true after Phase 19: no
+Windows environment was available). Mark each one only after doing it on a
+real Windows 10/11 machine or VM. Record the Windows build, Python version and
+`litenotebook diagnostics platform` output with the results.
 
 Use a test account or a disposable data folder — never your only copy of data.
+
+## v1.0 gate (Phase 19) — the order to run it in
+
+Each step names its status word. Record the result in the table at the end.
+
+1. **Built:** `uv sync --frozen --group packaging --group dev`;
+   `uv run --group packaging python tools/build.py`. Check `build-report.json`
+   (version, commit without `+dirty`), `SHA256SUMS`, file sizes, the
+   installer's version and icon, `LiteNotebook.exe` as the executable name,
+   `pypdfium2_raw\pdfium.dll` present and no `*mupdf*` file, `graph.js` and
+   `htmx.min.js` present, no model, database or user file inside.
+2. **Automated tests passed:** `uv run pytest -q`;
+   `tools/packaged_smoke.py dist\litenotebook` with and without
+   `--runtime-archive`; `tools/browser_smoke.py` (source) and
+   `tools/browser_smoke.py --app "%LOCALAPPDATA%\Programs\LiteNotebook\LiteNotebook.exe"`
+   after a silent install; silent uninstall keeps `%LOCALAPPDATA%\LiteNotebook`.
+   (`ci/litenotebook-build.yml` runs all of this on `windows-2022`.)
+3. **Manually verified** (a person at a Windows desktop):
+   - install with the real installer as a normal user (no UAC prompt); Start
+     menu entry; optional desktop shortcut; "Apps & features" entry with the
+     right version; nothing downloaded during install; note the SmartScreen
+     prompt (installer is unsigned);
+   - a user profile like `C:\Users\Test User José`: data, database, PDFs,
+     backups, cache, logs and the optional runtime all under
+     `%LOCALAPPDATA%\LiteNotebook`;
+   - first launch: the browser opens once, Diagnostics shows `127.0.0.1`
+     only (`netstat -ano | findstr LISTENING`), no console window stays open,
+     the setup wizard can be skipped and resumed, no model download starts;
+   - launch a second time: it opens the same page; Task Manager shows one
+     `LiteNotebook.exe` server and no extra worker;
+   - PDFs: text and multi-page uploads, Reader zoom, citation highlight,
+     annotation, then delete the source **while its Reader tab is open**: the
+     file in `notebooks\<id>\sources\` and its page cache are gone after the
+     handles close (Windows file locking);
+   - core-only: indexing a new PDF says the runtime is missing; with the
+     runtime: worker starts without a window, MiniLM loads, ingestion and FAISS
+     complete, hybrid search works, no `torch` in `LiteNotebook.exe`, the worker
+     exits on Quit;
+   - Local AI if a model is available: install/import the runtime, select a
+     model, start, health, **one** short answer, stop, restart, Quit, no
+     `llama-server.exe` left; say which parts were not possible;
+   - quiz on an ingested source (take, score, retry mistakes, history,
+     evidence → highlighted page); audio transcript citation → Reader; speech
+     if installed (short WAV, playback, delete), otherwise the optional-component
+     state;
+   - graph: Global (pan, zoom, drag, search, filters, inspector), Local depth
+     1/2/3, Note/Chat/Reader/evidence navigation, List view, and Windows
+     "Show animations" off (Settings → Accessibility → Visual effects) gives
+     the settled graph without animation;
+   - notes create/edit/delete, keyword and hybrid search, Memory page;
+   - backup: export, import into a fresh data folder, full backup and restore
+     (paths with spaces/Unicode); import a **Linux-created** archive
+     (`python tests/portable_archive.py fixture.zip` on Linux) and take a
+     Windows export back to Linux;
+   - Quit (Settings → Diagnostics) at least 8 times with a small action in
+     between: no `LiteNotebook.exe`, worker, `llama-server.exe` or
+     `sherpa-onnx-offline-tts.exe` left;
+   - kill `LiteNotebook.exe` in Task Manager while the worker runs; restart:
+     data opens, the lock is recovered;
+   - uninstall: program files and shortcuts removed, notebooks and backups
+     kept; reinstall: the existing data opens;
+   - a short Narrator (or NVDA) pass: notebook home, Reader, a quiz question,
+     the graph List view.
 
 ## Install / environment (running from source)
 

@@ -216,14 +216,22 @@ jenny_dioco say only "See URL".
 
 ### Licensing summary (not legal advice)
 
-- **Engine:** sherpa-onnx is Apache-2.0. Its TTS front end uses espeak-ng
-  (GPL-3.0) for phonemes.
-- **Voice archives:** they ship `espeak-ng-data` (GPL-3.0). The voice models'
-  training data is public domain per their model cards. The piper-voices
-  repository is MIT.
-- **Redistribution:** Apache-2.0 and MIT allow it with notices. espeak-ng is
-  GPL-3.0: bundling it with LiteNotebook would bring GPL obligations for
-  those parts.
+The speech stack is several separately licensed components, not one
+licence:
+
+| Component | Where it comes from | Licence |
+|---|---|---|
+| sherpa-onnx (its own code) | the engine download | Apache-2.0 |
+| ONNX Runtime (inference library) | inside the engine download | MIT |
+| espeak-ng (phonemizer used by the Piper text-to-speech front end) | inside the engine download | GPL-3.0-or-later |
+| espeak-ng-data (pronunciation data) | inside each voice download | GPL-3.0-or-later |
+| Piper voice models (Kristin, Norman, LJ Speech; int8 conversions published by sherpa-onnx) | each voice download | training data public domain per each model card; the piper-voices repository is MIT |
+
+- The licence files inside each download are authoritative; the table is a
+  summary.
+- **Redistribution:** Apache-2.0 and MIT allow it with notices. espeak-ng and
+  espeak-ng-data are GPL-3.0-or-later: bundling them with LiteNotebook would
+  bring GPL obligations for those parts.
 - **LiteNotebook therefore bundles nothing.** The engine and each voice are
   downloaded by the user, on request, from their publishers, and run as a
   separate program. User-downloaded components avoid redistributing GPL

@@ -86,6 +86,13 @@ jobs:
           RUNTIME=$(ls dist/litenotebook/LiteNotebook-embedding-runtime-*)
           uv run --frozen python tools/packaged_smoke.py dist/litenotebook \
             --runtime-archive "$RUNTIME" --json smoke-runtime.json
+      - name: Browser smoke (source mode; Chrome or Edge from the runner image)
+        run: uv run --frozen python tools/browser_smoke.py --json browser-source.json
+      - name: Browser smoke (packaged app, Linux)
+        if: runner.os == 'Linux'
+        run: |
+          APP=$(ls -d dist/litenotebook/LiteNotebook-*-linux-x86_64 | head -1)/litenotebook
+          uv run --frozen python tools/browser_smoke.py --app "$APP" --json browser-package.json
       - name: Silent install, smoke test, uninstall keeps data (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -96,6 +103,8 @@ jobs:
           if (-not (Test-Path (Join-Path $dir "LiteNotebook.exe"))) { throw "not installed" }
           uv run --frozen python tools/packaged_smoke.py --app-folder "$dir" --json smoke-installed.json
           if ($LASTEXITCODE -ne 0) { throw "installed app smoke test failed" }
+          uv run --frozen python tools/browser_smoke.py --app (Join-Path $dir "LiteNotebook.exe") --json browser-installed.json
+          if ($LASTEXITCODE -ne 0) { throw "installed app browser smoke failed" }
           $data = Join-Path $env:LOCALAPPDATA "LiteNotebook"
           New-Item -ItemType Directory -Force $data | Out-Null
           Set-Content (Join-Path $data "keep-me.txt") "user data"
@@ -116,4 +125,5 @@ jobs:
             litenotebook/dist/litenotebook/SHA256SUMS
             litenotebook/dist/litenotebook/build-report.json
             litenotebook/smoke-*.json
+            litenotebook/browser-*.json
             litenotebook/exports/*.zip
