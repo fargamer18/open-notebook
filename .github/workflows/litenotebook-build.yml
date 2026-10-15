@@ -36,8 +36,8 @@ jobs:
         working-directory: litenotebook
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.21"
       - name: Inno Setup (Windows)
@@ -118,7 +118,7 @@ jobs:
           Start-Sleep -Seconds 5
           if (Test-Path (Join-Path $dir "LiteNotebook.exe")) { throw "program files left" }
           if (-not (Test-Path (Join-Path $data "keep-me.txt"))) { throw "user data removed" }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: litenotebook-${{ runner.os == 'Windows' && 'windows-x64' || 'linux-x86_64' }}
@@ -142,7 +142,7 @@ jobs:
     needs: build
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: parts
       - name: Combined SHA256SUMS and release-manifest.json
@@ -165,7 +165,7 @@ jobs:
           (out / "SHA256SUMS").write_text("".join(f"{a['sha256']}  {a['filename']}\n" for a in artifacts), "utf-8")
           print(json.dumps(manifest, indent=1))
           EOF
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: litenotebook-release-files
           retention-days: 14
