@@ -1,6 +1,6 @@
 # LiteNotebook on Linux
 
-## Status (0.9.2)
+## Status (0.9.3)
 
 | Status | Linux x86_64 |
 |---|---|

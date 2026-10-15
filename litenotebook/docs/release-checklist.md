@@ -48,5 +48,5 @@ for them.
 - [ ] Chat answer with citations
 - [ ] Study → quiz question with feedback, and the result/review page
 - [ ] Study → Audio Overview player with chapters and transcript
-- [ ] Memory graph (current explorer view)
+- [ ] Knowledge graph: Global view, a Local view with the inspector open
 - [ ] Setup wizard: hardware step and Local AI settings

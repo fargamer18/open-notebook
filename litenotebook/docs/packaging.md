@@ -9,7 +9,7 @@ default browser. Users need neither Python nor the command line.
 | Windows x64 | `LiteNotebook-<v>-Setup.exe` (Inno Setup), `LiteNotebook-<v>-windows-x86_64.zip` | **Prepared** only: not Built, not tested, not verified ([windows.md](windows.md)) |
 | Both | `LiteNotebook-embedding-runtime-<v>-<platform>.tar.gz` / `.zip` (optional) | Linux built and verified; Windows prepared |
 
-Version: `litenotebook.__version__` (currently **0.9.2**, a pre-release).
+Version: `litenotebook.__version__` (currently **0.9.3**, a pre-release).
 `pyproject.toml` must match it; a test and the build both enforce this.
 
 ## Release blockers (0.9.x is not a public v1 release)

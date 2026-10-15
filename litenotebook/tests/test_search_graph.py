@@ -385,8 +385,15 @@ def test_search_results_are_scoped_on_the_web(web):
 def test_graph_routes(web):
     c, nb = web["c"], web["nb"]
     page = c.get(f"/notebooks/{nb}/memory/graph")
-    center = int(re.search(r'data-center="(\d+)"', page.text).group(1))
+    assert 'data-mode="global"' in page.text
     assert '<script src="/static/graph.js" defer></script>' in page.text
+    view = c.get(f"/notebooks/{nb}/memory/graph/view.json").json()
+    top = next(n for n in view["nodes"] if n["type"] == "concept")
+    center = int(top["id"].removeprefix("m:"))
+    local = c.get(f"/notebooks/{nb}/memory/graph?node={center}")
+    assert (
+        'data-mode="local"' in local.text and f'data-center="m:{center}"' in local.text
+    )
     j = c.get(f"/notebooks/{nb}/memory/graph.json?node={center}&depth=2").json()
     assert j["nodes"] and j["limits"] == {"nodes": 50, "edges": 100, "depth": 2}
     filt = c.get(

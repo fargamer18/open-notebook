@@ -1,4 +1,4 @@
-# Installing LiteNotebook 0.9.2 (pre-release)
+# Installing LiteNotebook 0.9.3 (pre-release)
 
 LiteNotebook is a desktop app that opens in your web browser. It needs no
 Python, no command line and no internet connection after installation.
@@ -14,12 +14,12 @@ for example Ubuntu 22.04+, Debian 12+, Fedora 36+ or Arch.
 
 ### AppImage (single file)
 
-1. Download `LiteNotebook-0.9.2-x86_64.AppImage` and `SHA256SUMS`.
+1. Download `LiteNotebook-0.9.3-x86_64.AppImage` and `SHA256SUMS`.
 2. Optional, to check the download: `sha256sum -c SHA256SUMS --ignore-missing`
 3. Make it executable and start it:
    ```bash
-   chmod +x LiteNotebook-0.9.2-x86_64.AppImage
-   ./LiteNotebook-0.9.2-x86_64.AppImage
+   chmod +x LiteNotebook-0.9.3-x86_64.AppImage
+   ./LiteNotebook-0.9.3-x86_64.AppImage
    ```
 
 Your browser opens LiteNotebook. If your system has no FUSE 2 library, run
@@ -28,15 +28,15 @@ it with `--appimage-extract-and-run`, or use the tarball.
 ### Tarball
 
 ```bash
-tar -xzf LiteNotebook-0.9.2-linux-x86_64.tar.gz
-cd LiteNotebook-0.9.2-linux-x86_64
+tar -xzf LiteNotebook-0.9.3-linux-x86_64.tar.gz
+cd LiteNotebook-0.9.3-linux-x86_64
 ./litenotebook                          # start
 ./litenotebook --install-desktop-entry  # optional: add to the app menu
 ```
 
 ## Windows 10 / 11 (x64) — prepared, not yet verified
 
-The installer `LiteNotebook-0.9.2-Setup.exe`:
+The installer `LiteNotebook-0.9.3-Setup.exe`:
 
 - installs for your user only, in `%LOCALAPPDATA%\Programs\LiteNotebook`,
   with no administrator rights;
@@ -69,7 +69,7 @@ tab does not stop it.
 |---|---|---|
 | Generation (llama.cpp + Qwen3, or your own llama-server / GGUF file) | Setup wizard or Settings → Local AI | the download size is shown before you start |
 | Embeddings: MiniLM | same | ~90 MB |
-| Embedding runtime (**packaged app only**) | Settings → Local AI → Semantic search: enter the path of the downloaded `LiteNotebook-embedding-runtime-0.9.2-…` archive → *Check and install*; or unpack it as an `embedding-runtime` folder next to the program; or the Windows installer's optional component | needed to index new PDFs in the packaged app (~330 MB download, ~1 GB unpacked) |
+| Embedding runtime (**packaged app only**) | Settings → Local AI → Semantic search: enter the path of the downloaded `LiteNotebook-embedding-runtime-0.9.3-…` archive → *Check and install*; or unpack it as an `embedding-runtime` folder next to the program; or the Windows installer's optional component | needed to index new PDFs in the packaged app (~330 MB download, ~1 GB unpacked) |
 | Speech: sherpa-onnx + voices | Settings → Local AI → Speech | for reading audio overviews aloud |
 
 Everything is checked against pinned SHA-256 checksums before use.

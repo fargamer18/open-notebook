@@ -1,47 +1,87 @@
 {% set nb = s.notebook %}
-<section class="panel mem-panel" aria-labelledby="graph-title">
+<section class="panel mem-panel kg-head" aria-labelledby="graph-title">
   <div class="panel-head">
-    <h2 id="graph-title">Memory graph</h2>
+    <h2 id="graph-title">Knowledge graph</h2>
     <nav class="mem-filters" aria-label="Memory views">
       <a href="/notebooks/{{ nb.id }}/memory">List</a>
       <a href="/notebooks/{{ nb.id }}/memory/graph" aria-current="page">Graph</a>
     </nav>
   </div>
-  {% if center %}
-  <div class="graph-controls" id="graph" data-notebook-id="{{ nb.id }}" data-center="{{ center }}" data-depth="{{ depth }}">
-    <form class="graph-search" id="graph-search" role="search">
-      <label class="sr-only" for="graph-q">Find a node</label>
-      <input id="graph-q" maxlength="300" placeholder="Find a concept, note or question…" autocomplete="off">
-      <button class="btn btn-sm" type="submit">Find</button>
-      <ul class="graph-hits" id="graph-hits"></ul>
-    </form>
-    <fieldset class="graph-opts">
-      <legend class="sr-only">Depth</legend>
-      <label class="check"><input type="radio" name="depth" value="1" {% if depth == 1 %}checked{% endif %}> Depth 1</label>
-      <label class="check"><input type="radio" name="depth" value="2" {% if depth == 2 %}checked{% endif %}> Depth 2</label>
-    </fieldset>
-    <fieldset class="graph-opts" id="graph-types">
-      <legend class="sr-only">Node types shown (legend)</legend>
-      <span class="muted" aria-hidden="true">Show:</span>
-      {% for t, label in [("concept", "Concepts"), ("note", "Notes"), ("question", "Questions"), ("answer", "Answers"), ("correction", "Corrections"), ("source_evidence", "Evidence"), ("conversation", "Conversations")] %}
-        <label class="check"><input type="checkbox" value="{{ t }}" checked> <span class="gdot gdot-{{ t }}" aria-hidden="true"></span>{{ label }}</label>
-      {% endfor %}
-    </fieldset>
-    <div class="graph-zoom" role="group" aria-label="Graph zoom">
-      <button class="btn btn-sm btn-icon" type="button" id="graph-zoom-out" aria-label="Zoom out">−</button>
-      <button class="btn btn-sm btn-icon" type="button" id="graph-zoom-in" aria-label="Zoom in">+</button>
-      <button class="btn btn-sm" type="button" id="graph-zoom-reset">Reset view</button>
+  <div class="kg-toolbar" id="kg" data-notebook-id="{{ nb.id }}" data-mode="{{ graph_mode }}"
+       data-center="{{ center }}" data-depth="{{ depth }}">
+    <div class="kg-modes" role="group" aria-label="Graph mode">
+      <button class="btn btn-sm" type="button" id="kg-mode-global" aria-pressed="{{ 'true' if graph_mode == 'global' else 'false' }}">Global</button>
+      <button class="btn btn-sm" type="button" id="kg-mode-local" aria-pressed="{{ 'true' if graph_mode == 'local' else 'false' }}">Local</button>
     </div>
-    <p class="muted graph-status" id="graph-status" role="status">Loading graph…</p>
+    <form class="kg-search" id="kg-search" role="search" autocomplete="off">
+      <label class="sr-only" for="kg-q">Find in the graph</label>
+      <input id="kg-q" type="search" maxlength="200" placeholder="Find a concept, note, source…" data-slash-focus
+             aria-controls="kg-hits" aria-describedby="kg-search-hint">
+      <span class="sr-only" id="kg-search-hint">Matching nodes are highlighted. Press Enter to select the first match.</span>
+      <ul class="kg-hits" id="kg-hits" aria-label="Matching nodes"></ul>
+    </form>
+    <fieldset class="kg-depth" id="kg-depth" {% if graph_mode != 'local' %}hidden{% endif %}>
+      <legend class="sr-only">Local depth</legend>
+      <span class="muted" aria-hidden="true">Depth</span>
+      {% for d in (1, 2, 3) %}<label class="check"><input type="radio" name="kg-depth" value="{{ d }}" {% if d == depth %}checked{% endif %}> {{ d }}</label>{% endfor %}
+    </fieldset>
+    <div class="kg-view" role="group" aria-label="View">
+      <button class="btn btn-sm btn-icon" type="button" id="kg-zoom-out" aria-label="Zoom out" title="Zoom out (−)">−</button>
+      <button class="btn btn-sm btn-icon" type="button" id="kg-zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
+      <button class="btn btn-sm" type="button" id="kg-fit" title="Fit graph (0)">Fit</button>
+      <button class="btn btn-sm" type="button" id="kg-reset" title="Release pinned nodes and lay out again">Reset layout</button>
+    </div>
   </div>
-  {% else %}
-    <div class="empty-state"><p>No memory yet. Ask questions in <a href="/notebooks/{{ nb.id }}/chat">Chat</a> or write <a href="/notebooks/{{ nb.id }}/notes">Notes</a>; their concepts appear here as a graph.</p></div>
-  {% endif %}
+  <details class="kg-filters" id="kg-filters">
+    <summary>Filters</summary>
+    <div class="kg-filter-body">
+      <fieldset class="kg-types" id="kg-types">
+        <legend>Show node types</legend>
+        {% for t in default_types + optional_types %}
+          <label class="check"><input type="checkbox" value="{{ t }}" {% if t in default_types %}checked{% endif %}> <span class="kg-shape kg-shape-{{ t }}" aria-hidden="true"></span>{{ type_labels[t] }}{% if t == "quiz" %} (study activity){% endif %}</label>
+        {% endfor %}
+      </fieldset>
+      <fieldset class="kg-more">
+        <legend>Display</legend>
+        <label class="check"><input type="checkbox" id="kg-orphans"> Hide nodes without connections</label>
+        <label class="kg-min">Minimum connections <input type="number" id="kg-min" min="0" max="50" value="0" inputmode="numeric"></label>
+        <label class="kg-min">Concepts
+          <select id="kg-concepts">
+            <option value="auto">Auto</option>
+            <option value="0">All</option>
+            <option value="2">Shared by 2+</option>
+            <option value="3">Shared by 3+</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="kg-labels" checked> Show labels</label>
+      </fieldset>
+    </div>
+  </details>
+  <p class="muted kg-status" id="kg-status" role="status" aria-live="polite">Loading graph…</p>
 </section>
-{% if center %}
-<div class="graph-layout">
-  <section class="panel graph-canvas" aria-label="Graph"><svg id="graph-svg" role="img" aria-label="Local memory graph"></svg></section>
-  <aside class="evidence" id="graph-inspector" aria-live="polite" aria-label="Inspector"><p class="muted">Click a node or a link (or focus it with <kbd>Tab</kbd> and press <kbd>Enter</kbd>) to inspect it. Activate a selected node again to centre the graph on it.</p></aside>
+<div class="kg-layout">
+  <section class="panel kg-stage-wrap" aria-labelledby="kg-stage-label">
+    <h3 class="sr-only" id="kg-stage-label">Graph</h3>
+    <div class="kg-stage" id="kg-stage" tabindex="0" role="application"
+         aria-roledescription="knowledge graph" aria-label="Knowledge graph. Arrow keys move between connected nodes, Enter opens the selected node, Escape clears the selection, plus and minus zoom, 0 fits the graph. A list view of the same graph is below."
+         aria-describedby="kg-status">
+      <canvas id="kg-canvas"></canvas>
+      <p class="kg-tip" id="kg-tip" hidden></p>
+    </div>
+    <ul class="kg-legend" aria-label="Legend">
+      {% for t in default_types + optional_types %}<li data-type="{{ t }}"><span class="kg-shape kg-shape-{{ t }}" aria-hidden="true"></span>{{ type_labels[t] }}</li>{% endfor %}
+      <li><span class="kg-mark kg-mark-review" aria-hidden="true"></span>Needs review</li>
+      <li><span class="kg-mark kg-mark-superseded" aria-hidden="true"></span>Corrected / superseded</li>
+    </ul>
+  </section>
+  <aside class="evidence kg-inspector" id="kg-inspector" aria-labelledby="kg-inspector-title" tabindex="-1">
+    <h3 class="kg-inspector-title" id="kg-inspector-title">Inspector</h3>
+    <div id="kg-inspector-body"><p class="muted">Select a node to see what it is, what it connects to, and to open it.</p></div>
+  </aside>
 </div>
-<noscript><p class="error">The graph view needs JavaScript (a small local script). The <a href="/notebooks/{{ nb.id }}/memory">list view</a> works without it.</p></noscript>
-{% endif %}
+<details class="panel kg-list" id="kg-list-box">
+  <summary id="kg-list-summary">List view of this graph</summary>
+  <p class="muted">The same nodes and relationships as structured text. Choose a node to select it in the graph and the inspector.</p>
+  <ul class="kg-list-items" id="kg-list"></ul>
+</details>
+<noscript><p class="error">The graph needs JavaScript (a small local script). The <a href="/notebooks/{{ nb.id }}/memory">list view</a> works without it.</p></noscript>

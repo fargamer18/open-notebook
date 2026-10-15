@@ -201,8 +201,9 @@ modified.
 Nothing is ever called "mastered", and no percentages are invented.
 Concepts come from the model, but they are kept only if their words appear in
 the evidence (at most 3 per question). Otherwise one deterministic phrase is
-used. They stay separate from the memory graph. A later graph phase can read
-`study_concept_stats`.
+used. They stay separate from the memory graph. The knowledge graph
+([graph.md](graph.md)) reads `study_concept_stats` to mark concepts as
+*Needs review*, *Seen* or *Strong recently* (exact concept-key match).
 
 **Deleting**
 

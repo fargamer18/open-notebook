@@ -1,4 +1,4 @@
-# Performance budgets and observed numbers (0.9.2)
+# Performance budgets and observed numbers (0.9.3)
 
 These are rough release budgets, not microbenchmarks. The numbers below were
 observed on the development machine:
@@ -23,6 +23,8 @@ grow with data size (`tests/test_query_budget.py`).
 | Hybrid search, warm | interactive | 23 ms median |
 | Hybrid search, cold | explained in the UI | ~23 s the first time (MiniLM worker cold start; PyTorch import). The UI says "may load the embedding model (~15 s)" |
 | Reader page image | cached interactive | 8 ms cached, 61 ms first render (1.5×, pixel-capped) |
+| Knowledge graph API | interactive | 4–7 ms for a small notebook; 15–22 ms with 1,200 graph nodes / 4,200 links (Global capped at 400 nodes, Local depth 3 at 150); see graph.md |
+| Knowledge graph in the browser | 60 fps | 400 nodes: first draw 0.3 s, settled 1.7 s, 16.7 ms median frame during layout; 1,200 nodes: settled 1.9 s, still 60 fps (this machine, headless Chromium) |
 | App start → browser | ~1 s | packaged: 0.9–1.1 s to ready, second launch 0.3 s, quit 0.4 s; source mode 1.4–1.7 s, also with the large notebook |
 | Ingestion | progress shown | 1,038 chunks (520-page PDF) in 74 s, including the worker's cold start (~14 chunks/s overall) |
 | Full backup | seconds | 0.43 s for the large notebook (2.1 MiB archive) |

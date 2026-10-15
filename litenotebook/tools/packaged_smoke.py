@@ -401,6 +401,24 @@ def main() -> int:
         check(st == 303, "note created")
         st, _, body = c.req("GET", f"/notebooks/{nb}/search?q=violet")
         check(st == 200 and b"Harbour" in body, "fast search finds the note")
+        # Knowledge graph: page, local script and a view with the note (no AI)
+        st, _, body = c.req("GET", f"/notebooks/{nb}/memory/graph")
+        check(
+            st == 200
+            and b'<script src="/static/graph.js" defer></script>' in body
+            and b"https://"
+            not in body.split(b"<body", 1)[-1]
+            .split(b"</body>")[0]
+            .replace(b"https://github.com", b""),
+            "knowledge graph page served (local script only)",
+        )
+        st, _, js = c.req("GET", "/static/graph.js")
+        check(st == 200 and b"LNGraph" in js, "graph.js bundled")
+        st, _, body = c.req("GET", f"/notebooks/{nb}/memory/graph/view.json")
+        check(
+            st == 200 and b'"label":"Harbour"' in body.replace(b" ", b""),
+            "graph view lists the note",
+        )
         # PDF upload: indexed with the runtime, a clear message without it
         st, _, _ = c.upload(
             f"/notebooks/{nb}/sources",

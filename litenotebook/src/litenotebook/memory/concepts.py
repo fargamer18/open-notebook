@@ -23,6 +23,15 @@ DEFAULT_LIMIT = 6
 _SEGMENTS = re.compile(r"[^\w\s'’-]+|\s-\s|--+|\n")
 _WORD = re.compile(r"[^\W_]+(?:['’][^\W_]+)*(?:-[^\W_]+)*")
 _CITATION = re.compile(r"\[\s*[SM]\s*\d+(?:\s*[,;]\s*[SM]?\s*\d+)*\s*\]", re.IGNORECASE)
+# Markup that is never a concept: LaTeX commands (\frac, \mathbf) and the
+# names of LaTeX environments (\begin{pmatrix}), URLs and e-mail addresses.
+# They become run breaks, so "\frac{a}{b}" never yields "frac".
+_NOT_WORDS = re.compile(
+    r"\\(?:begin|end)\s*\{[^{}]*\}"
+    r"|\\[A-Za-z]+"
+    r"|\b(?:https?|ftp)://\S+|\bwww\.\S+"
+    r"|\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
+)
 
 STOPWORDS = frozenset(
     """
@@ -77,6 +86,7 @@ def runs(text: str) -> list[list[str]]:
     """Runs of consecutive meaningful, normalized words."""
     out: list[list[str]] = []
     text = _CITATION.sub(" ", text)
+    text = _NOT_WORDS.sub("\n", text)
     for segment in _SEGMENTS.split(text):
         run: list[str] = []
         for raw in _WORD.findall(segment):

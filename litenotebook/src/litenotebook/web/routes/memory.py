@@ -86,18 +86,23 @@ def graph_page(
     request: Request,
     conn: Db,
     notebook_id: int,
-    node: int | None = None,
+    node: str | None = None,
     depth: int = 1,
+    mode: str = "",
 ) -> HTMLResponse:
-    from litenotebook.memory.explorer import FILTERABLE, default_center
+    """The knowledge graph: Global (whole notebook, bounded) or Local (one
+    node's neighbourhood). ``node`` may be a view id ("m:12", "s:3") or a
+    memory node number (links from the memory inspector)."""
+    from litenotebook.memory import visual
     from litenotebook.web.routes.notebooks import WORKSPACE_TABS
 
     summary = get_summary(conn, notebook_id)
-    center = node if node is not None else default_center(conn, notebook_id)
-    if center is not None and node_detail(conn, notebook_id, center) is None:
-        raise MemoryNodeNotFoundError(
-            f"Memory node {center} not found in this notebook"
-        )
+    center = None
+    if node:
+        center = f"m:{node}" if node.isdigit() else node
+        if visual.node_kind(conn, notebook_id, center) is None:
+            raise MemoryNodeNotFoundError("That graph node is not in this notebook")
+    which = mode if mode in ("global", "local") else ("local" if center else "global")
     return render(
         request,
         "notebook/workspace.html",
@@ -107,13 +112,85 @@ def graph_page(
             "last_read": last_read(conn, notebook_id),
             "tab": "memory",
             "memory_view": "graph",
-            "center": center,
-            "depth": 2 if depth == 2 else 1,
-            "filterable": FILTERABLE,
+            "graph_mode": which,
+            "center": center or "",
+            "depth": max(1, min(visual.MAX_DEPTH, depth)),
+            "type_labels": visual.TYPE_LABELS,
+            "default_types": visual.DEFAULT_TYPES,
+            "optional_types": visual.OPTIONAL_TYPES,
             "stats": stats(conn, notebook_id),
             "nb_id": notebook_id,
         },
     )
+
+
+def _flag(value: str) -> bool:
+    return value.lower() in ("1", "true", "yes", "on")
+
+
+@router.get("/graph/view.json", response_model=None)
+def graph_view(
+    conn: Db,
+    notebook_id: int,
+    types: str | None = None,
+    min_degree: int = 0,
+    hide_orphans: str = "0",
+    concept_min: str = "auto",
+    max_nodes: int = 0,
+) -> JSONResponse:
+    """Global graph: structured nodes/edges only (labels, ids, flags)."""
+    from litenotebook.memory import visual
+
+    get_summary(conn, notebook_id)
+    return JSONResponse(
+        visual.global_graph(
+            conn,
+            notebook_id,
+            visual.parse_types(types),
+            min_degree=max(0, min(50, min_degree)),
+            hide_orphans=_flag(hide_orphans),
+            concept_min=int(concept_min) if concept_min.isdigit() else None,
+            max_nodes=max_nodes or visual.GLOBAL_NODES,
+        )
+    )
+
+
+@router.get("/graph/local.json", response_model=None)
+def graph_local(
+    conn: Db, notebook_id: int, node: str, depth: int = 1, types: str | None = None
+) -> JSONResponse:
+    from litenotebook.memory import visual
+
+    get_summary(conn, notebook_id)
+    graph = visual.local_graph(
+        conn, notebook_id, node[:40], depth, visual.parse_types(types)
+    )
+    if graph is None:
+        return JSONResponse({"error": "That graph node is not in this notebook"}, 404)
+    return JSONResponse(graph)
+
+
+@router.get("/graph/node.json", response_model=None)
+def graph_node(conn: Db, notebook_id: int, id: str) -> JSONResponse:  # noqa: A002
+    from litenotebook.memory import visual
+
+    get_summary(conn, notebook_id)
+    detail = visual.node_detail(conn, notebook_id, id[:40])
+    if detail is None:
+        return JSONResponse({"error": "That graph node is not in this notebook"}, 404)
+    return JSONResponse(detail)
+
+
+@router.get("/graph/find.json", response_model=None)
+def graph_find(
+    conn: Db, notebook_id: int, q: str = "", types: str | None = None
+) -> JSONResponse:
+    """Label search for the graph (substring; no AI)."""
+    from litenotebook.memory import visual
+
+    get_summary(conn, notebook_id)
+    wanted = visual.parse_types(types, visual.ALL_TYPES)
+    return JSONResponse({"results": visual.search(conn, notebook_id, q, wanted)})
 
 
 @router.get("/graph.json", response_model=None)

@@ -6,7 +6,7 @@ with source / page citations, take notes, practise with quizzes and listen
 to audio overviews. Everything runs on your own computer. No account, no
 cloud service and no internet connection are needed for daily use.
 
-> **Status: 0.9.2 pre-release — not a stable v1.** Open release blockers:
+> **Status: 0.9.3 pre-release — not a stable v1.** Open release blockers:
 >
 > 1. **Windows is Prepared only.** It is not yet Built, Automated-tested or
 >    Manually verified on real Windows; see [docs/windows.md](docs/windows.md).
@@ -43,6 +43,9 @@ macOS is not a target.
   - a memory of earlier answers;
   - one answer at a time, with stop and retry.
 - **Notes** linked to passages, answers and annotations.
+- **Knowledge graph:** a Global and a Local view of concepts, notes,
+  sources, conversations and corrections, with an inspector that opens the
+  real note, chat or PDF passage. No AI needed ([docs/graph.md](docs/graph.md)).
 - **Study:**
   - quizzes generated from the selected material and validated against it,
     with attempts, hints, review and concept progress;

@@ -170,7 +170,7 @@ this is verified until the boxes below are ticked on a real Windows machine.
 Record each result as one of: **Prepared** (code exists, simulated on
 Linux), **Built** (package produced on Windows), **Automated tests passed**
 (suite + packaged smoke + silent install/uninstall on Windows), **Manually
-verified** (this plan completed by a person). As of 0.9.2, Windows is
+verified** (this plan completed by a person). As of 0.9.3, Windows is
 **Prepared** only.
 
 ## Release verification (Phase 16) — run on Windows 11 or the CI runner

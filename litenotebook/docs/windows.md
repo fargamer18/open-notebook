@@ -1,6 +1,6 @@
 # LiteNotebook on Windows
 
-## Status (0.9.2): **Prepared** — not Built, not tested, not verified
+## Status (0.9.3): **Prepared** — not Built, not tested, not verified
 
 LiteNotebook uses four separate status words for Windows. They are never
 collapsed into one "supported" checkbox.
