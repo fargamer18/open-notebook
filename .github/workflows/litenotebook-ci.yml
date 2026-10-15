@@ -1,0 +1,57 @@
+# LiteNotebook: tests, lint and types on Linux and Windows for every push and
+# pull request that touches litenotebook/. (The legacy Open Notebook workflows
+# in this folder are separate and unchanged.)
+#
+# Model- and LLM-dependent tests skip themselves: the MiniLM cache is absent on
+# runners (marker "model") and LITENOTEBOOK_TEST_LLM is not set (marker "llm").
+# No model is downloaded. PYTHONUTF8 is deliberately NOT set, so Windows runs
+# with its legacy code page and catches text I/O without encoding="utf-8".
+name: LiteNotebook CI
+
+on:
+  push:
+    paths:
+      - "litenotebook/**"
+      - ".github/workflows/litenotebook-*.yml"
+  pull_request:
+    paths:
+      - "litenotebook/**"
+      - ".github/workflows/litenotebook-*.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: litenotebook-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: litenotebook
+        shell: bash
+    env:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.21"
+      - name: Dependencies (locked, CPU-only torch)
+        run: uv sync --frozen --group dev --python 3.12
+      - name: Ruff
+        run: |
+          uv run --frozen ruff check .
+          uv run --frozen ruff format --check .
+      - name: Mypy
+        run: uv run --frozen mypy --strict src
+      - name: Pytest
+        run: uv run --frozen pytest -q -p no:cacheprovider

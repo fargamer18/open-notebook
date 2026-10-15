@@ -23,7 +23,8 @@ Each step names its status word. Record the result in the table at the end.
    `--runtime-archive`; `tools/browser_smoke.py` (source) and
    `tools/browser_smoke.py --app "%LOCALAPPDATA%\Programs\LiteNotebook\LiteNotebook.exe"`
    after a silent install; silent uninstall keeps `%LOCALAPPDATA%\LiteNotebook`.
-   (`ci/litenotebook-build.yml` runs all of this on `windows-2022`.)
+   (`.github/workflows/litenotebook-build.yml` runs all of this on
+   `windows-2022`, including `tools/installer_smoke.py windows`.)
 3. **Manually verified** (a person at a Windows desktop):
    - install with the real installer as a normal user (no UAC prompt); Start
      menu entry; optional desktop shortcut; "Apps & features" entry with the

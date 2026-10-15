@@ -27,7 +27,14 @@ Expected to work on Ubuntu 22.04+, Debian 12+, Fedora 36+, openSUSE Leap
 other distributions are not individually tested. **No claim of universal
 Linux compatibility is made.**
 
-## AppImage vs tarball
+## Installer, AppImage or tarball
+
+- **Installer (recommended):** `install-litenotebook.sh` next to the tarball
+  (and, optionally, the runtime archive). Per user, no root: program in
+  `~/.local/opt/litenotebook`, launcher `~/.local/bin/litenotebook`, menu
+  entry and icon in `$XDG_DATA_HOME`; verifies the archives' SHA-256; upgrades
+  in place; `litenotebook-uninstall` keeps your data. See
+  [installers.md](installers.md).
 
 - **AppImage:** one file, mounted with FUSE 2 when run. Ubuntu 22.04 and
   newer do not install `libfuse2` by default; without it a direct start fails

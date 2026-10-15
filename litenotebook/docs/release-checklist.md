@@ -17,7 +17,7 @@ commit `b63cc34` (clean tree) on Ubuntu 22.04.
 
 | Item | Status | Evidence / reason |
 |---|---|---|
-| Prepared (code, installer script, CI job) | PASS | `packaging/windows/litenotebook.iss`, `ci/litenotebook-build.yml`, Windows code paths simulated in the test suite |
+| Prepared (code, installer script, CI job) | PASS | `packaging/windows/litenotebook.iss` (wizard; compiles with Inno Setup 6.4.3), `.github/workflows/litenotebook-build.yml`, Windows code paths simulated in the test suite |
 | Built on Windows (PyInstaller + Inno Setup) | **BLOCKER** | No Windows machine, VM or Windows runner was available. The CI job only runs once the workflow is in a repository whose GitHub Actions run it, which needs a push (not authorised). |
 | Automated tests passed on Windows (suite, packaged smoke ± runtime, browser smoke, silent install/uninstall) | **BLOCKER** | Same: never run on Windows |
 | Manually verified on a Windows desktop ([windows-test-plan.md](windows-test-plan.md)) | **BLOCKER** | Not run. Includes data paths with spaces/Unicode, second instance, PDF delete under Windows file locking, embedding runtime, Local AI, quiz, audio, graph, backup, Quit, Task-Manager kill, uninstall/reinstall |
@@ -40,6 +40,10 @@ commit `b63cc34` (clean tree) on Ubuntu 22.04.
 | Fresh Ubuntu 22.04: real browser | PASS | `tools/browser_smoke.py` 38/38 with the app inside the container (host browser over loopback), ending with Quit |
 | AppImage with FUSE 2 | PASS | 38/38 browser smoke on Arch (`libfuse.so.2`), Quit leaves no mount or process |
 | AppImage without FUSE 2 | WARNING | A direct run fails ("No suitable fusermount binary"). `--appimage-extract-and-run` works (Ubuntu 22.04 container, data path with spaces and "José"). Ubuntu 22.04+ does not install `libfuse2` by default. Documented in INSTALL.md / linux.md |
+| Linux installer `install-litenotebook.sh` | PASS | `tests/test_linux_installer.py` (21 tests incl. hostile archives); `tools/installer_smoke.py linux` 12/12 on the real build on Arch and as a normal user in a clean Ubuntu 22.04 (HOME with a space and "José"): install → launch → data → reinstall with runtime → uninstall keeps data; refuses root and non-interactive runs without `--yes` |
+| Release manifest and checks | PASS | `release-manifest.json` per build; `tools/verify_release.py` 29/29 on the Linux build |
+| Windows installer wizard (Inno Setup script) | WARNING | compiles with Inno Setup 6.4.3 (under Wine); install, upgrade from an older version, component change, data-folder refusal and uninstall-keeps-data exercised under Wine with stand-in files. Not Windows verification: Built/Automated/Manual remain BLOCKERS above |
+| GitHub workflows (`.github/workflows/litenotebook-ci.yml`, `litenotebook-build.yml`) | WARNING | pass `actionlint` 1.7.7 (with shellcheck); never run: the repository has not been pushed. They never publish a release |
 | Distributions other than Ubuntu 22.04 and Arch | NOT TESTED | Expected from the glibc 2.35 baseline; no claim of universal Linux support |
 | Linux arm64 | NOT TESTED | Not built |
 

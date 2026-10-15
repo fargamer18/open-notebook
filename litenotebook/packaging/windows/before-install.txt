@@ -1,0 +1,32 @@
+LiteNotebook - local-first research notebook
+
+LiteNotebook runs on this computer only. It opens in your web browser at
+http://127.0.0.1 and listens to this computer only. It needs no account and
+no internet connection for daily use.
+
+What this installer does
+- Installs the LiteNotebook program for your Windows user account only. No
+  administrator rights are needed.
+- Optionally installs the local semantic-search runtime (about 1 GB). It
+  enables local embeddings and semantic search and is needed to add new
+  PDFs. You can also add it later in Settings > Local AI.
+- Does not download anything, and does not install any AI model, speech
+  voice or notebook. Local AI components are offered later by LiteNotebook's
+  own setup wizard, and are downloaded only when you choose them.
+- Does not change which program opens PDF files.
+
+Your data
+- Notebooks, PDFs, notes, chats, backups, downloaded models and AI
+  components are kept in %LOCALAPPDATA%\LiteNotebook.
+- Updating or uninstalling LiteNotebook never deletes that folder.
+
+Licences and notices
+- LiteNotebook's own code is under the MIT licence (LICENSE.txt in the
+  program folder).
+- Bundled third-party components keep their own licences; see
+  THIRD_PARTY_LICENSES.md and the "licenses" folder in the program folder.
+  PDFs are read with PDFium (BSD-3-Clause, via pypdfium2).
+
+This installer is not code-signed yet, so Windows may show a SmartScreen
+warning ("Windows protected your PC"). Choose "More info" and "Run anyway"
+only if you downloaded it from the official LiteNotebook release page.

@@ -8,10 +8,13 @@ Output (ignored by git) under ``dist/litenotebook/``::
     LiteNotebook-<version>-<platform>/            the app folder (core, no torch)
     LiteNotebook-<version>-<platform>.tar.gz      portable archive (.zip on Windows)
     LiteNotebook-<version>-x86_64.AppImage        Linux AppImage
+    install-litenotebook.sh                       Linux per-user installer
     LiteNotebook-embedding-runtime-<version>-<platform>.tar.gz   optional worker
-    LiteNotebook-<version>-Setup.exe              Windows installer (on Windows,
-                                                  when Inno Setup is installed)
-    SHA256SUMS, build-report.json
+    LiteNotebook-Setup-<version>-x64.exe          Windows installer wizard (on
+                                                  Windows, when Inno Setup is installed)
+    SHA256SUMS, build-report.json, release-manifest.json
+
+<platform> is linux-x86_64 or windows-x64.
 
 Nothing optional is bundled: no GGUF models, no MiniLM files, no llama.cpp,
 no speech engine or voices, no user data. Linux builds need a glibc at least
@@ -65,7 +68,9 @@ def platform_tag() -> str:
         "arm64": "arm64",
         "aarch64": "arm64",
     }.get(platform.machine().lower(), platform.machine())
-    return f"{'windows' if IS_WINDOWS else sys.platform}-{arch}"
+    if IS_WINDOWS:  # Windows release names use Microsoft's "x64"
+        return "windows-" + {"x86_64": "x64"}.get(arch, arch)
+    return f"{sys.platform}-{arch}"
 
 
 def sha256(path: Path) -> str:
@@ -356,8 +361,43 @@ def inno_setup(
         defines.append(f"/DRuntimeFolder={runtime_folder}")
     script = ROOT / "packaging" / "windows" / "litenotebook.iss"
     subprocess.run([iscc, *defines, str(script)], check=True)
-    out = DIST / f"LiteNotebook-{__version__}-Setup.exe"
+    out = DIST / f"LiteNotebook-Setup-{__version__}-x64.exe"
     return out if out.exists() else None
+
+
+COMPONENTS = {  # release-manifest.json "component" per artifact
+    "app-archive": "LiteNotebook (portable archive)",
+    "appimage": "LiteNotebook (AppImage)",
+    "linux-installer": "LiteNotebook per-user installer script",
+    "windows-installer": "LiteNotebook installer wizard",
+    "embedding-runtime": "optional local semantic-search runtime",
+}
+
+
+def release_manifest(
+    report: dict[str, object], kinds: dict[str, str], digests: dict[str, str]
+) -> dict[str, object]:
+    """Machine-readable list of this build's release files (no local paths)."""
+    tag = str(report["platform"])
+    return {
+        "app": "LiteNotebook",
+        "version": __version__,
+        "git_commit": report["git_commit"],
+        "built_at": report["built_at"],
+        "artifacts": [
+            {
+                "filename": name,
+                "version": __version__,
+                "platform": tag.split("-", 1)[0],
+                "architecture": tag.split("-", 1)[1],
+                "component": kind,
+                "description": COMPONENTS[kind],
+                "size": (DIST / name).stat().st_size,
+                "sha256": digests[name],
+            }
+            for name, kind in kinds.items()
+        ],
+    }
 
 
 # --- main -------------------------------------------------------------------------
@@ -464,19 +504,40 @@ def main() -> int:
         "size": core_archive.stat().st_size,
     }
     artifacts = [core_archive]
+    kinds = {core_archive.name: "app-archive"}
     if runtime_entry:
         artifacts.append(DIST / runtime_entry["file"])
+        kinds[runtime_entry["file"]] = "embedding-runtime"
     if not IS_WINDOWS and not args.skip_appimage:
         image = appimage(
             app_folder, icons, DIST / f"LiteNotebook-{__version__}-x86_64.AppImage"
         )
         report["appimage"] = {"file": image.name, "size": image.stat().st_size}
         artifacts.append(image)
+        kinds[image.name] = "appimage"
+    if not IS_WINDOWS:
+        from linux_installer import SCRIPT_NAME, write  # tools/linux_installer.py
+
+        script = write(
+            DIST / SCRIPT_NAME,
+            __version__,
+            {
+                "file": core_archive.name,
+                "size": core_archive.stat().st_size,
+                "sha256": sha256(core_archive),
+                "dir": app_name,
+            },
+            runtime_entry,
+        )
+        report["linux_installer"] = {"file": script.name}
+        artifacts.append(script)
+        kinds[script.name] = "linux-installer"
     if IS_WINDOWS:
         setup = inno_setup(app_folder, runtime_folder, icons)
         if setup is not None:
             report["installer"] = {"file": setup.name, "size": setup.stat().st_size}
             artifacts.append(setup)
+            kinds[setup.name] = "windows-installer"
     if not IS_WINDOWS:
         report["glibc"] = {"app": glibc_requirement(app_folder)}
         if runtime_folder is not None:
@@ -488,6 +549,10 @@ def main() -> int:
     ]
     sums = "".join(f"{digests[p.name]}  {p.name}\n" for p in artifacts)
     (DIST / "SHA256SUMS").write_text(sums, encoding="utf-8")
+    (DIST / "release-manifest.json").write_text(
+        json.dumps(release_manifest(report, kinds, digests), indent=1),
+        encoding="utf-8",
+    )
     report["licenses"] = {"packages": len(inventory)}
     report["build_seconds"] = round(time.perf_counter() - started)
     (DIST / "build-report.json").write_text(

@@ -84,7 +84,7 @@ data folder is kept as `<data>.pre-restore-<time>`.
 
 ## Continuous integration
 
-A Linux + Windows matrix (ruff, mypy, pytest; model/LLM tests skip) is ready
-in `ci/litenotebook-ci.yml`. It is not active because this repository's
-`.github/workflows` belongs to the legacy Open Notebook project; copy the file
-there (or into LiteNotebook's own repository) to enable it.
+`.github/workflows/litenotebook-ci.yml` (repository root) runs ruff, mypy
+and pytest on `ubuntu-22.04` and `windows-2022` for every push and pull
+request that touches `litenotebook/` (model/LLM tests skip). It runs once the
+repository is pushed to GitHub; until then it has never run.

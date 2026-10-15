@@ -5,9 +5,15 @@ default browser. Users need neither Python nor the command line.
 
 | Platform | Artifacts | Status |
 |---|---|---|
-| Linux x86_64 | `LiteNotebook-<v>-x86_64.AppImage`, `LiteNotebook-<v>-linux-x86_64.tar.gz` | **release build: Ubuntu 22.04 container (needs glibc ≥ 2.35)**, verified on Arch and in Ubuntu 22.04; development builds on Arch need glibc ≥ 2.38 |
-| Windows x64 | `LiteNotebook-<v>-Setup.exe` (Inno Setup), `LiteNotebook-<v>-windows-x86_64.zip` | **Prepared** only: not Built, not tested, not verified ([windows.md](windows.md)) |
-| Both | `LiteNotebook-embedding-runtime-<v>-<platform>.tar.gz` / `.zip` (optional) | Linux built and verified; Windows prepared |
+| Linux x86_64 | `install-litenotebook.sh` (per-user installer, recommended) + `LiteNotebook-<v>-linux-x86_64.tar.gz`; `LiteNotebook-<v>-x86_64.AppImage` | **release build: Ubuntu 22.04 container (needs glibc ≥ 2.35)**, verified on Arch and in Ubuntu 22.04; development builds on Arch need glibc ≥ 2.38 |
+| Windows x64 | `LiteNotebook-Setup-<v>-x64.exe` (Inno Setup wizard), `LiteNotebook-<v>-windows-x64.zip` (portable) | **Prepared** only: not Built, not tested, not verified ([windows.md](windows.md)) |
+| Both | `LiteNotebook-embedding-runtime-<v>-linux-x86_64.tar.gz` / `-windows-x64.zip` (optional) | Linux built and verified; Windows prepared |
+
+Every build also writes `SHA256SUMS`, `build-report.json` and
+`release-manifest.json` (per artifact: file name, version, platform,
+architecture, component type, size and SHA-256; no local paths), and
+`tools/verify_release.py` checks the folder before upload. Installers:
+[installers.md](installers.md).
 
 Version: `litenotebook.__version__` (currently **0.9.3**, a pre-release).
 `pyproject.toml` must match it; a test and the build both enforce this.
@@ -68,10 +74,11 @@ or the CI job:
 - The AppImage step downloads appimagetool 1.9.1 from a pinned URL and
   verifies its SHA-256.
 - On Windows the build runs Inno Setup (`ISCC`) when it is installed.
-- `ci/litenotebook-build.yml` is a ready workflow (Ubuntu 22.04 + Windows
-  2022). It is inactive because this is still the inherited Open Notebook
-  repository: move it to `.github/workflows/` once LiteNotebook has its own
-  repository.
+- `.github/workflows/litenotebook-build.yml` (repository root) builds both
+  platforms on `ubuntu-22.04` and `windows-2022` when started by hand or by a
+  `v*` tag: tests, package checks, packaged/browser/installer smoke tests,
+  checksums and a combined release manifest, uploaded as workflow artifacts.
+  It never publishes a GitHub Release.
 
 ## Why PyInstaller
 

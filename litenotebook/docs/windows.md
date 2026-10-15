@@ -9,7 +9,7 @@ collapsed into one "supported" checkbox.
 |---|---|---|
 | **Prepared** | Code paths, installer script and CI job exist; Windows behaviour is simulated in tests on Linux | ✅ yes |
 | **Built** | The Windows package was produced by the release build on Windows (CI `windows-2022` or a Windows 11 machine) | ❌ not yet: no Windows machine, VM or runner was available in Phases 16–19, and this repository's GitHub Actions cannot run the LiteNotebook workflow until it is pushed to a repository that runs it (not authorised so far) |
-| **Automated tests passed** | On real Windows: the source test suite, the packaged smoke test (with and without the embedding runtime) and silent install / uninstall all pass (`ci/litenotebook-build.yml`) | ❌ not yet |
+| **Automated tests passed** | On real Windows: the source test suite, the packaged smoke test (with and without the embedding runtime), the browser smoke and the installer test (silent install, upgrade, uninstall keeps data) all pass (`.github/workflows/litenotebook-build.yml`) | ❌ not yet |
 | **Manually verified** | A person ran [windows-test-plan.md](windows-test-plan.md) on a Windows desktop (browser, console windows, SmartScreen, Start menu, uninstall) | ❌ not yet |
 
 **Windows is a v1 release blocker until all four are ✅.** Simulated
@@ -20,7 +20,7 @@ fakes) count only as **Prepared**.
 
 | Area | Implementation |
 |---|---|
-| Installer | Inno Setup, per user (`%LOCALAPPDATA%\Programs\LiteNotebook`), no admin rights, Start menu + optional desktop shortcut, optional "semantic search runtime" component; uninstall removes program files only (`packaging/windows/litenotebook.iss`) |
+| Installer | `LiteNotebook-Setup-<v>-x64.exe`, an Inno Setup wizard: per user (`%LOCALAPPDATA%\Programs\LiteNotebook`), no admin rights, optional "local semantic-search runtime" component (unticked), Start Menu shortcut (ticked) and Desktop shortcut (unticked), "Launch LiteNotebook" on Finish; upgrades in place; uninstall removes program files and shortcuts only (`packaging/windows/litenotebook.iss`, [installers.md](installers.md)). The script compiles with Inno Setup 6.4.3 and its install/upgrade/uninstall logic was exercised under Wine on Linux, which is **not** Windows verification |
 | No console windows | windowed `LiteNotebook.exe`; worker, llama-server and speech started with `CREATE_NO_WINDOW` |
 | Data | `%LOCALAPPDATA%\LiteNotebook` (logs in `…\Logs`); paths with spaces and non-ASCII names are handled with `pathlib` and UTF-8 everywhere |
 | One instance per data folder | `msvcrt.locking`; a second launch opens the running one |
@@ -30,8 +30,9 @@ fakes) count only as **Prepared**.
 
 ## How Windows gets verified
 
-1. Move `ci/litenotebook-build.yml` to `.github/workflows/` in the
-   LiteNotebook repository and run it (or run the same steps on Windows 11:
+1. Push the repository to GitHub and run the "LiteNotebook build" workflow
+   (`.github/workflows/litenotebook-build.yml`, *Run workflow*), or run the
+   same steps on Windows 11:
    `uv sync --frozen --group packaging --group dev`, `uv run pytest`,
    `uv run --group packaging python tools/build.py`, then
    `tools/packaged_smoke.py` and `tools/browser_smoke.py` (it finds Edge or

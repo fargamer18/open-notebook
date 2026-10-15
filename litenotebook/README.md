@@ -72,17 +72,33 @@ needs the embeddings component.
 
 ## Install
 
-See [INSTALL.md](INSTALL.md). In short:
+**Windows 10 / 11 (x64)** *(prepared; not yet verified on Windows)*
 
-- **Linux:** download the AppImage (or tarball), make it executable, run it.
-- **Windows:** once built and verified, run the installer. It installs per
-  user, needs no admin rights, and uninstalling keeps your notebooks.
-- **From source:**
-  - `uv sync`
-  - `uv run litenotebook serve --open`
+1. Download `LiteNotebook-Setup-0.9.3-x64.exe`.
+2. Run the setup wizard. It installs for your user only (no administrator
+   rights) and ends with *Launch LiteNotebook*.
 
-LiteNotebook opens in your default browser at `http://127.0.0.1:<port>`.
-It listens on your own computer only.
+**Linux (x86_64, glibc 2.35+)**
+
+- **Recommended:** download `install-litenotebook.sh` and
+  `LiteNotebook-0.9.3-linux-x86_64.tar.gz` into one folder, then run
+  `bash install-litenotebook.sh` (no `sudo`). Start LiteNotebook from the
+  application menu.
+- **Alternative:** the single-file `LiteNotebook-0.9.3-x86_64.AppImage`
+  (needs FUSE 2, or run it with `--appimage-extract-and-run`).
+- **Advanced:** the plain `LiteNotebook-0.9.3-linux-x86_64.tar.gz`.
+
+**Optional semantic-search runtime.** To add new PDFs, LiteNotebook needs its
+local semantic-search runtime (approximately 1 GB installed). Tick it in the
+Windows wizard, or put `LiteNotebook-embedding-runtime-0.9.3-linux-x86_64.tar.gz`
+next to the Linux installer and say yes (or install it later in Settings →
+Local AI). AI models and voices are never part of an installer: on first
+start, LiteNotebook's setup wizard checks your hardware and offers them,
+downloading only what you approve.
+
+Uninstalling keeps your notebooks. LiteNotebook opens in your browser at
+`http://127.0.0.1:<port>` and listens on your own computer only. Details:
+[INSTALL.md](INSTALL.md) and [docs/installers.md](docs/installers.md).
 
 ## Your data and privacy
 
@@ -123,6 +139,7 @@ It listens on your own computer only.
 - **Security and performance:** [docs/security.md](docs/security.md),
   [docs/performance.md](docs/performance.md)
 - **Packaging and release:** [docs/packaging.md](docs/packaging.md),
+  [docs/installers.md](docs/installers.md),
   [docs/pdf-licensing-decision.md](docs/pdf-licensing-decision.md),
   [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md),
   [docs/windows-test-plan.md](docs/windows-test-plan.md),

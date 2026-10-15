@@ -1,0 +1,172 @@
+# LiteNotebook release builds: Linux (Ubuntu 22.04, glibc 2.35 baseline) and
+# Windows (windows-2022), with tests, package checks, installer tests,
+# checksums, a release manifest and artifact upload.
+#
+# It NEVER publishes a GitHub Release. Tag pushes (v*) only build and upload
+# workflow artifacts; publishing stays a separate, explicit, human step until
+# Windows has been verified.
+#
+# Status words (docs/windows.md): a green windows-2022 job means Windows is
+# "Built" and "Automated tests passed". "Manually verified" still needs a
+# person at a real Windows desktop (docs/windows-test-plan.md).
+name: LiteNotebook build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      LN_BUILD_RUNNER: github-actions ${{ matrix.os }}
+      PYTHONUTF8: "1"
+      HF_HUB_OFFLINE: "1"
+    defaults:
+      run:
+        working-directory: litenotebook
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.21"
+      - name: Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        run: choco install innosetup --version=6.4.3 -y --no-progress
+      - name: Dependencies (locked)
+        run: uv sync --frozen --group packaging --group dev --python 3.12
+      - name: Lint and types
+        run: |
+          uv run --frozen ruff check .
+          uv run --frozen ruff format --check .
+          uv run --frozen mypy --strict src
+      - name: Tests (source mode)
+        run: uv run --frozen pytest -q -p no:cacheprovider
+      - name: Build (PyInstaller; Inno Setup wizard on Windows; AppImage and installer script on Linux)
+        run: uv run --frozen --group packaging python tools/build.py
+      - name: Verify the release folder (names, checksums, manifest, contents, PyMuPDF absent, PDFium present)
+        run: uv run --frozen python tools/verify_release.py dist/litenotebook
+      - name: glibc baseline (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 - <<'EOF'
+          import json
+          r = json.load(open("dist/litenotebook/build-report.json"))
+          need = r["glibc"]["app"]["min_glibc"]
+          print("core app needs glibc", need, r["glibc"])
+          assert tuple(map(int, need.split("."))) <= (2, 35), need
+          EOF
+      - name: Packaged smoke test (core only)
+        run: >-
+          uv run --frozen python tools/packaged_smoke.py dist/litenotebook
+          --json smoke-core.json --export-to exports
+      - name: Packaged smoke test (with the embedding runtime)
+        run: |
+          RUNTIME=$(ls dist/litenotebook/LiteNotebook-embedding-runtime-*)
+          uv run --frozen python tools/packaged_smoke.py dist/litenotebook \
+            --runtime-archive "$RUNTIME" --json smoke-runtime.json
+      - name: Browser smoke (source and package; Chrome or Edge from the runner image)
+        run: |
+          uv run --frozen python tools/browser_smoke.py --json browser-source.json
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            APP=(dist/litenotebook/LiteNotebook-*-windows-x64/LiteNotebook.exe)
+          else
+            APP=(dist/litenotebook/LiteNotebook-*-linux-x86_64/litenotebook)
+          fi
+          uv run --frozen python tools/browser_smoke.py --app "${APP[0]}" --json browser-package.json
+      - name: Linux installer (install, upgrade, uninstall keeps data; path with space and José)
+        if: runner.os == 'Linux'
+        run: uv run --frozen python tools/installer_smoke.py linux dist/litenotebook
+      - name: Windows installer wizard (silent install, upgrade from an older version, launch, uninstall keeps data)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          $app = Get-ChildItem dist/litenotebook -Directory | Where-Object { $_.Name -like "LiteNotebook-*-windows-x64" } | Select-Object -First 1
+          # an older-version installer from the same files, to test the upgrade path
+          & $iscc /Q /DAppVersion=0.0.1 "/DAppFolder=$($app.FullName)" "/DOutputDir=$PWD\old-installer" packaging\windows\litenotebook.iss
+          if ($LASTEXITCODE -ne 0) { throw "could not build the older test installer" }
+          uv run --frozen python tools/installer_smoke.py windows dist/litenotebook --old-installer old-installer/LiteNotebook-Setup-0.0.1-x64.exe
+          if ($LASTEXITCODE -ne 0) { throw "installer smoke failed" }
+      - name: Installed app at the default location (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/litenotebook/LiteNotebook-Setup-*-x64.exe | Select-Object -First 1
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\LiteNotebook"
+          & $setup.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+          if (-not (Test-Path (Join-Path $dir "LiteNotebook.exe"))) { throw "not installed" }
+          uv run --frozen python tools/packaged_smoke.py --app-folder "$dir" --json smoke-installed.json
+          if ($LASTEXITCODE -ne 0) { throw "installed app smoke test failed" }
+          uv run --frozen python tools/browser_smoke.py --app (Join-Path $dir "LiteNotebook.exe") --json browser-installed.json
+          if ($LASTEXITCODE -ne 0) { throw "installed app browser smoke failed" }
+          $data = Join-Path $env:LOCALAPPDATA "LiteNotebook"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          Set-Content (Join-Path $data "keep-me.txt") "user data"
+          & (Join-Path $dir "unins000.exe") /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+          Start-Sleep -Seconds 5
+          if (Test-Path (Join-Path $dir "LiteNotebook.exe")) { throw "program files left" }
+          if (-not (Test-Path (Join-Path $data "keep-me.txt"))) { throw "user data removed" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: litenotebook-${{ runner.os == 'Windows' && 'windows-x64' || 'linux-x86_64' }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            litenotebook/dist/litenotebook/LiteNotebook-*.tar.gz
+            litenotebook/dist/litenotebook/LiteNotebook-*.zip
+            litenotebook/dist/litenotebook/LiteNotebook-*.AppImage
+            litenotebook/dist/litenotebook/LiteNotebook-Setup-*-x64.exe
+            litenotebook/dist/litenotebook/install-litenotebook.sh
+            litenotebook/dist/litenotebook/SHA256SUMS
+            litenotebook/dist/litenotebook/build-report.json
+            litenotebook/dist/litenotebook/release-manifest.json
+            litenotebook/smoke-*.json
+            litenotebook/browser-*.json
+
+  release-files:
+    # Combines both platforms' checksums and manifests. Uploads a workflow
+    # artifact only; it does not create or publish a GitHub Release.
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: parts
+      - name: Combined SHA256SUMS and release-manifest.json
+        run: |
+          python3 - <<'EOF'
+          import hashlib, json, pathlib, shutil
+          out = pathlib.Path("release"); out.mkdir()
+          artifacts, version = [], None
+          for m in sorted(pathlib.Path("parts").rglob("release-manifest.json")):
+              data = json.loads(m.read_text("utf-8"))
+              version = version or data["version"]
+              assert data["version"] == version, "platforms built different versions"
+              for a in data["artifacts"]:
+                  src = m.parent / a["filename"]
+                  assert hashlib.sha256(src.read_bytes()).hexdigest() == a["sha256"], a["filename"]
+                  shutil.copy(src, out / a["filename"])
+                  artifacts.append(a)
+          manifest = {"app": "LiteNotebook", "version": version, "artifacts": artifacts}
+          (out / "release-manifest.json").write_text(json.dumps(manifest, indent=1), "utf-8")
+          (out / "SHA256SUMS").write_text("".join(f"{a['sha256']}  {a['filename']}\n" for a in artifacts), "utf-8")
+          print(json.dumps(manifest, indent=1))
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: litenotebook-release-files
+          retention-days: 14
+          path: release/
